@@ -21,6 +21,7 @@ import { ForgotPasswordScreen } from './views/auth/ForgotPasswordScreen';
 // Dashboards Principais
 import OfficerDashboard from './views/officer/OfficerDashboard';
 import AdminDashboard from './views/admin/AdminDashboard';
+import DashboardDepartamento from './views/departamentos/DashboardDepartamento';
 import HomePage from './views/HomePage';
 import OperationsDashboard from './views/operations/OperationsDashboard';
 
@@ -145,6 +146,8 @@ export default function App() {
                     // Sistema EGIDE
                     userData?.role === 'admin' && currentPage === 'admin'
                         ? <AdminDashboard userData={userData} showNotification={showNotification} />
+                        : userData?.role === 'departamento'
+                        ? <DashboardDepartamento userData={userData} showNotification={showNotification} />
                         : <OfficerDashboard user={userData} showNotification={showNotification} />
                 ) : selectedSystem === 'operacoes' ? (
                     // Sistema OPERAÇÕES

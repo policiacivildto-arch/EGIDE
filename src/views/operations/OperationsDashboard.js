@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Shield, Menu, X, LayoutDashboard, Plus, ClipboardList, CheckCircle, 
-    FileText, Target, BarChart
+    FileText, Target, BarChart, Users
 } from 'lucide-react';
+import policiaisData from '../../data/policiais.json';
 
 // Importar componentes de visualização
 import { DashboardView } from './components/DashboardView';
@@ -17,9 +18,18 @@ import { EstatisticasView } from './components/EstatisticasView';
  * Gerencia todo o ciclo de operações policiais
  */
 export default function OperationsDashboard({ userData, showNotification }) {
-    // Verificar se é DTO (controle total)
+    // Verificar tipo de usuário
     const isDTO = userData?.role === 'admin';
-    const isPolicialOperacional = !isDTO;
+    const isDepartamento = userData?.role === 'departamento';
+    const isPolicialOperacional = !isDTO && !isDepartamento;
+    const userDepartamento = userData?.departamento || '';
+    
+    // Debug
+    console.log('=== OPERATIONS DASHBOARD DEBUG ===');
+    console.log('userData:', userData);
+    console.log('isDTO:', isDTO);
+    console.log('isDepartamento:', isDepartamento);
+    console.log('userDepartamento:', userDepartamento);
     
     const [activeView, setActiveView] = useState(isPolicialOperacional ? 'relatorio' : 'dashboard');
     const [operations, setOperations] = useState([]);
@@ -89,6 +99,13 @@ export default function OperationsDashboard({ userData, showNotification }) {
     const [alvos, setAlvos] = useState([]);
     const [equipes, setEquipes] = useState([]);
     const [draggedAlvo, setDraggedAlvo] = useState(null);
+    
+    // Função para buscar policial por matrícula
+    const buscarPolicialPorMatricula = (matricula) => {
+        if (!matricula || matricula.length < 3) return null;
+        const policial = policiaisData.find(p => p.matricula === matricula.trim());
+        return policial ? policial.nome : null;
+    };
     const [selectedOperationRelatorio, setSelectedOperationRelatorio] = useState(null);
     const [showSubstituicaoModal, setShowSubstituicaoModal] = useState(false);
     const [policiaisPresenca, setPoliciaisPresenca] = useState({});
@@ -136,17 +153,24 @@ export default function OperationsDashboard({ userData, showNotification }) {
             (eq.membros && eq.membros.some(m => m?.toUpperCase() === nomePolicial?.toUpperCase())) ||
             (emailPolicial.toLowerCase() === 'kleverdpc@gmail.com' && eq.chefe?.toUpperCase().includes('KLEVER'))
         )
+        : isDepartamento
+        ? equipes.filter(eq => eq.departamento === userDepartamento)
         : equipes;
 
     console.log('🔍 DEBUG - equipesDoPolicialAtual:', equipesDoPolicialAtual);
 
+    // Filtrar operações baseado no tipo de usuário
     const operacoesDoPolicialAtual = isPolicialOperacional
         ? operations.filter(op => equipesDoPolicialAtual.some(eq => eq.operacaoId === op.id))
+        : isDepartamento
+        ? operations.filter(op => op.departamento === userDepartamento || op.departamento_solicitante === userDepartamento || op.departamento_solicitante_sigla === userDepartamento)
         : operations;
 
     const alvosDoPolicialAtual = isPolicialOperacional
         ? alvos.filter(alvo => alvo.equipesVinculadas && alvo.equipesVinculadas.some(eqId => 
             equipesDoPolicialAtual.some(eq => eq.id === eqId)))
+        : isDepartamento
+        ? alvos.filter(alvo => alvo.departamento === userDepartamento)
         : alvos;
     
     console.log('🔍 DEBUG - alvosDoPolicialAtual:', alvosDoPolicialAtual);
@@ -220,11 +244,13 @@ export default function OperationsDashboard({ userData, showNotification }) {
     const loadOperations = async () => {
         try {
             setLoading(true);
-            // Mock temporário
+            // Mock temporário - operações de diferentes departamentos
             setOperations([
-                { id: 1, nome: 'Operação Cerco', status: 'Aguardando Aprovação', tipo_operacao: 'Com Apoio', data_hora_inicio: '2025-12-20T08:00:00', departamento_solicitante_sigla: 'DRE', total_equipes: 5 },
-                { id: 2, nome: 'Operação Fortaleza Segura', status: 'Aprovada pelo DTO', tipo_operacao: 'Interna', data_hora_inicio: '2025-12-18T06:00:00', departamento_solicitante_sigla: 'DHPP', total_equipes: 3 },
-                { id: 3, nome: 'Operação Protetor', status: 'Em Execução', tipo_operacao: 'Com Apoio', data_hora_inicio: '2025-12-16T14:00:00', departamento_solicitante_sigla: 'DRE', total_equipes: 8 }
+                { id: 1, nome: 'Operação Cerco', status: 'Aguardando Aprovação', tipo_operacao: 'Com Apoio', data_hora_inicio: '2025-12-20T08:00:00', departamento_solicitante_sigla: 'DRE', departamento: 'DRE', total_equipes: 5 },
+                { id: 2, nome: 'Operação Fortaleza Segura', status: 'Aprovada pelo DTO', tipo_operacao: 'Interna', data_hora_inicio: '2025-12-18T06:00:00', departamento_solicitante_sigla: 'DHPP', departamento: 'DHPP', total_equipes: 3 },
+                { id: 3, nome: 'Operação Protetor', status: 'Em Execução', tipo_operacao: 'Com Apoio', data_hora_inicio: '2025-12-16T14:00:00', departamento_solicitante_sigla: 'DRE', departamento: 'DRE', total_equipes: 8 },
+                { id: 4, nome: 'Operação Maracanaú Seguro', status: 'Aprovada pelo DTO', tipo_operacao: 'Interna', data_hora_inicio: '2026-01-15T08:00:00', departamento_solicitante_sigla: 'DPM', departamento: 'DPM', total_equipes: 6 },
+                { id: 5, nome: 'Operação Cidade Protegida', status: 'Em Execução', tipo_operacao: 'Com Apoio', data_hora_inicio: '2026-01-10T06:00:00', departamento_solicitante_sigla: 'DPM', departamento: 'DPM', total_equipes: 4 }
             ]);
         } catch (error) {
             showNotification('Erro ao carregar operações', 'error');
@@ -285,21 +311,26 @@ export default function OperationsDashboard({ userData, showNotification }) {
             </div>
 
             <nav className="mt-4">
-                {isDTO && (
+                {(isDTO || isDepartamento) && (
                     <>
                         <MenuItem icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeView === 'dashboard'} onClick={() => setActiveView('dashboard')} collapsed={!sidebarOpen} />
                         <MenuItem icon={<Plus size={20} />} label="Nova Demanda" active={activeView === 'nova-demanda'} onClick={() => setActiveView('nova-demanda')} collapsed={!sidebarOpen} />
                         {stats.aprovadas > 0 && (
                             <MenuItem icon={<ClipboardList size={20} />} label="Planejamento" active={activeView === 'planejamento'} onClick={() => setActiveView('planejamento')} collapsed={!sidebarOpen} badge={stats.aprovadas} />
                         )}
-                        <MenuItem icon={<CheckCircle size={20} />} label="Aprovação" active={activeView === 'aprovacao'} onClick={() => setActiveView('aprovacao')} collapsed={!sidebarOpen} badge={stats.aguardandoAprovacao} />
+                        {isDTO && (
+                            <MenuItem icon={<CheckCircle size={20} />} label="Aprovação" active={activeView === 'aprovacao'} onClick={() => setActiveView('aprovacao')} collapsed={!sidebarOpen} badge={stats.aguardandoAprovacao} />
+                        )}
                     </>
                 )}
                 <MenuItem icon={<FileText size={20} />} label="Relatório" active={activeView === 'relatorio'} onClick={() => setActiveView('relatorio')} collapsed={!sidebarOpen} />
+                {(isDTO || isDepartamento) && (
+                    <MenuItem icon={<Users size={20} />} label="Equipes" active={activeView === 'equipes'} onClick={() => setActiveView('equipes')} collapsed={!sidebarOpen} />
+                )}
                 {isPolicialOperacional && (
                     <MenuItem icon={<Target size={20} />} label="Meus Alvos" active={activeView === 'meus-alvos'} onClick={() => setActiveView('meus-alvos')} collapsed={!sidebarOpen} />
                 )}
-                {isDTO && (
+                {(isDTO || isDepartamento) && (
                     <MenuItem icon={<BarChart size={20} />} label="Estatísticas" active={activeView === 'estatisticas'} onClick={() => setActiveView('estatisticas')} collapsed={!sidebarOpen} />
                 )}
             </nav>
@@ -328,7 +359,11 @@ export default function OperationsDashboard({ userData, showNotification }) {
                                 <span>Sistema de OPERAÇÕES</span>
                             </h1>
                             <p className="text-cyan-100 mt-1">
-                                {isPolicialOperacional ? 'Modo Operacional - Policial' : 'Gestão Operacional e Logística'}
+                                {isPolicialOperacional 
+                                    ? 'Modo Operacional - Policial' 
+                                    : isDepartamento 
+                                    ? `Gestão Departamental - ${userDepartamento}`
+                                    : 'Gestão Operacional e Logística'}
                             </p>
                         </div>
                         {isDTO && (
@@ -337,30 +372,37 @@ export default function OperationsDashboard({ userData, showNotification }) {
                                 <p className="text-cyan-100 text-sm">Controle Total</p>
                             </div>
                         )}
+                        {isDepartamento && (
+                            <div className="bg-white/20 px-4 py-2 rounded-lg">
+                                <p className="text-white font-semibold">{userDepartamento}</p>
+                                <p className="text-cyan-100 text-sm">Departamento</p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Conteúdo Principal */}
                 <div className="p-6">
-                    {isDTO && activeView === 'dashboard' && (
+                    {(isDTO || isDepartamento) && activeView === 'dashboard' && (
                         <DashboardView 
                             stats={stats} 
-                            operations={operations} 
+                            operations={operacoesDoPolicialAtual} 
                             setSelectedOperation={setSelectedOperation} 
                             setActiveView={setActiveView} 
                         />
                     )}
-                    {isDTO && activeView === 'nova-demanda' && (
+                    {(isDTO || isDepartamento) && activeView === 'nova-demanda' && (
                         <NovaDemandaView 
                             formData={formData} 
                             setFormData={setFormData} 
                             handleSubmit={handleSubmitNovaDemanda}
                             showNotification={showNotification}
+                            userDepartamento={userDepartamento}
                         />
                     )}
-                    {isDTO && activeView === 'planejamento' && (
+                    {(isDTO || isDepartamento) && activeView === 'planejamento' && (
                         <PlanejamentoView 
-                            operations={operations}
+                            operations={operacoesDoPolicialAtual}
                             selectedOperationId={selectedOperationId}
                             setSelectedOperationId={setSelectedOperationId}
                             stats={stats}
@@ -413,13 +455,360 @@ export default function OperationsDashboard({ userData, showNotification }) {
                             onRegistrarInformacoes={handleRegistrarInformacoesAlvo}
                         />
                     )}
-                    {isDTO && activeView === 'estatisticas' && (
+                    {(isDTO || isDepartamento) && activeView === 'estatisticas' && (
                         <EstatisticasView 
-                            operations={operations}
-                            equipes={equipes}
-                            alvos={alvos}
+                            operations={operacoesDoPolicialAtual}
+                            equipes={equipesDoPolicialAtual}
+                            alvos={alvosDoPolicialAtual}
                             stats={stats}
                         />
+                    )}
+                    {(isDTO || isDepartamento) && activeView === 'equipes' && (
+                        <div className="bg-gray-700 p-6 rounded-lg">
+                            <h2 className="text-2xl font-bold text-white mb-6">
+                                {isDTO ? 'Solicitação de Equipes' : 'Minhas Solicitações de Equipes'}
+                            </h2>
+                            
+                            {/* DTO: Criar Solicitação */}
+                            {isDTO && (
+                                <div className="mb-8 bg-gray-800 p-6 rounded-lg border border-cyan-500">
+                                    <h3 className="text-xl font-bold text-cyan-400 mb-4">Nova Solicitação</h3>
+                                    <form onSubmit={(e) => {
+                                        e.preventDefault();
+                                        const formData = new FormData(e.target);
+                                        const novaSolicitacao = {
+                                            id: Date.now(),
+                                            operacaoId: formData.get('operacao'),
+                                            operacaoNome: operations.find(op => op.id === parseInt(formData.get('operacao')))?.nome,
+                                            departamentoDestino: formData.get('departamento'),
+                                            quantidadeEquipes: parseInt(formData.get('quantidade')),
+                                            status: 'Pendente',
+                                            dataEnvio: new Date().toISOString(),
+                                            equipesAlocadas: []
+                                        };
+                                        
+                                        // Salvar no localStorage
+                                        const solicitacoes = JSON.parse(localStorage.getItem('solicitacoesEquipes') || '[]');
+                                        solicitacoes.push(novaSolicitacao);
+                                        localStorage.setItem('solicitacoesEquipes', JSON.stringify(solicitacoes));
+                                        
+                                        showNotification(`Solicitação enviada para ${formData.get('departamento')}!`, 'success');
+                                        e.target.reset();
+                                        window.location.reload();
+                                    }}>
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-300 mb-2">Operação</label>
+                                                <select name="operacao" required className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500">
+                                                    <option value="">Selecione...</option>
+                                                    {operations.filter(op => op.status === 'Aprovada pelo DTO').map(op => (
+                                                        <option key={op.id} value={op.id}>{op.nome}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-300 mb-2">Departamento</label>
+                                                <select name="departamento" required className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500">
+                                                    <option value="">Selecione...</option>
+                                                    <option value="DHPP">DHPP</option>
+                                                    <option value="DPM">DPM</option>
+                                                    <option value="DRE">DRE</option>
+                                                    <option value="DRFR">DRFR</option>
+                                                    <option value="DCIP">DCIP</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-300 mb-2">Qtd. Equipes</label>
+                                                <input type="number" name="quantidade" min="1" required className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500" />
+                                            </div>
+                                        </div>
+                                        <button type="submit" className="mt-4 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-6 rounded-lg">
+                                            Enviar Solicitação
+                                        </button>
+                                    </form>
+                                </div>
+                            )}
+                            
+                            {/* Lista de Solicitações */}
+                            <div className="space-y-4">
+                                {(() => {
+                                    const todasSolicitacoes = JSON.parse(localStorage.getItem('solicitacoesEquipes') || '[]');
+                                    const solicitacoesFiltradas = isDepartamento 
+                                        ? todasSolicitacoes.filter(s => s.departamentoDestino === userDepartamento)
+                                        : todasSolicitacoes;
+                                    
+                                    if (solicitacoesFiltradas.length === 0) {
+                                        return (
+                                            <div className="text-center py-12">
+                                                <p className="text-gray-400 text-lg">
+                                                    {isDepartamento ? 'Nenhuma solicitação recebida' : 'Nenhuma solicitação enviada'}
+                                                </p>
+                                            </div>
+                                        );
+                                    }
+                                    
+                                    return solicitacoesFiltradas.map((solicitacao) => (
+                                        <div key={solicitacao.id} className="bg-gray-800 p-5 rounded-lg border-l-4 border-cyan-500">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div>
+                                                    <h3 className="text-lg font-bold text-white">{solicitacao.operacaoNome}</h3>
+                                                    <p className="text-sm text-gray-400">
+                                                        Para: <span className="font-semibold text-cyan-400">{solicitacao.departamentoDestino}</span>
+                                                    </p>
+                                                </div>
+                                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                                    solicitacao.status === 'Completa' ? 'bg-green-600 text-white' :
+                                                    solicitacao.status === 'Parcial' ? 'bg-yellow-600 text-white' :
+                                                    'bg-orange-600 text-white'
+                                                }`}>
+                                                    {solicitacao.status}
+                                                </span>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Equipes Solicitadas</p>
+                                                    <p className="text-2xl font-bold text-white">{solicitacao.quantidadeEquipes}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Equipes Alocadas</p>
+                                                    <p className="text-2xl font-bold text-cyan-400">{solicitacao.equipesAlocadas.length}</p>
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Departamento: Alocar Equipes */}
+                                            {isDepartamento && solicitacao.equipesAlocadas.length < solicitacao.quantidadeEquipes && (
+                                                <form onSubmit={(e) => {
+                                                    e.preventDefault();
+                                                    const formData = new FormData(e.target);
+                                                    
+                                                    // Coletar dados dos policiais
+                                                    const policiais = [];
+                                                    let lider = null;
+                                                    
+                                                    for (let i = 1; i <= 4; i++) {
+                                                        const matricula = formData.get(`policial${i}_matricula`);
+                                                        const nome = formData.get(`policial${i}_nome`);
+                                                        
+                                                        if (matricula && nome) {
+                                                            const policial = {
+                                                                matricula,
+                                                                nome,
+                                                                isLider: formData.get(`policial${i}_lider`) === 'on'
+                                                            };
+                                                            
+                                                            if (policial.isLider) lider = nome;
+                                                            policiais.push(policial);
+                                                        }
+                                                    }
+                                                    
+                                                    const novaEquipe = {
+                                                        id: Date.now(),
+                                                        departamento: formData.get('departamento'),
+                                                        delegacia: formData.get('delegacia'),
+                                                        chefe: lider || policiais[0]?.nome,
+                                                        viatura: formData.get('viatura'),
+                                                        membros: policiais.map(p => p.nome),
+                                                        policiais: policiais,
+                                                        operacaoId: solicitacao.operacaoId
+                                                    };
+                                                    
+                                                    // Atualizar solicitação
+                                                    const solicitacoes = JSON.parse(localStorage.getItem('solicitacoesEquipes') || '[]');
+                                                    const index = solicitacoes.findIndex(s => s.id === solicitacao.id);
+                                                    solicitacoes[index].equipesAlocadas.push(novaEquipe);
+                                                    
+                                                    // Atualizar status
+                                                    if (solicitacoes[index].equipesAlocadas.length >= solicitacoes[index].quantidadeEquipes) {
+                                                        solicitacoes[index].status = 'Completa';
+                                                    } else {
+                                                        solicitacoes[index].status = 'Parcial';
+                                                    }
+                                                    
+                                                    localStorage.setItem('solicitacoesEquipes', JSON.stringify(solicitacoes));
+                                                    
+                                                    // Adicionar às equipes gerais
+                                                    const equipesAtuais = equipes;
+                                                    equipesAtuais.push(novaEquipe);
+                                                    setEquipes(equipesAtuais);
+                                                    
+                                                    showNotification('Equipe alocada com sucesso!', 'success');
+                                                    window.location.reload();
+                                                }} className="bg-gray-700 p-6 rounded border border-cyan-500 mt-4">
+                                                    <h4 className="font-bold text-white mb-1 text-lg flex items-center">
+                                                        🚔 Equipes Operacionais
+                                                    </h4>
+                                                    <p className="text-sm text-gray-400 mb-4">Efetivo de 3 a 4 policiais</p>
+                                                    
+                                                    {/* Dados da Equipe */}
+                                                    <div className="bg-gray-800 p-4 rounded mb-4">
+                                                        <h5 className="font-bold text-cyan-400 mb-3">Dados da Equipe</h5>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div>
+                                                                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                                                                    Departamento <span className="text-red-500">*</span>
+                                                                </label>
+                                                                <input 
+                                                                    type="text" 
+                                                                    name="departamento" 
+                                                                    value={userDepartamento}
+                                                                    readOnly
+                                                                    className="w-full bg-gray-900 text-gray-400 rounded px-3 py-2 border border-gray-600"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                                                                    Delegacia/Unidade <span className="text-red-500">*</span>
+                                                                </label>
+                                                                <select 
+                                                                    name="delegacia" 
+                                                                    required
+                                                                    className="w-full bg-gray-900 text-white rounded px-3 py-2 border border-gray-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                                                >
+                                                                    <option value="">Selecione a delegacia</option>
+                                                                    <option value="1ª Delegacia de Polícia Civil de Caucaia">1ª Delegacia de Polícia Civil de Caucaia</option>
+                                                                    <option value="1ª Delegacia de Polícia Civil de Maracanaú">1ª Delegacia de Polícia Civil de Maracanaú</option>
+                                                                    <option value="1ª Delegacia de Polícia Civil de Pacatuba">1ª Delegacia de Polícia Civil de Pacatuba</option>
+                                                                    <option value="1ª Seccional da Região Metropolitana">1ª Seccional da Região Metropolitana</option>
+                                                                    <option value="2ª Delegacia de Polícia Civil de Caucaia">2ª Delegacia de Polícia Civil de Caucaia</option>
+                                                                    <option value="2ª Delegacia de Polícia Civil de Maracanaú">2ª Delegacia de Polícia Civil de Maracanaú</option>
+                                                                    <option value="2ª Delegacia de Polícia Civil de Pacatuba">2ª Delegacia de Polícia Civil de Pacatuba</option>
+                                                                    <option value="2ª Seccional da Região Metropolitana">2ª Seccional da Região Metropolitana</option>
+                                                                    <option value="3ª Delegacia de Polícia Civil de Caucaia">3ª Delegacia de Polícia Civil de Caucaia</option>
+                                                                    <option value="3ª Delegacia de Polícia Civil de Maracanaú">3ª Delegacia de Polícia Civil de Maracanaú</option>
+                                                                    <option value="3ª Seccional da Região Metropolitana">3ª Seccional da Região Metropolitana</option>
+                                                                    <option value="4ª Delegacia de Polícia Civil de Caucaia">4ª Delegacia de Polícia Civil de Caucaia</option>
+                                                                    <option value="4ª Delegacia de Polícia Civil de Maracanaú">4ª Delegacia de Polícia Civil de Maracanaú</option>
+                                                                    <option value="4ª Seccional da Região Metropolitana">4ª Seccional da Região Metropolitana</option>
+                                                                    <option value="5ª Delegacia de Polícia Civil de Caucaia">5ª Delegacia de Polícia Civil de Caucaia</option>
+                                                                    <option value="5ª Delegacia de Polícia Civil de Maracanaú">5ª Delegacia de Polícia Civil de Maracanaú</option>
+                                                                    <option value="5ª Seccional da Região Metropolitana">5ª Seccional da Região Metropolitana</option>
+                                                                    <option value="6ª Delegacia de Polícia Civil de Maracanaú">6ª Delegacia de Polícia Civil de Maracanaú</option>
+                                                                    <option value="6ª Seccional da Região Metropolitana">6ª Seccional da Região Metropolitana</option>
+                                                                    <option value="Delegacia de Polícia Civil de Aquiraz">Delegacia de Polícia Civil de Aquiraz</option>
+                                                                    <option value="Delegacia de Polícia Civil de Cascavel">Delegacia de Polícia Civil de Cascavel</option>
+                                                                    <option value="Delegacia de Polícia Civil de Chorozinho">Delegacia de Polícia Civil de Chorozinho</option>
+                                                                    <option value="Delegacia de Polícia Civil de Eusébio">Delegacia de Polícia Civil de Eusébio</option>
+                                                                    <option value="Delegacia de Polícia Civil de Guaiúba">Delegacia de Polícia Civil de Guaiúba</option>
+                                                                    <option value="Delegacia de Polícia Civil de Horizonte">Delegacia de Polícia Civil de Horizonte</option>
+                                                                    <option value="Delegacia de Polícia Civil de Itaitinga">Delegacia de Polícia Civil de Itaitinga</option>
+                                                                    <option value="Delegacia de Polícia Civil de Maranguape">Delegacia de Polícia Civil de Maranguape</option>
+                                                                    <option value="Delegacia de Polícia Civil de Pacajus">Delegacia de Polícia Civil de Pacajus</option>
+                                                                    <option value="Delegacia de Polícia Civil de Paracuru">Delegacia de Polícia Civil de Paracuru</option>
+                                                                    <option value="Delegacia de Polícia Civil de Paraipaba">Delegacia de Polícia Civil de Paraipaba</option>
+                                                                    <option value="Delegacia de Polícia Civil de Pindoretama">Delegacia de Polícia Civil de Pindoretama</option>
+                                                                    <option value="Delegacia de Polícia Civil de São Gonçalo do Amarante">Delegacia de Polícia Civil de São Gonçalo do Amarante</option>
+                                                                    <option value="Delegacia de Polícia Civil de Trairí">Delegacia de Polícia Civil de Trairí</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-3">
+                                                            <label className="block text-sm font-semibold text-gray-300 mb-2">Placa da Viatura</label>
+                                                            <input 
+                                                                type="text" 
+                                                                name="viatura" 
+                                                                placeholder="ABC-1234"
+                                                                required
+                                                                className="w-full bg-gray-900 text-white rounded px-3 py-2 border border-gray-600"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Policiais */}
+                                                    <div className="bg-gray-800 p-4 rounded">
+                                                        <h5 className="font-bold text-cyan-400 mb-3 flex items-center">
+                                                            👮 OIP - Oficiais de Investigação Policial
+                                                        </h5>
+                                                        
+                                                        {[1, 2, 3, 4].map(num => (
+                                                            <div key={num} className="mb-4 pb-4 border-b border-gray-700 last:border-0">
+                                                                <p className="text-sm font-semibold text-gray-300 mb-2">
+                                                                    Policial {num} {num <= 3 && <span className="text-red-500">*</span>}
+                                                                    {num === 4 && <span className="text-gray-500 text-xs ml-2">(Opcional)</span>}
+                                                                </p>
+                                                                <div className="grid grid-cols-12 gap-3">
+                                                                    <div className="col-span-2 flex items-center">
+                                                                        <label className="flex items-center space-x-2 cursor-pointer">
+                                                                            <input 
+                                                                                type="checkbox" 
+                                                                                name={`policial${num}_lider`}
+                                                                                className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"
+                                                                            />
+                                                                            <span className="text-sm text-gray-400">Líder</span>
+                                                                        </label>
+                                                                    </div>
+                                                                    <div className="col-span-4">
+                                                                        <input 
+                                                                            type="text" 
+                                                                            name={`policial${num}_matricula`}
+                                                                            placeholder="Matrícula"
+                                                                            required={num <= 3}
+                                                                            onChange={(e) => {
+                                                                                const matricula = e.target.value;
+                                                                                const nome = buscarPolicialPorMatricula(matricula);
+                                                                                if (nome) {
+                                                                                    const nomeInput = document.querySelector(`input[name="policial${num}_nome"]`);
+                                                                                    if (nomeInput) {
+                                                                                        nomeInput.value = nome;
+                                                                                        nomeInput.classList.add('border-green-500', 'bg-green-900/20');
+                                                                                    }
+                                                                                } else {
+                                                                                    const nomeInput = document.querySelector(`input[name="policial${num}_nome"]`);
+                                                                                    if (nomeInput && matricula.length > 0) {
+                                                                                        nomeInput.classList.remove('border-green-500', 'bg-green-900/20');
+                                                                                    }
+                                                                                }
+                                                                            }}
+                                                                            className="w-full bg-gray-900 text-white rounded px-3 py-2 text-sm border border-gray-600"
+                                                                        />
+                                                                    </div>
+                                                                    <div className="col-span-6">
+                                                                        <input 
+                                                                            type="text" 
+                                                                            name={`policial${num}_nome`}
+                                                                            placeholder="Nome completo do policial"
+                                                                            required={num <= 3}
+                                                                            readOnly
+                                                                            className="w-full bg-gray-900 text-white rounded px-3 py-2 text-sm border border-gray-600 cursor-not-allowed"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    
+                                                    <button type="submit" className="w-full mt-4 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition-colors">
+                                                        ✓ Adicionar Equipe à Operação
+                                                    </button>
+                                                </form>
+                                            )}
+                                            
+                                            {/* Mostrar Equipes Alocadas */}
+                                            {solicitacao.equipesAlocadas.length > 0 && (
+                                                <div className="mt-4 space-y-2">
+                                                    <p className="text-sm font-bold text-gray-300">Equipes Alocadas:</p>
+                                                    {solicitacao.equipesAlocadas.map((eq, idx) => (
+                                                        <div key={idx} className="bg-gray-900 p-3 rounded">
+                                                            <div className="flex justify-between items-start">
+                                                                <div>
+                                                                    <p className="text-white font-semibold">{eq.chefe}</p>
+                                                                    <p className="text-xs text-gray-400">{eq.delegacia} • {eq.viatura}</p>
+                                                                </div>
+                                                                {eq.membros.length > 0 && (
+                                                                    <span className="text-xs bg-gray-700 px-2 py-1 rounded text-gray-300">
+                                                                        +{eq.membros.length} membros
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ));
+                                })()}
+                            </div>
+                        </div>
                     )}
                     {isDTO && activeView === 'aprovacao' && (
                         <div className="bg-gray-700 p-6 rounded-lg">

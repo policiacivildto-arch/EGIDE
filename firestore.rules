@@ -1,0 +1,184 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- FUNÇÕES AUXILIARES ---
+    // Funções para deixar as regras mais limpas e reutilizáveis
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Função que busca o perfil do usuário logado e verifica se ele é um admin
+    function isAdmin() {
+      return isAuthenticated() && get(/databases/$(database)/documents/artifacts/egide-8c7c2/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Função que verifica se o usuário é de um departamento
+    function isDepartamento() {
+      return isAuthenticated() && get(/databases/$(database)/documents/artifacts/egide-8c7c2/users/$(request.auth.uid)).data.role == 'departamento';
+    }
+
+    // Função que retorna o departamento do usuário logado
+    function getUserDepartamento() {
+      return get(/databases/$(database)/documents/artifacts/egide-8c7c2/users/$(request.auth.uid)).data.departamento;
+    }
+
+    // Função que verifica se o documento pertence ao departamento do usuário
+    function isOwnDepartamento(departamento) {
+      return isDepartamento() && getUserDepartamento() == departamento;
+    }
+
+    // Caminho principal da sua aplicação
+    match /artifacts/egide-8c7c2/{document=**} {
+
+        // --- COLEÇÃO DE USUÁRIOS ---
+        // Regras para os documentos de perfil dos policiais
+        match /users/{userId} {
+          // 1. Um usuário pode ler seu próprio perfil.
+          // 2. Um admin pode ler o perfil de qualquer usuário.
+          // 3. Um departamento pode ler perfis de usuários do mesmo departamento.
+          allow get: if isUser(userId) || isAdmin() || 
+                       (isDepartamento() && resource.data.departamento == getUserDepartamento());
+          
+          // Admin pode listar todos, departamento pode listar apenas do seu departamento
+          allow list: if isAdmin() || 
+                        (isDepartamento() && resource.data.departamento == getUserDepartamento());
+
+          // Um usuário pode criar seu próprio perfil (no cadastro).
+          allow create: if isUser(userId);
+
+          // 1. Um usuário pode atualizar seu próprio perfil (ex: telefone).
+          // 2. Um admin pode atualizar o perfil de qualquer usuário.
+          // 3. Um departamento pode atualizar perfis do seu departamento.
+          allow update: if isUser(userId) || isAdmin() || 
+                          (isDepartamento() && resource.data.departamento == getUserDepartamento());
+          
+          // Ninguém pode apagar um perfil de usuário (mais seguro)
+          allow delete: if false; 
+        }
+
+        // --- DADOS PÚBLICOS (VAGAS, EQUIPES, FERIADOS) ---
+        match /public/data/{collection}/{docId} {
+            // Qualquer policial autenticado pode ler
+            allow read: if isAuthenticated();
+
+            // Admin pode escrever em tudo, por padrão
+            allow write: if isAdmin();
+        }
+
+        // --- REGRAS ESPECÍFICAS DE ESCRITA ---
+
+        // Vagas
+        match /public/data/vagas/{vagaId} {
+            // Admin, departamento (do próprio departamento) ou usuário pode ocupar vaga disponível
+            allow update: if isAdmin() || 
+                           (isOwnDepartamento(resource.data.departamento)) ||
+                           (isAuthenticated() 
+                               && request.resource.data.status == 'Ocupada' 
+                               && resource.data.status == 'Disponível');
+            
+            // Admins e departamentos podem criar vagas (com seu próprio departamento)
+            allow create: if isAdmin() || 
+                           (isDepartamento() && request.resource.data.departamento == getUserDepartamento());
+            
+            // Apenas admins e departamentos (do próprio departamento) podem deletar
+            allow delete: if isAdmin() || 
+                            (isDepartamento() && resource.data.departamento == getUserDepartamento());
+        }
+
+        // Equipes (Teams)
+        match /public/data/teams/{teamId} {
+            // Admin pode tudo, departamento pode atualizar/deletar equipes do seu departamento
+            allow update, delete: if isAdmin() || 
+                                     (isDepartamento() && resource.data.departamento == getUserDepartamento());
+            
+            // Um policial pode criar uma equipe (ao se inscrever numa vaga)
+            // Departamento pode criar equipes do seu departamento
+            allow create: if isAuthenticated() && 
+                            (request.auth.uid == request.resource.data.registeringOfficer.uid ||
+                             isAdmin() ||
+                             isOwnDepartamento(request.resource.data.departamento));
+        }
+
+        // Comboios/Operações (convoys)
+        match /public/data/convoys/{convoyId} {
+            // Admin ou departamento do próprio departamento pode criar
+            allow create: if isAdmin() || 
+                            (isDepartamento() && request.resource.data.departamento == getUserDepartamento());
+            
+            // Admin ou departamento do próprio departamento pode atualizar/deletar
+            allow update, delete: if isAdmin() || 
+                                    (isOwnDepartamento(resource.data.departamento));
+        }
+
+        // Relatórios de Comboio (convoyReports)
+        match /public/data/convoyReports/{reportId} {
+             // Qualquer policial autenticado pode criar um relatório
+             // Departamento pode criar relatório para seu departamento
+             allow create: if isAuthenticated();
+             
+             // Admins podem alterar qualquer relatório
+             // Departamentos podem alterar relatórios do próprio departamento
+             allow update: if isAdmin() || 
+                            (isDepartamento() && resource.data.departamento == getUserDepartamento());
+             
+             // Apenas admins podem apagar relatórios
+             allow delete: if isAdmin();
+        }
+
+        // Equipes (Teams)
+        match /public/data/teams/{teamId} {
+            // Admin pode fazer tudo
+            // Departamento pode atualizar/deletar equipes do seu departamento
+            allow update, delete: if isAdmin() || 
+                                    (isDepartamento() && resource.data.departamento == getUserDepartamento());
+            
+            // Um policial pode criar uma equipe (ao se inscrever numa vaga)
+            // Um departamento pode criar equipes para seu departamento
+            allow create: if isAuthenticated() && 
+                           (request.auth.uid == request.resource.data.registeringOfficer.uid ||
+                            isAdmin() ||
+                            isOwnDepartamento(request.resource.data.departamento));
+        }
+
+        // Comboios (Convoys)
+        match /public/data/convoys/{convoyId} {
+            // Admin e departamento (do próprio departamento) podem criar/atualizar/deletar
+            allow create: if isAdmin() || 
+                            (isDepartamento() && request.resource.data.departamento == getUserDepartamento());
+            
+            allow update, delete: if isAdmin() || 
+                                    (isDepartamento() && resource.data.departamento == getUserDepartamento());
+        }
+
+        // Relatórios de Comboio (convoyReports)
+        match /public/data/convoyReports/{reportId} {
+             // Qualquer policial autenticado pode criar um relatório.
+             allow create: if isAuthenticated();
+             
+             // Admin e departamento (do próprio departamento) podem alterar ou apagar relatórios.
+             allow update, delete: if isAdmin() || 
+                                     (isDepartamento() && resource.data.departamento == getUserDepartamento());
+        }
+
+        // Alertas
+        match /public/data/alerts/{alertId} {
+            // Admin e departamento podem criar/atualizar/deletar alertas do próprio departamento
+            allow create: if isAdmin() || isDepartamento();
+            
+            allow update, delete: if isAdmin() || 
+                                    (isDepartamento() && resource.data.departamento == getUserDepartamento());
+        }
+
+        // Feriados - apenas leitura para todos, escrita para admin
+        match /public/data/holidays/{holidayId} {
+            allow read: if isAuthenticated();
+            allow write: if isAdmin();
+        }
+    }
+  }
+}

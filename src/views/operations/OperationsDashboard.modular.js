@@ -17,9 +17,20 @@ import { EstatisticasView } from './components/EstatisticasView';
  * Gerencia todo o ciclo de operações policiais
  */
 export default function OperationsDashboard({ userData, showNotification }) {
-    // Verificar se é DTO (controle total)
+    // Verificar tipo de usuário
     const isDTO = userData?.role === 'admin';
-    const isPolicialOperacional = !isDTO;
+    const isDepartamento = userData?.role === 'departamento';
+    const isPolicialOperacional = !isDTO && !isDepartamento;
+    const userDepartamento = userData?.departamento || '';
+    
+    // Debug - mostrar no console
+    console.log('=== OPERATIONS DASHBOARD DEBUG ===');
+    console.log('userData:', userData);
+    console.log('isDTO:', isDTO);
+    console.log('isDepartamento:', isDepartamento);
+    console.log('isPolicialOperacional:', isPolicialOperacional);
+    console.log('userDepartamento:', userDepartamento);
+    console.log('==================================');
     
     const [activeView, setActiveView] = useState(isPolicialOperacional ? 'relatorio' : 'dashboard');
     const [operations, setOperations] = useState([]);
@@ -95,13 +106,18 @@ export default function OperationsDashboard({ userData, showNotification }) {
         ? equipes.filter(eq => eq.chefe === userData?.nome || (eq.membros && eq.membros.includes(userData?.nome)))
         : equipes;
 
+    // Filtrar operações baseado no tipo de usuário
     const operacoesDoPolicialAtual = isPolicialOperacional
         ? operations.filter(op => equipesDoPolicialAtual.some(eq => eq.operacaoId === op.id))
+        : isDepartamento
+        ? operations.filter(op => op.departamento === userDepartamento || op.departamento_solicitante === userDepartamento)
         : operations;
 
     const alvosDoPolicialAtual = isPolicialOperacional
         ? alvos.filter(alvo => alvo.equipesVinculadas && alvo.equipesVinculadas.some(eqId => 
             equipesDoPolicialAtual.some(eq => eq.id === eqId)))
+        : isDepartamento
+        ? alvos.filter(alvo => alvo.departamento === userDepartamento)
         : alvos;
 
     useEffect(() => {
@@ -161,7 +177,7 @@ export default function OperationsDashboard({ userData, showNotification }) {
             </div>
 
             <nav className="mt-4">
-                {isDTO && (
+                {(isDTO || isDepartamento) && (
                     <>
                         <MenuItem icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeView === 'dashboard'} onClick={() => setActiveView('dashboard')} collapsed={!sidebarOpen} />
                         <MenuItem icon={<Plus size={20} />} label="Nova Demanda" active={activeView === 'nova-demanda'} onClick={() => setActiveView('nova-demanda')} collapsed={!sidebarOpen} />
@@ -175,7 +191,7 @@ export default function OperationsDashboard({ userData, showNotification }) {
                 {isPolicialOperacional && (
                     <MenuItem icon={<Target size={20} />} label="Meus Alvos" active={activeView === 'meus-alvos'} onClick={() => setActiveView('meus-alvos')} collapsed={!sidebarOpen} />
                 )}
-                {isDTO && (
+                {(isDTO || isDepartamento) && (
                     <MenuItem icon={<BarChart size={20} />} label="Estatísticas" active={activeView === 'estatisticas'} onClick={() => setActiveView('estatisticas')} collapsed={!sidebarOpen} />
                 )}
             </nav>
@@ -204,7 +220,11 @@ export default function OperationsDashboard({ userData, showNotification }) {
                                 <span>Sistema de OPERAÇÕES</span>
                             </h1>
                             <p className="text-cyan-100 mt-1">
-                                {isPolicialOperacional ? 'Modo Operacional - Policial' : 'Gestão Operacional e Logística'}
+                                {isPolicialOperacional 
+                                    ? 'Modo Operacional - Policial' 
+                                    : isDepartamento 
+                                    ? `Gestão Departamental - ${userDepartamento}`
+                                    : 'Gestão Operacional e Logística'}
                             </p>
                         </div>
                         {isDTO && (
@@ -213,30 +233,37 @@ export default function OperationsDashboard({ userData, showNotification }) {
                                 <p className="text-cyan-100 text-sm">Controle Total</p>
                             </div>
                         )}
+                        {isDepartamento && (
+                            <div className="bg-white/20 px-4 py-2 rounded-lg">
+                                <p className="text-white font-semibold">{userDepartamento}</p>
+                                <p className="text-cyan-100 text-sm">Departamento</p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Conteúdo Principal */}
                 <div className="p-6">
-                    {isDTO && activeView === 'dashboard' && (
+                    {(isDTO || isDepartamento) && activeView === 'dashboard' && (
                         <DashboardView 
                             stats={stats} 
-                            operations={operations} 
+                            operations={operacoesDoPolicialAtual} 
                             setSelectedOperation={setSelectedOperation} 
                             setActiveView={setActiveView} 
                         />
                     )}
-                    {isDTO && activeView === 'nova-demanda' && (
+                    {(isDTO || isDepartamento) && activeView === 'nova-demanda' && (
                         <NovaDemandaView 
                             formData={formData} 
                             setFormData={setFormData} 
                             handleSubmit={handleSubmitNovaDemanda}
                             showNotification={showNotification}
+                            userDepartamento={userDepartamento}
                         />
                     )}
-                    {isDTO && activeView === 'planejamento' && (
+                    {(isDTO || isDepartamento) && activeView === 'planejamento' && (
                         <PlanejamentoView 
-                            operations={operations}
+                            operations={operacoesDoPolicialAtual}
                             selectedOperationId={selectedOperationId}
                             setSelectedOperationId={setSelectedOperationId}
                             stats={stats}
@@ -263,7 +290,7 @@ export default function OperationsDashboard({ userData, showNotification }) {
                     )}
                     {activeView === 'relatorio' && (
                         <RelatorioView 
-                            operations={operations}
+                            operations={operacoesDoPolicialAtual}
                             equipes={equipes}
                             isPolicialOperacional={isPolicialOperacional}
                             equipesDoPolicialAtual={equipesDoPolicialAtual}
@@ -285,7 +312,7 @@ export default function OperationsDashboard({ userData, showNotification }) {
                             equipesDoPolicialAtual={equipesDoPolicialAtual}
                         />
                     )}
-                    {isDTO && activeView === 'estatisticas' && (
+                    {(isDTO || isDepartamento) && activeView === 'estatisticas' && (
                         <EstatisticasView 
                             operations={operations}
                             equipes={equipes}
