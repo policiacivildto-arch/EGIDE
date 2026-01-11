@@ -6,7 +6,7 @@ import { AlertTriangle } from 'lucide-react';
 import { LoadingSpinner } from '../../../components/ui/Shared';
 import { getCycleInfo, getWeekInfo, displayMatricula } from '../../../utils/helpers';
 
-export const AlertsView = ({ showNotification, setView, setCurrentWeek }) => {
+export const AlertsView = ({ showNotification, setView, setCurrentWeek, departamento }) => {
     const [savedAlerts, setSavedAlerts] = useState([]);
     const [loadingSaved, setLoadingSaved] = useState(true);
 
@@ -15,13 +15,16 @@ export const AlertsView = ({ showNotification, setView, setCurrentWeek }) => {
     const [foundIssues, setFoundIssues] = useState([]);
 
     useEffect(() => {
-        const q = query(collection(db, `/artifacts/${appId}/public/data/alerts`));
+        let q = query(collection(db, `/artifacts/${appId}/public/data/alerts`));
+        if (departamento) {
+            q = query(collection(db, `/artifacts/${appId}/public/data/alerts`), where("departamento", "==", departamento));
+        }
         const unsub = onSnapshot(q, (snap) => {
             setSavedAlerts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoadingSaved(false);
         });
         return () => unsub();
-    }, []);
+    }, [departamento]);
 
     const handleGoToSchedule = (date) => {
         if (!date || !setView || !setCurrentWeek) return;
@@ -35,10 +38,17 @@ export const AlertsView = ({ showNotification, setView, setCurrentWeek }) => {
         showNotification("Iniciando verificação... Isso pode levar alguns segundos.", "info");
 
         try {
-            const teamsQuery = query(
+            let teamsQuery = query(
                 collection(db, `/artifacts/${appId}/public/data/teams`),
                 where("cycleId", "==", scanCycle)
             );
+            if (departamento) {
+                teamsQuery = query(
+                    collection(db, `/artifacts/${appId}/public/data/teams`),
+                    where("cycleId", "==", scanCycle),
+                    where("departamento", "==", departamento)
+                );
+            }
             const teamsSnap = await getDocs(teamsQuery);
             const teams = teamsSnap.docs.map(doc => doc.data());
 

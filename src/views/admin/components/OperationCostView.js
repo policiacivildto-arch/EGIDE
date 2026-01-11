@@ -6,7 +6,7 @@ import { useAdminData } from '../useAdminData';
 import { calculateShiftCost, displayMatricula } from '../../../utils/helpers';
 import { LoadingSpinner } from '../../../components/ui/Shared';
 
-export const OperationCostView = ({ showNotification, allUsers, holidays }) => {
+export const OperationCostView = ({ showNotification, allUsers, holidays, departamento }) => {
     const adminData = useAdminData();
     allUsers = allUsers || adminData.allUsers;
     holidays = holidays || adminData.holidays;
@@ -34,11 +34,22 @@ export const OperationCostView = ({ showNotification, allUsers, holidays }) => {
             end.setHours(23, 59, 59, 999);
 
             // 1. Busca todos os comboios (operações) no período selecionado
-            const convoysQuery = query(
+            let convoysQuery = query(
                 collection(db, `/artifacts/${appId}/public/data/convoys`),
                 where("date", ">=", start),
                 where("date", "<=", end)
             );
+            
+            // Se houver departamento, adicionar filtro
+            if (departamento) {
+                convoysQuery = query(
+                    collection(db, `/artifacts/${appId}/public/data/convoys`),
+                    where("date", ">=", start),
+                    where("date", "<=", end),
+                    where("departamento", "==", departamento)
+                );
+            }
+            
             const convoysSnap = await getDocs(convoysQuery);
             const convoys = convoysSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 

@@ -11,7 +11,7 @@ import { AdminEditTeamModal } from './AdminEditTeamModal';
 import { checkWeeklyLimit } from '../../../utils/helpers'; 
 
     
-export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotification, weekId }) => {
+export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotification, weekId, departamento }) => {
     const [expandedRows, setExpandedRows] = useState([]);
     const [modalContent, setModalContent] = useState(null);
     const [editingTeam, setEditingTeam] = useState(null);
@@ -123,6 +123,7 @@ const handleAdminRegister = async (vaga, teamData) => {
             status: teamStatus,
             ...(conflictDetails && { conflictDetails }), // Adiciona detalhes se houver conflito
             delegaciaPrincipal: leader?.delegacia || '', // Pega delegacia do líder selecionado
+            departamento: departamento || 'N/A', // Adiciona departamento
         };
         const vagaDocRef = doc(db, `/artifacts/${appId}/public/data/vagas`, vaga.id);
         const batch = writeBatch(db);

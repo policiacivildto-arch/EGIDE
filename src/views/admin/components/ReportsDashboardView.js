@@ -10,14 +10,26 @@ import { Pie, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
     
- export  const ReportsDashboardView = ({ showNotification }) => {
+ export  const ReportsDashboardView = ({ showNotification, departamento }) => {
      const [cycle, setCycle] = useState(getCycleInfo());
      const [reports, setReports] = useState([]);
      const [loading, setLoading] = useState(true);
  
      useEffect(() => {
          setLoading(true);
-         const reportsQuery = query(collection(db, `/artifacts/${appId}/public/data/convoyReports`), where("cycleId", "==", cycle.cycleId));
+         let reportsQuery = query(
+             collection(db, `/artifacts/${appId}/public/data/convoyReports`), 
+             where("cycleId", "==", cycle.cycleId)
+         );
+         
+         // Se houver departamento, adicionar filtro
+         if (departamento) {
+             reportsQuery = query(
+                 collection(db, `/artifacts/${appId}/public/data/convoyReports`), 
+                 where("cycleId", "==", cycle.cycleId),
+                 where("departamento", "==", departamento)
+             );
+         }
          
          const unsubReports = onSnapshot(reportsQuery, (snap) => {
              setReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -25,7 +37,7 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
          });
  
          return () => unsubReports();
-     }, [cycle]);
+     }, [cycle, departamento]);
  
      const goToPreviousCycle = () => {
          const [year, month] = cycle.cycleId.split('-').map(Number);

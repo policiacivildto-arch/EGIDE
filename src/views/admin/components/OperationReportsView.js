@@ -9,7 +9,7 @@ import { Download } from 'lucide-react';
 
 
 
-export const OperationReportsView = ({ showNotification }) => {
+export const OperationReportsView = ({ showNotification, departamento }) => {
     const today = new Date().toISOString().split('T')[0];
     const [startDate, setStartDate] = useState(today);
     const [endDate, setEndDate] = useState(today);
@@ -32,11 +32,22 @@ export const OperationReportsView = ({ showNotification }) => {
             const end = new Date(endDate);
             end.setHours(23, 59, 59, 999);
 
-            const reportsQuery = query(
+            let reportsQuery = query(
                 collection(db, `/artifacts/${appId}/public/data/convoyReports`),
                 where("submittedAt", ">=", start),
                 where("submittedAt", "<=", end)
             );
+            
+            // Se houver departamento, adicionar filtro
+            if (departamento) {
+                reportsQuery = query(
+                    collection(db, `/artifacts/${appId}/public/data/convoyReports`),
+                    where("submittedAt", ">=", start),
+                    where("submittedAt", "<=", end),
+                    where("departamento", "==", departamento)
+                );
+            }
+            
             const reportsSnap = await getDocs(reportsQuery);
             const fetchedReports = reportsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 

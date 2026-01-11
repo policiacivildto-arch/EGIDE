@@ -16,7 +16,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Download, Edit } from 'lucide-react';
 import { LoadingSpinner } from '../../../components/ui/Shared';
-export const PaymentReportView = ({ allUsers, showNotification }) => {
+export const PaymentReportView = ({ allUsers, showNotification, departamento }) => {
     const today = new Date().toISOString().split('T')[0];
     const [startDate, setStartDate] = useState(today);
     const [endDate, setEndDate] = useState(today);
@@ -48,20 +48,36 @@ export const PaymentReportView = ({ allUsers, showNotification }) => {
             const end = new Date(endDate);
             end.setHours(23, 59, 59, 999);
 
-            const teamsQuery = query(
+            let teamsQuery = query(
                 collection(db, `/artifacts/${appId}/public/data/teams`),
                 where("vagaDate", ">=", start),
                 where("vagaDate", "<=", end)
             );
+            if (departamento) {
+                teamsQuery = query(
+                    collection(db, `/artifacts/${appId}/public/data/teams`),
+                    where("vagaDate", ">=", start),
+                    where("vagaDate", "<=", end),
+                    where("departamento", "==", departamento)
+                );
+            }
             const teamsSnap = await getDocs(teamsQuery);
             const fetchedServices = teamsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             if (fetchedServices.length > 0) {
-                const convoysQuery = query(
+                let convoysQuery = query(
                     collection(db, `/artifacts/${appId}/public/data/convoys`),
                     where("date", ">=", start),
                     where("date", "<=", end)
                 );
+                if (departamento) {
+                    convoysQuery = query(
+                        collection(db, `/artifacts/${appId}/public/data/convoys`),
+                        where("date", ">=", start),
+                        where("date", "<=", end),
+                        where("departamento", "==", departamento)
+                    );
+                }
                 const convoysSnap = await getDocs(convoysQuery);
                 const fetchedConvoys = convoysSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setConvoysForPeriod(fetchedConvoys);

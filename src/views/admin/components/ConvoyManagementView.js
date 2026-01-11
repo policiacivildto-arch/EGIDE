@@ -11,7 +11,7 @@ import { AIS_OPTIONS, AIS_BAIRROS, DPC_LIST, OIP_LIST, BRIEFING_LOCATIONS } from
 import { displayMatricula } from '../../../utils/helpers';
     
 
-export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification }) => {
+export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification, departamento }) => {
     const [dataOperacao, setDataOperacao] = useState(() => new Date().toISOString().split("T")[0]);
     const [selectedTeams, setSelectedTeams] = useState([]);
     const [operationData, setOperationData] = useState({ dpc: '', oip: '', dpcOutro: '', oipOutro: '', localBriefing: '', localBriefingOutro: '' });
@@ -101,7 +101,8 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification 
             oip: finalOip,
             dpc: finalDpc,
             localBriefing: finalLocalBriefing,
-            status: 'Formado'
+            status: 'Formado',
+            departamento: departamento || 'N/A'
         });
         
         showNotification(`Comboio ${newConvoyNumber} criado com sucesso!`, "success");

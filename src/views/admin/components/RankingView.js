@@ -5,7 +5,7 @@ import { db, appId } from '../../../config/firebase'; // Import correto!
 import { LoadingSpinner } from '../../../components/ui/Shared'; // Import correto!
 import { displayMatricula } from '../../../utils/helpers'; // Import correto!
 
-export const RankingView = ({ showNotification }) => {
+export const RankingView = ({ showNotification, departamento }) => {
     const [rankingData, setRankingData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [rankingTitle, setRankingTitle] = useState('Ranking Geral de Participação');
@@ -29,6 +29,7 @@ const fetchRankingData = async () => {
     const convoysCollectionRef = collection(db, `/artifacts/${appId}/public/data/convoys`);
     
     let dateConstraints = [];
+    let departamentoConstraint = departamento ? [where("departamento", "==", departamento)] : [];
     let titleDatePart = 'Geral';
 
     // Monta o filtro de data (sem alterações aqui)
@@ -50,7 +51,7 @@ const fetchRankingData = async () => {
     try {
         const statsMap = new Map();
 
-        const teamsQuery = query(teamsCollectionRef, ...dateConstraints);
+        const teamsQuery = query(teamsCollectionRef, ...dateConstraints, ...departamentoConstraint);
         const teamsSnap = await getDocs(teamsQuery);
         const teamsInPeriod = teamsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
