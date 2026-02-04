@@ -16,9 +16,10 @@ ALLOWED_HOSTS = config(
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
 
-# Se estiver em produção no Render
+# Se estiver em produção no Render ou Railway
 if not DEBUG:
     ALLOWED_HOSTS.append('.onrender.com')
+    ALLOWED_HOSTS.append('.railway.app')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
