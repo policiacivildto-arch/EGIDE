@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db, appId } from '../../../config/firebase'; // Import correto!    
 import { useAdminData } from '../useAdminData';
-import { calculateShiftCost, displayMatricula } from '../../../utils/helpers';
+import { calculateShiftCost, displayMatricula } from '../../../utils/calculateCost';
 import { LoadingSpinner } from '../../../components/ui/Shared';
 
 export const OperationCostView = ({ showNotification, allUsers, holidays, departamento }) => {

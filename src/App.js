@@ -25,6 +25,9 @@ import DashboardDepartamento from './views/departamentos/DashboardDepartamento';
 import HomePage from './views/HomePage';
 import OperationsDashboard from './views/operations/OperationsDashboard';
 
+// Exemplo de CRUD Completo Django
+import ExemploCicloCompleto from './examples/ExemploCicloCompleto';
+
 // Re-export commonly-used UI/layout helpers so other modules can import from `../../App`
 export { LoadingSpinner, Notification, Modal, AuthLayout, Header };
 export default function App() {
@@ -118,6 +121,12 @@ export default function App() {
             default:
                 return <LoginScreen showNotification={showNotification} setAuthScreen={setAuthScreen} />;
         }
+    }
+
+    // 🎯 ROTA DE TESTE: Acesse /teste-crud para ver o ciclo completo
+    // Coloque ?teste=1 na URL para ativar
+    if (window.location.search.includes('teste=1')) {
+        return <ExemploCicloCompleto />;
     }
 
     // Página de Seleção de Sistema (antes de entrar no app)

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { normalizeName, formatMatricula, formatTelefone } from '../../../utils/helpers';
-import { DEPARTMENTS } from '../../../config/constants';  
+import { DEPARTMENTS } from '../../../constants/data';
 import { findPolicialByMatricula } from '../../../constants/policiais';
 export const UserForm = ({ user, onSave }) => {
    const [formData, setFormData] = useState({ 

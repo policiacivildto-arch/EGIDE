@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { FileText } from 'lucide-react';
+import { DEPARTMENTS } from '../../../constants/data';
 
 export function PlanoForm({ 
     planoForm, 
@@ -10,8 +11,26 @@ export function PlanoForm({
     equipes,
     alvos,
     setOperacoes,
-    operacoes
+    operacoes,
+    operacaoAtual
 }) {
+    // Preencher formulário automaticamente com dados da operação
+    useEffect(() => {
+        if (operacaoAtual && !planoForm.dataOperacao) {
+            const dataHoje = new Date().toISOString().split('T')[0];
+            setPlanoForm({
+                ...planoForm,
+                dataOperacao: operacaoAtual.data_inicio || dataHoje,
+                horarioApresentacao: operacaoAtual.hora_inicio || '',
+                ondeOcorrera: operacaoAtual.objetivo || '',
+                delegacia: operacaoAtual.delegacia_responsavel || '',
+                departamentoDemandante: operacaoAtual.departamento_solicitante || operacaoAtual.orgao_solicitante || '',
+                localApresentacao: 'DTO - Departamento Técnico Operacional',
+                dataEmissao: dataHoje
+            });
+        }
+    }, [operacaoAtual]);
+
     const handleSubmit = (e) => {
         e.preventDefault();
         
@@ -42,6 +61,44 @@ export function PlanoForm({
                     <h5 className="font-semibold text-white">Informações Gerais</h5>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
+                            <label className="block text-gray-300 mb-2">Nº do Plano *</label>
+                            <input
+                                type="text"
+                                required
+                                value={planoForm.numeroPlano || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, numeroPlano: e.target.value })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                                placeholder="Ex: 001/2026"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-300 mb-2">NUP/OFÍCIO/EMAIL *</label>
+                            <input
+                                type="text"
+                                required
+                                value={planoForm.nupOficioEmail || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, nupOficioEmail: e.target.value })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                                placeholder="Ex: NUP 00000.000000/2026-00"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-300 mb-2">Tipo de Mandado</label>
+                            <select
+                                value={planoForm.tipoMandado || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, tipoMandado: e.target.value })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                            >
+                                <option value="">Selecione</option>
+                                <option value="Busca e Apreensão">Busca e Apreensão</option>
+                                <option value="Prisão Preventiva">Prisão Preventiva</option>
+                                <option value="Prisão Temporária">Prisão Temporária</option>
+                                <option value="Sequestro de Bens">Sequestro de Bens</option>
+                                <option value="Sem Mandado">Sem Mandado</option>
+                                <option value="Outros">Outros</option>
+                            </select>
+                        </div>
+                        <div>
                             <label className="block text-gray-300 mb-2">Data da Operação *</label>
                             <input
                                 type="date"
@@ -52,229 +109,129 @@ export function PlanoForm({
                             />
                         </div>
                         <div>
-                            <label className="block text-gray-300 mb-2">Horário Previsto *</label>
+                            <label className="block text-gray-300 mb-2">Horário de Apresentação *</label>
                             <input
                                 type="time"
                                 required
-                                value={planoForm.horarioPrevisto || ''}
-                                onChange={(e) => setPlanoForm({ ...planoForm, horarioPrevisto: e.target.value })}
+                                value={planoForm.horarioApresentacao || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, horarioApresentacao: e.target.value })}
                                 className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-300 mb-2">Onde Ocorrerá *</label>
+                            <input
+                                type="text"
+                                required
+                                value={planoForm.ondeOcorrera || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, ondeOcorrera: e.target.value })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                                placeholder="Local da operação"
                             />
                         </div>
                     </div>
                 </div>
 
-                {/* Objetivo */}
+                {/* Informações Institucionais */}
                 <div className="bg-gray-600 p-4 rounded-lg space-y-4">
-                    <h5 className="font-semibold text-white">🎯 Objetivo da Operação</h5>
-                    <textarea
-                        required
-                        value={planoForm.objetivo || ''}
-                        onChange={(e) => setPlanoForm({ ...planoForm, objetivo: e.target.value })}
-                        className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500 h-24"
-                        placeholder="Descreva o objetivo principal da operação..."
-                    />
-                </div>
-
-                {/* Estratégia */}
-                <div className="bg-gray-600 p-4 rounded-lg space-y-4">
-                    <h5 className="font-semibold text-white">⚔️ Estratégia Operacional</h5>
-                    <div>
-                        <label className="block text-gray-300 mb-2">Tipo de Abordagem</label>
-                        <select
-                            value={planoForm.tipoAbordagem || ''}
-                            onChange={(e) => setPlanoForm({ ...planoForm, tipoAbordagem: e.target.value })}
-                            className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
-                        >
-                            <option value="">Selecione</option>
-                            <option value="Cerco e Busca">Cerco e Busca</option>
-                            <option value="Abordagem Direta">Abordagem Direta</option>
-                            <option value="Vigilância e Captura">Vigilância e Captura</option>
-                            <option value="Mandado de Busca">Mandado de Busca e Apreensão</option>
-                            <option value="Patrulhamento">Patrulhamento Ostensivo</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-gray-300 mb-2">Descrição da Estratégia</label>
-                        <textarea
-                            value={planoForm.estrategia || ''}
-                            onChange={(e) => setPlanoForm({ ...planoForm, estrategia: e.target.value })}
-                            className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500 h-32"
-                            placeholder="Detalhe a estratégia: rotas, pontos de apoio, táticas específicas..."
-                        />
-                    </div>
-                </div>
-
-                {/* Equipes Designadas */}
-                <div className="bg-gray-600 p-4 rounded-lg space-y-4">
-                    <h5 className="font-semibold text-white">👥 Equipes Designadas</h5>
-                    <div className="space-y-2">
-                        {equipes.filter(e => e.operacaoId === selectedOperationId).length > 0 ? (
-                            equipes.filter(e => e.operacaoId === selectedOperationId).map(equipe => (
-                                <div key={equipe.id} className="flex items-center space-x-3 bg-gray-700 p-3 rounded">
-                                    <input
-                                        type="checkbox"
-                                        checked={planoForm.equipesDesignadas?.includes(equipe.id) || false}
-                                        onChange={(e) => {
-                                            const equipesDesignadas = planoForm.equipesDesignadas || [];
-                                            if (e.target.checked) {
-                                                setPlanoForm({ 
-                                                    ...planoForm, 
-                                                    equipesDesignadas: [...equipesDesignadas, equipe.id] 
-                                                });
-                                            } else {
-                                                setPlanoForm({ 
-                                                    ...planoForm, 
-                                                    equipesDesignadas: equipesDesignadas.filter(id => id !== equipe.id) 
-                                                });
-                                            }
-                                        }}
-                                        className="w-4 h-4"
-                                    />
-                                    <span className="text-white">
-                                        {equipe.departamento} {equipe.delegacia && `- ${equipe.delegacia}`} 
-                                        {' '}(Líder: {equipe.chefe})
-                                    </span>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-gray-400 italic">Nenhuma equipe cadastrada para esta operação</p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Alvos Prioritários */}
-                <div className="bg-gray-600 p-4 rounded-lg space-y-4">
-                    <h5 className="font-semibold text-white">🎯 Alvos Prioritários</h5>
-                    <div className="space-y-2">
-                        {alvos.filter(a => a.operacaoId === selectedOperationId).length > 0 ? (
-                            alvos.filter(a => a.operacaoId === selectedOperationId).map(alvo => (
-                                <div key={alvo.id} className="flex items-center space-x-3 bg-gray-700 p-3 rounded">
-                                    <input
-                                        type="checkbox"
-                                        checked={planoForm.alvosPrioritarios?.includes(alvo.id) || false}
-                                        onChange={(e) => {
-                                            const alvosPrioritarios = planoForm.alvosPrioritarios || [];
-                                            if (e.target.checked) {
-                                                setPlanoForm({ 
-                                                    ...planoForm, 
-                                                    alvosPrioritarios: [...alvosPrioritarios, alvo.id] 
-                                                });
-                                            } else {
-                                                setPlanoForm({ 
-                                                    ...planoForm, 
-                                                    alvosPrioritarios: alvosPrioritarios.filter(id => id !== alvo.id) 
-                                                });
-                                            }
-                                        }}
-                                        className="w-4 h-4"
-                                    />
-                                    <span className="text-white">
-                                        {alvo.nome} {alvo.vulgo && `"${alvo.vulgo}"`}
-                                    </span>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-gray-400 italic">Nenhum alvo cadastrado para esta operação</p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Recursos Necessários */}
-                <div className="bg-gray-600 p-4 rounded-lg space-y-4">
-                    <h5 className="font-semibold text-white">🛠️ Recursos Necessários</h5>
+                    <h5 className="font-semibold text-white">🏛️ Informações Institucionais</h5>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="flex items-center space-x-2">
-                                <input
-                                    type="checkbox"
-                                    checked={planoForm.recursos?.apoioTatico || false}
-                                    onChange={(e) => setPlanoForm({ 
-                                        ...planoForm, 
-                                        recursos: { ...planoForm.recursos, apoioTatico: e.target.checked }
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <span className="text-gray-300">Apoio Tático (GOE/BOPE)</span>
-                            </label>
+                            <label className="block text-gray-300 mb-2">Delegacia *</label>
+                            <select
+                                required
+                                value={planoForm.delegacia || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, delegacia: e.target.value })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                            >
+                                <option value="">Selecione a delegacia</option>
+                                {planoForm.departamentoDemandante && DEPARTMENTS[planoForm.departamentoDemandante] ? (
+                                    DEPARTMENTS[planoForm.departamentoDemandante].map((delegacia) => (
+                                        <option key={delegacia} value={delegacia}>{delegacia}</option>
+                                    ))
+                                ) : (
+                                    Object.keys(DEPARTMENTS).map((dept) => (
+                                        <optgroup key={dept} label={dept}>
+                                            {DEPARTMENTS[dept].map((delegacia) => (
+                                                <option key={delegacia} value={delegacia}>{delegacia}</option>
+                                            ))}
+                                        </optgroup>
+                                    ))
+                                )}
+                            </select>
                         </div>
                         <div>
-                            <label className="flex items-center space-x-2">
-                                <input
-                                    type="checkbox"
-                                    checked={planoForm.recursos?.caoFarejador || false}
-                                    onChange={(e) => setPlanoForm({ 
-                                        ...planoForm, 
-                                        recursos: { ...planoForm.recursos, caoFarejador: e.target.checked }
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <span className="text-gray-300">Cão Farejador</span>
-                            </label>
+                            <label className="block text-gray-300 mb-2">Departamento Demandante *</label>
+                            <select
+                                required
+                                value={planoForm.departamentoDemandante || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, departamentoDemandante: e.target.value, delegacia: '' })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                            >
+                                <option value="">Selecione o departamento</option>
+                                {Object.keys(DEPARTMENTS).map((dept) => (
+                                    <option key={dept} value={dept}>{dept}</option>
+                                ))}
+                            </select>
                         </div>
                         <div>
-                            <label className="flex items-center space-x-2">
-                                <input
-                                    type="checkbox"
-                                    checked={planoForm.recursos?.drones || false}
-                                    onChange={(e) => setPlanoForm({ 
-                                        ...planoForm, 
-                                        recursos: { ...planoForm.recursos, drones: e.target.checked }
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <span className="text-gray-300">Drones</span>
-                            </label>
+                            <label className="block text-gray-300 mb-2">Diretor Demandante</label>
+                            <input
+                                type="text"
+                                value={planoForm.diretorDemandante || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, diretorDemandante: e.target.value })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                                placeholder="Nome do diretor demandante"
+                            />
                         </div>
                         <div>
-                            <label className="flex items-center space-x-2">
-                                <input
-                                    type="checkbox"
-                                    checked={planoForm.recursos?.ambulancia || false}
-                                    onChange={(e) => setPlanoForm({ 
-                                        ...planoForm, 
-                                        recursos: { ...planoForm.recursos, ambulancia: e.target.checked }
-                                    })}
-                                    className="w-4 h-4"
-                                />
-                                <span className="text-gray-300">Ambulância</span>
-                            </label>
+                            <label className="block text-gray-300 mb-2">Local de Apresentação *</label>
+                            <input
+                                type="text"
+                                required
+                                value={planoForm.localApresentacao || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, localApresentacao: e.target.value })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                                placeholder="Ex: DTO - Departamento Técnico Operacional"
+                            />
                         </div>
                     </div>
-                </div>
-
-                {/* Riscos e Medidas de Segurança */}
-                <div className="bg-gray-600 p-4 rounded-lg space-y-4">
-                    <h5 className="font-semibold text-white">⚠️ Riscos e Medidas de Segurança</h5>
                     <div>
-                        <label className="block text-gray-300 mb-2">Riscos Identificados</label>
+                        <label className="block text-gray-300 mb-2">Departamentos Envolvidos</label>
                         <textarea
-                            value={planoForm.riscos || ''}
-                            onChange={(e) => setPlanoForm({ ...planoForm, riscos: e.target.value })}
+                            value={planoForm.departamentosEnvolvidos || ''}
+                            onChange={(e) => setPlanoForm({ ...planoForm, departamentosEnvolvidos: e.target.value })}
                             className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500 h-20"
-                            placeholder="Descreva os riscos envolvidos..."
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-gray-300 mb-2">Medidas de Segurança</label>
-                        <textarea
-                            value={planoForm.medidasSeguranca || ''}
-                            onChange={(e) => setPlanoForm({ ...planoForm, medidasSeguranca: e.target.value })}
-                            className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500 h-20"
-                            placeholder="Detalhe as medidas de segurança..."
+                            placeholder="Liste todos os departamentos envolvidos separados por vírgula"
                         />
                     </div>
                 </div>
 
-                {/* Observações */}
+                {/* Diretor e Data de Emissão */}
                 <div className="bg-gray-600 p-4 rounded-lg space-y-4">
-                    <h5 className="font-semibold text-white">📝 Observações</h5>
-                    <textarea
-                        value={planoForm.observacoes || ''}
-                        onChange={(e) => setPlanoForm({ ...planoForm, observacoes: e.target.value })}
-                        className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500 h-24"
-                        placeholder="Informações adicionais relevantes..."
-                    />
+                    <h5 className="font-semibold text-white">📝 Aprovação</h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-gray-300 mb-2">Diretor Responsável</label>
+                            <input
+                                type="text"
+                                value={planoForm.diretor || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, diretor: e.target.value })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                                placeholder="Nome do diretor responsável"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-300 mb-2">Data de Emissão *</label>
+                            <input
+                                type="date"
+                                required
+                                value={planoForm.dataEmissao || ''}
+                                onChange={(e) => setPlanoForm({ ...planoForm, dataEmissao: e.target.value })}
+                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 {/* Botões */}
@@ -288,9 +245,10 @@ export function PlanoForm({
                     </button>
                     <button
                         type="submit"
-                        className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded text-white font-semibold"
+                        className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded text-white font-semibold flex items-center space-x-2"
                     >
-                        ✓ Salvar Plano Operacional
+                        <FileText size={18} />
+                        <span>✓ Salvar e Gerar Documento</span>
                     </button>
                 </div>
             </form>

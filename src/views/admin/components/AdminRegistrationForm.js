@@ -9,7 +9,7 @@ export const AdminRegistrationForm = ({ vaga, allUsers, onSubmit, onCancel, show
     const [leaderUid, setLeaderUid] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
-    const availableUsers = allUsers.filter(u => !team.some(tm => tm.uid === u.id));
+    const availableUsers = (allUsers || []).filter(u => !team.some(tm => tm.uid === u.id));
     const filteredUsers = searchTerm ? availableUsers.filter(u => normalizeName(u.nome).includes(normalizeName(searchTerm))) : availableUsers;
 
     const addMember = (user) => {
@@ -44,10 +44,10 @@ export const AdminRegistrationForm = ({ vaga, allUsers, onSubmit, onCancel, show
                 <h3 className="font-bold text-lg mb-2">Membros da Equipe</h3>
                 <div className="mb-2">
                     <input type="text" placeholder="Pesquisar policial por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full p-2 border rounded-md" />
-                    {searchTerm && <div className="border max-h-40 overflow-y-auto">{filteredUsers.slice(0, 10).map(u => <div key={u.id} onClick={() => addMember(u)} className="p-2 hover:bg-gray-200 cursor-pointer">{u.nome} ({displayMatricula(u.matricula)})</div>)}</div>}
+                    {searchTerm && <div className="border max-h-40 overflow-y-auto">{(filteredUsers || []).slice(0, 10).map(u => <div key={u.id} onClick={() => addMember(u)} className="p-2 hover:bg-gray-200 cursor-pointer">{u.nome} ({displayMatricula(u.matricula)})</div>)}</div>}
                 </div>
                 <div className="space-y-2">
-                    {team.map(member => (
+                    {(team || []).map(member => (
                         <div key={member.uid} className="flex items-center justify-between p-2 bg-gray-100 rounded">
                             <span>{member.nome}</span>
                             <button type="button" onClick={() => removeMember(member.uid)} className="text-red-500"><UserMinus size={18} /></button>
@@ -60,7 +60,7 @@ export const AdminRegistrationForm = ({ vaga, allUsers, onSubmit, onCancel, show
                 <h3 className="font-bold text-lg mb-2">Definir Chefe da Equipe</h3>
                 <select value={leaderUid} onChange={e => setLeaderUid(e.target.value)} className="w-full p-2 border rounded-md bg-white" required>
                     <option value="">Selecione um líder...</option>
-                    {team.map(m => <option key={m.uid} value={m.uid}>{m.nome}</option>)}
+                    {(team || []).map(m => <option key={m.uid} value={m.uid}>{m.nome}</option>)}
                 </select>
             </div>
 

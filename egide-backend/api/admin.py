@@ -2,6 +2,10 @@ from django.contrib import admin
 from .models import (
     Departamento, Delegacia, Policial, Viatura, Vaga,
     Equipe, Operacao, Comboio,
+    # Sistema de Operações
+    OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
+    ResultadoOperacao, AporteFinanceiro,
+    # Sistema de Eventos
     EventoOperacao, DepartamentoEvento, EscalaPolicial
 )
 from .models_security import (
@@ -71,6 +75,70 @@ class ComboioAdmin(admin.ModelAdmin):
     search_fields = ['descricao', 'ais', 'bairros']
     readonly_fields = ['criado_em', 'atualizado_em']
     filter_horizontal = ['operacoes']
+
+
+# =====================================================
+# ADMIN PARA SISTEMA DE OPERAÇÕES POLICIAIS
+# =====================================================
+
+@admin.register(OperacaoPolicial)
+class OperacaoPolicialAdmin(admin.ModelAdmin):
+    list_display = ['id', 'nome', 'departamento_solicitante', 'tipo_operacao', 'status', 'data_hora_inicio', 'criado_em']
+    list_filter = ['status', 'tipo_operacao', 'departamento_solicitante', 'data_hora_inicio']
+    search_fields = ['nome', 'objetivo']
+    readonly_fields = ['criado_por', 'criado_em', 'atualizado_em']
+    filter_horizontal = ['departamentos_apoio']
+    
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.criado_por = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Alvo)
+class AlvoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'nome', 'tipo', 'operacao', 'visivel_apos_briefing', 'criado_em']
+    list_filter = ['tipo', 'operacao', 'visivel_apos_briefing', 'criado_em']
+    search_fields = ['nome', 'descricao', 'endereco']
+    readonly_fields = ['criado_em', 'atualizado_em']
+
+
+@admin.register(EquipeOperacao)
+class EquipeOperacaoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'operacao', 'departamento', 'delegacia', 'chefe', 'confirmou_presenca']
+    list_filter = ['operacao', 'departamento', 'delegacia', 'confirmou_presenca']
+    search_fields = ['operacao__nome', 'chefe__nome']
+    filter_horizontal = ['membros']
+    readonly_fields = ['criado_em']
+
+
+@admin.register(SubstitutoOperacao)
+class SubstitutoOperacaoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'equipe', 'policial_planejado', 'policial_substituto', 'motivo', 'registrado_em']
+    list_filter = ['equipe__operacao', 'registrado_em']
+    search_fields = ['policial_planejado__nome', 'policial_substituto__nome', 'motivo']
+    readonly_fields = ['registrado_em']
+
+
+@admin.register(ResultadoOperacao)
+class ResultadoOperacaoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'operacao', 'tipo', 'quantidade', 'equipe', 'registrado_em']
+    list_filter = ['tipo', 'operacao', 'registrado_em']
+    search_fields = ['operacao__nome', 'descricao']
+    readonly_fields = ['registrado_por', 'registrado_em']
+    
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.registrado_por = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(AporteFinanceiro)
+class AporteFinanceiroAdmin(admin.ModelAdmin):
+    list_display = ['id', 'operacao', 'departamento_responsavel', 'total_dpc', 'total_oip', 'total_efetivo', 'custo_total']
+    list_filter = ['operacao', 'departamento_responsavel', 'calculado_em']
+    search_fields = ['operacao__nome', 'departamento_responsavel__nome']
+    readonly_fields = ['calculado_em', 'atualizado_em']
 
 
 # =====================================================

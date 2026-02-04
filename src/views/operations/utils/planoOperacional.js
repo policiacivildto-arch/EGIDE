@@ -1,7 +1,11 @@
 /**
  * Utilitário para gerar Plano Operacional em formato DOCX
  * Organiza equipes por departamento e numera todas as equipes
+ * Usa a biblioteca docx para gerar Word verdadeiro (.docx)
  */
+
+import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, AlignmentType, WidthType, BorderStyle } from 'docx';
+import { saveAs } from 'file-saver';
 
 export function gerarPlanoOperacional(operacao, equipes, alvos) {
     // Agrupar equipes por departamento
@@ -24,47 +28,447 @@ export function gerarPlanoOperacional(operacao, equipes, alvos) {
             });
         });
 
-    // Gerar HTML do documento
-    const html = gerarHTMLPlano(operacao, equipesPorDepartamento, alvos);
+    // Gerar documento Word real
+    const doc = criarDocumentoWord(operacao, equipesPorDepartamento, alvos);
     
     // Criar e baixar arquivo
-    baixarComoDocx(html, `Plano_Operacional_${operacao.nome.replace(/\s+/g, '_')}.doc`);
+    Packer.toBlob(doc).then(blob => {
+        saveAs(blob, `Plano_Operacional_${operacao.nome.replace(/\s+/g, '_')}.docx`);
+    });
 }
 
-function gerarHTMLPlano(operacao, equipesPorDepartamento, alvos) {
+function criarDocumentoWord(operacao, equipesPorDepartamento, alvos) {
     const dataOperacao = new Date(operacao.data_hora_inicio).toLocaleDateString('pt-BR');
-    const horaOperacao = new Date(operacao.data_hora_inicio).toLocaleTimeString('pt-BR', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-    });
+    const dataEmissao = new Date().toLocaleDateString('pt-BR');
+    const numeroOperacao = operacao.numeroOperacao || operacao.id;
+    const anoOperacao = new Date(operacao.data_hora_inicio).getFullYear();
+    const horarioApresentacao = new Date(operacao.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    // Gerar seções de equipes por departamento no novo formato
-    let equipesHTML = '';
+    // Extrair informações da operação
+    const departamentoDemandante = operacao.departamentoDemandante || 'DEPARTAMENTO TÉCNICO OPERACIONAL';
+    const nup = operacao.nup || '[NUP não informado]';
+    const tipoMandado = operacao.tipoMandado || 'mandados de prisão e busca e apreensão';
+    const localOperacao = operacao.local || operacao.bairros || '[Local não informado]';
+    const localApresentacao = operacao.localApresentacao || 'DTO - Departamento Técnico Operacional';
+    const diretor = operacao.diretor || 'DPC [Nome do Diretor]';
+    const diretorDemandante = operacao.diretorDemandante || diretor;
+    
+    // Departamentos envolvidos
+    const departamentosEnvolvidos = Object.keys(equipesPorDepartamento).join(', ') || 'Departamentos Envolvidos';
+
+    const sections = [];
+
+    // CABEÇALHO OFICIAL
+    sections.push(
+        new Paragraph({
+            text: 'DEPARTAMENTO TÉCNICO OPERACIONAL',
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 0 }
+        }),
+        new Paragraph({
+            text: 'SEÇÃO DE OPERAÇÕES',
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 }
+        }),
+        new Paragraph({
+            text: '',
+            spacing: { after: 800 }
+        }),
+        new Paragraph({
+            text: `PLANO OPERACIONAL Nº ${numeroOperacao}`,
+            alignment: AlignmentType.CENTER,
+            bold: true,
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: 'CUMPRIMENTO DE MANDADOS JUDICIAIS',
+            alignment: AlignmentType.CENTER,
+            bold: true,
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: `Dia ${dataOperacao}`,
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 }
+        })
+    );
+
+    // 1. FINALIDADE
+    sections.push(
+        new Paragraph({
+            text: '1. FINALIDADE',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: `Executar, por solicitação do ${departamentoDemandante}, através do NUP ${nup}, no cumprimento de ${tipoMandado}, que ocorrerá na(s) cidade(s) de ${localOperacao}, além de viabilizar a otimização da atuação desta Instituição nas diversas ações delitivas, tudo em consonância com as diretrizes da Delegacia Geral da Polícia Civil.`,
+            alignment: AlignmentType.JUSTIFIED,
+            spacing: { after: 200 }
+        })
+    );
+
+    // 2. CALENDÁRIO
+    sections.push(
+        new Paragraph({
+            text: '2. CALENDÁRIO',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: 'a) Cronograma operacional:',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: `●\tDATA: ${dataOperacao}`,
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: `●\tHORÁRIO DE APRESENTAÇÃO: ${horarioApresentacao}`,
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: `●\tLOCAL: ${localApresentacao}`,
+            spacing: { after: 150 }
+        }),
+        new Paragraph({
+            text: 'b) Ações a serem realizadas:',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: `●\tCumprimento de ${tipoMandado};`,
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: '●\tLavratura de Auto de Prisão em Flagrante;',
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: '●\tElaboração de Termo Circunstanciado de Ocorrência;',
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: '●\tInstauração de Inquérito Policial mediante Portaria;',
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: '●\tRegistro de BO\'s;',
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: '●\tOutros atos imprescindíveis à elucidação dos crimes, contravenções e respectivas autorias, resultantes desta Operação, dentro da área de competência constitucionalmente atribuída à Polícia Civil.',
+            spacing: { after: 200 }
+        })
+    );
+
+    // 3. REFERÊNCIAS
+    sections.push(
+        new Paragraph({
+            text: '3. REFERÊNCIAS',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: '●\tConstituição Federal;',
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: '●\tCódigo Penal, Processo Penal Brasileira e legislação extravagante.',
+            spacing: { after: 200 }
+        })
+    );
+
+    // 4. PARTICIPANTES
+    sections.push(
+        new Paragraph({
+            text: '4. PARTICIPANTES',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: `●\tPolícia Civil através do ${departamentosEnvolvidos}.`,
+            spacing: { after: 200 }
+        })
+    );
+
+    // 5. EXECUÇÃO
+    sections.push(
+        new Paragraph({
+            text: '5. EXECUÇÃO',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: `A cargo do ${departamentoDemandante}.`,
+            spacing: { after: 200 }
+        })
+    );
+
+    // 6. EFETIVO EMPREGADO
+    sections.push(
+        new Paragraph({
+            text: '6. EFETIVO EMPREGADO',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: 'De acordo com o contido no Anexo I deste Plano.',
+            spacing: { after: 200 }
+        })
+    );
+
+    // 7. APOIO LOGÍSTICO
+    sections.push(
+        new Paragraph({
+            text: '7. APOIO LOGÍSTICO',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: 'Tendo em vista o caráter reservado do presente Plano Operacional, somente será encaminhado aos Departamentos envolvidos, após o envio do Relatório Circunstanciado, indicando o local e horário que cada equipe efetivamente executou a missão, sob pena do não pagamento da Diária de Reforço Operacional aos policiais participantes, à qual ficará a cargo do DTO, conforme legislação em vigor.',
+            alignment: AlignmentType.JUSTIFIED,
+            spacing: { after: 200 }
+        })
+    );
+
+    // 8. CONTROLE DA OPERAÇÃO
+    sections.push(
+        new Paragraph({
+            text: '8. CONTROLE DA OPERAÇÃO',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: 'a) SUPERVISÃO GERAL',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: `${diretor}.`,
+            spacing: { after: 150 }
+        }),
+        new Paragraph({
+            text: 'b) SUPERVISÃO OPERACIONAL',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: `${diretorDemandante}.`,
+            spacing: { after: 150 }
+        }),
+        new Paragraph({
+            text: 'c) COORDENAÇÃO OPERACIONAL',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: 'A cargo de cada Delegado escalado na Missão.',
+            spacing: { after: 200 }
+        })
+    );
+
+    // 9. RELATÓRIO
+    sections.push(
+        new Paragraph({
+            text: '9. RELATÓRIO',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: 'O DTO, após o término da Operação, elaborará Relatório Circunstanciado da mesma, informando o efetivo empregado nominalmente, comunicando as substituições e faltas, e o encaminhará aos Departamentos envolvidos.',
+            alignment: AlignmentType.JUSTIFIED,
+            spacing: { after: 200 }
+        })
+    );
+
+    // 10. PRESCRIÇÕES GERAIS
+    sections.push(
+        new Paragraph({
+            text: '10. PRESCRIÇÕES GERAIS',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: 'Priorizar o atendimento aos fatos emergentes da presente Operação.',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: `O(s) ${departamentosEnvolvidos} se encarregará(ão) de informar aos policiais das Delegacias que lhe são subordinadas acerca do dia, horário e apresentação das equipes.`,
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: 'Cada órgão participante deverá manter sigilo sobre as informações da Operação, cuja divulgação será de responsabilidade do Coordenador Operacional no momento do briefing.',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: 'Recomenda-se aos integrantes deste Plano Operacional o costumeiro entrosamento com os demais Órgãos participantes.',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: 'Os policiais civis deverão estar devidamente identificados com distintivo e fardamento da POLÍCIA CIVIL, conforme portaria nº 04/2024 da Polícia Civil do Ceará, salvo aqueles que por necessidade de serviço atuarão de forma velada, usando traje social.',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: 'É obrigatório o uso de Colete Balístico durante toda operação.',
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: 'A distribuição e atribuições das equipes no ambiente operacional ficarão a cargo da Coordenação Operacional.',
+            spacing: { after: 200 }
+        })
+    );
+
+    // 11. CUSTOS OPERACIONAIS
+    sections.push(
+        new Paragraph({
+            text: '11. CUSTOS OPERACIONAIS',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: 'Os custos operacionais encontram-se dispostos no anexo II para aporte financeiro ao DTO;',
+            spacing: { after: 200 }
+        })
+    );
+
+    // 12. DIFUSÃO
+    sections.push(
+        new Paragraph({
+            text: '12. DIFUSÃO',
+            bold: true,
+            spacing: { before: 300, after: 200 }
+        }),
+        new Paragraph({
+            text: `${departamentosEnvolvidos}.`,
+            spacing: { after: 400 }
+        })
+    );
+
+    // ASSINATURAS
+    sections.push(
+        new Paragraph({
+            text: '',
+            spacing: { after: 400 }
+        }),
+        new Paragraph({
+            text: `Fortaleza, ${dataEmissao}.`,
+            spacing: { after: 400 }
+        }),
+        new Paragraph({
+            text: '',
+            spacing: { after: 200 }
+        }),
+        new Paragraph({
+            text: diretor,
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: 'Diretor do Departamento Técnico Operacional',
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 300 }
+        }),
+        new Paragraph({
+            text: '',
+            spacing: { after: 200 }
+        }),
+        new Paragraph({
+            text: 'Aprovo: DPC Otávio Duarte Vieira Coutinho',
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 50 }
+        }),
+        new Paragraph({
+            text: 'Diretor de Planejamento e Gestão Interna',
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 }
+        })
+    );
+
+    // QUEBRA DE PÁGINA PARA ANEXO I
+    sections.push(
+        new Paragraph({
+            text: '',
+            pageBreakBefore: true
+        })
+    );
+
+    // ANEXO I - EFETIVO
+    sections.push(
+        new Paragraph({
+            text: 'ANEXO I',
+            alignment: AlignmentType.CENTER,
+            bold: true,
+            spacing: { after: 200 }
+        }),
+        new Paragraph({
+            text: `EFETIVO DA OPERAÇÃO ${numeroOperacao}/${anoOperacao}`,
+            alignment: AlignmentType.CENTER,
+            bold: true,
+            spacing: { after: 100 }
+        }),
+        new Paragraph({
+            text: `DIA ${dataOperacao}`,
+            alignment: AlignmentType.CENTER,
+            bold: true,
+            spacing: { after: 300 }
+        })
+    );
+
+    // Gerar seções de equipes por departamento
     Object.keys(equipesPorDepartamento).sort().forEach(dept => {
-        equipesHTML += `
-            <div style="margin-top: 30px; page-break-inside: avoid;">
-                <h3 style="color: #000; font-size: 12pt; font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 5px;">DEPARTAMENTO: ${dept}</h3>
-        `;
+        // Título do departamento
+        sections.push(
+            new Paragraph({
+                text: `DEPARTAMENTO: ${dept}`,
+                spacing: { before: 300, after: 200 },
+                bold: true,
+                border: {
+                    bottom: {
+                        color: '000000',
+                        space: 1,
+                        style: BorderStyle.SINGLE,
+                        size: 6
+                    }
+                }
+            })
+        );
 
-        equipesPorDepartamento[dept].forEach((equipe, idx) => {
+        equipesPorDepartamento[dept].forEach(equipe => {
             const tituloEquipe = equipe.tipo === 'Supervisão' 
                 ? `EQUIPE SUPERVISÃO: ${equipe.delegacia || dept}` 
                 : `EQUIPE ${equipe.numeroGlobal}: ${equipe.delegacia || 'N.O ' + dept}`;
-            
-            equipesHTML += `
-                <div style="margin-bottom: 25px; page-break-inside: avoid;">
-                    <p style="font-weight: bold; font-size: 11pt; margin-bottom: 10px;">${tituloEquipe} | VTR: ${equipe.viatura || '-'}</p>
-                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-                        <thead>
-                            <tr style="background-color: #ffffff; border: 1px solid #000;">
-                                <th style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold; font-size: 10pt; width: 12%;">CARGO</th>
-                                <th style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold; font-size: 10pt; width: 45%;">NOME</th>
-                                <th style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold; font-size: 10pt; width: 18%;">MATRÍCULA</th>
-                                <th style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold; font-size: 10pt; width: 25%;">TELEFONE</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
+
+            // Título da equipe
+            sections.push(
+                new Paragraph({
+                    text: `${tituloEquipe} | VTR: ${equipe.viatura || '-'}`,
+                    spacing: { before: 200, after: 100 },
+                    bold: true
+                })
+            );
+
+            // Criar tabela da equipe
+            const rows = [];
+
+            // Cabeçalho da tabela
+            rows.push(
+                new TableRow({
+                    children: [
+                        new TableCell({
+                            children: [new Paragraph({ text: 'CARGO', bold: true })],
+                            width: { size: 15, type: WidthType.PERCENTAGE }
+                        }),
+                        new TableCell({
+                            children: [new Paragraph({ text: 'NOME', bold: true })],
+                            width: { size: 45, type: WidthType.PERCENTAGE }
+                        }),
+                        new TableCell({
+                            children: [new Paragraph({ text: 'MATRÍCULA', bold: true })],
+                            width: { size: 20, type: WidthType.PERCENTAGE }
+                        }),
+                        new TableCell({
+                            children: [new Paragraph({ text: 'TELEFONE', bold: true })],
+                            width: { size: 20, type: WidthType.PERCENTAGE }
+                        })
+                    ]
+                })
+            );
 
             // Adicionar chefe se existir
             if (equipe.chefe) {
@@ -72,14 +476,16 @@ function gerarHTMLPlano(operacao, equipesPorDepartamento, alvos) {
                 const matriculaChefe = equipe.matriculaChefe || '-';
                 const telefoneChefe = equipe.telefoneChefe || '-';
                 
-                equipesHTML += `
-                    <tr>
-                        <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${cargo}</td>
-                        <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${equipe.chefe}</td>
-                        <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${matriculaChefe}</td>
-                        <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${telefoneChefe}</td>
-                    </tr>
-                `;
+                rows.push(
+                    new TableRow({
+                        children: [
+                            new TableCell({ children: [new Paragraph(cargo)] }),
+                            new TableCell({ children: [new Paragraph(equipe.chefe)] }),
+                            new TableCell({ children: [new Paragraph(matriculaChefe)] }),
+                            new TableCell({ children: [new Paragraph(telefoneChefe)] })
+                        ]
+                    })
+                );
             }
 
             // Adicionar membros
@@ -87,156 +493,104 @@ function gerarHTMLPlano(operacao, equipesPorDepartamento, alvos) {
                            (equipe.membros ? equipe.membros.split(',').map(m => m.trim()) : []);
             
             if (equipe.membrosDetalhes && Array.isArray(equipe.membrosDetalhes)) {
-                // Se tiver detalhes dos membros
                 equipe.membrosDetalhes.forEach(membro => {
-                    equipesHTML += `
-                        <tr>
-                            <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${membro.cargo || 'OIP'}</td>
-                            <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${membro.nome}</td>
-                            <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${membro.matricula || '-'}</td>
-                            <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${membro.telefone || '-'}</td>
-                        </tr>
-                    `;
+                    rows.push(
+                        new TableRow({
+                            children: [
+                                new TableCell({ children: [new Paragraph(membro.cargo || 'OIP')] }),
+                                new TableCell({ children: [new Paragraph(membro.nome)] }),
+                                new TableCell({ children: [new Paragraph(membro.matricula || '-')] }),
+                                new TableCell({ children: [new Paragraph(membro.telefone || '-')] })
+                            ]
+                        })
+                    );
                 });
             } else if (membros.length > 0) {
-                // Se tiver apenas nomes
                 membros.forEach(nome => {
                     if (nome) {
-                        equipesHTML += `
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">OIP</td>
-                                <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${nome}</td>
-                                <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">-</td>
-                                <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">-</td>
-                            </tr>
-                        `;
+                        rows.push(
+                            new TableRow({
+                                children: [
+                                    new TableCell({ children: [new Paragraph('OIP')] }),
+                                    new TableCell({ children: [new Paragraph(nome)] }),
+                                    new TableCell({ children: [new Paragraph('-')] }),
+                                    new TableCell({ children: [new Paragraph('-')] })
+                                ]
+                            })
+                        );
                     }
                 });
             }
 
-            equipesHTML += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
+            // Adicionar tabela ao documento
+            sections.push(
+                new Table({
+                    rows: rows,
+                    width: { size: 100, type: WidthType.PERCENTAGE }
+                })
+            );
         });
-
-        equipesHTML += `</div>`;
     });
 
-    // Gerar lista de alvos (se houver)
-    let alvosHTML = '';
+    // Adicionar alvos se houver
     const alvosDaOperacao = alvos.filter(a => a.operationId === operacao.id);
     
     if (alvosDaOperacao.length > 0) {
-        alvosHTML = `
-            <div style="page-break-before: always; margin-top: 30px;">
-                <h2 style="color: #000; font-size: 14pt; font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 5px;">ALVOS DA OPERAÇÃO</h2>
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background-color: #ffffff;">
-                            <th style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold; width: 5%;">Nº</th>
-                            <th style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold; width: 30%;">NOME</th>
-                            <th style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold; width: 15%;">CPF</th>
-                            <th style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold; width: 40%;">ENDEREÇO</th>
-                            <th style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; width: 10%;">EQUIPE</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
+        sections.push(
+            new Paragraph({
+                text: 'ALVOS DA OPERAÇÃO',
+                spacing: { before: 400, after: 200 },
+                bold: true,
+                border: {
+                    bottom: {
+                        color: '000000',
+                        space: 1,
+                        style: BorderStyle.SINGLE,
+                        size: 6
+                    }
+                }
+            })
+        );
+
+        const alvosRows = [
+            new TableRow({
+                children: [
+                    new TableCell({ children: [new Paragraph({ text: 'Nº', bold: true })], width: { size: 5, type: WidthType.PERCENTAGE } }),
+                    new TableCell({ children: [new Paragraph({ text: 'NOME', bold: true })], width: { size: 30, type: WidthType.PERCENTAGE } }),
+                    new TableCell({ children: [new Paragraph({ text: 'CPF', bold: true })], width: { size: 15, type: WidthType.PERCENTAGE } }),
+                    new TableCell({ children: [new Paragraph({ text: 'ENDEREÇO', bold: true })], width: { size: 40, type: WidthType.PERCENTAGE } }),
+                    new TableCell({ children: [new Paragraph({ text: 'EQUIPE', bold: true })], width: { size: 10, type: WidthType.PERCENTAGE } })
+                ]
+            })
+        ];
 
         alvosDaOperacao.forEach((alvo, index) => {
-            alvosHTML += `
-                <tr>
-                    <td style="border: 1px solid #000; padding: 6px; text-align: center; font-size: 10pt;">${index + 1}</td>
-                    <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${alvo.nome || '-'}</td>
-                    <td style="border: 1px solid #000; padding: 6px; font-size: 10pt;">${alvo.cpf || '-'}</td>
-                    <td style="border: 1px solid #000; padding: 6px; font-size: 9pt;">${alvo.endereco_cumprimento || '-'}</td>
-                    <td style="border: 1px solid #000; padding: 6px; text-align: center; font-size: 10pt;">${alvo.equipeNumero || '-'}</td>
-                </tr>
-            `;
+            alvosRows.push(
+                new TableRow({
+                    children: [
+                        new TableCell({ children: [new Paragraph((index + 1).toString())] }),
+                        new TableCell({ children: [new Paragraph(alvo.nome || '-')] }),
+                        new TableCell({ children: [new Paragraph(alvo.cpf || '-')] }),
+                        new TableCell({ children: [new Paragraph(alvo.endereco_cumprimento || '-')] }),
+                        new TableCell({ children: [new Paragraph(alvo.equipeNumero?.toString() || '-')] })
+                    ]
+                })
+            );
         });
 
-        alvosHTML += `
-                    </tbody>
-                </table>
-            </div>
-        `;
+        sections.push(
+            new Table({
+                rows: alvosRows,
+                width: { size: 100, type: WidthType.PERCENTAGE }
+            })
+        );
     }
 
-    // Estatísticas
-    const totalEquipes = Object.values(equipesPorDepartamento).reduce((sum, eqs) => sum + eqs.length, 0);
-    const departamentos = Object.keys(equipesPorDepartamento).length;
-    const numeroOperacao = operacao.numeroOperacao || operacao.id;
-    const anoOperacao = new Date(operacao.data_hora_inicio).getFullYear();
-
-    // Template completo do documento
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Plano Operacional - ${operacao.nome}</title>
-    <style>
-        @page {
-            size: A4;
-            margin: 2cm 2cm 2cm 2cm;
-        }
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 11pt;
-            line-height: 1.3;
-            color: #000;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        h1 {
-            font-size: 14pt;
-            font-weight: bold;
-            margin: 5px 0;
-        }
-        h2 {
-            font-size: 12pt;
-            font-weight: bold;
-            margin: 15px 0 10px 0;
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>ANEXO I</h1>
-        <h2>EFETIVO DA OPERAÇÃO ${numeroOperacao}/${anoOperacao}</h2>
-        <p style="font-weight: bold; margin: 10px 0;">DIA ${dataOperacao}</p>
-    </div>
-
-    ${equipesHTML}
-
-    ${alvosHTML}
-
-</body>
-</html>
-    `;
-}
-
-function baixarComoDocx(html, nomeArquivo) {
-    // Criar blob com o HTML
-    const blob = new Blob([html], { 
-        type: 'application/msword' 
+    // Criar e retornar documento
+    return new Document({
+        sections: [{
+            properties: {},
+            children: sections
+        }]
     });
-    
-    // Criar link de download
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = nomeArquivo;
-    
-    // Disparar download
-    document.body.appendChild(link);
-    link.click();
-    
-    // Limpar
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
 }

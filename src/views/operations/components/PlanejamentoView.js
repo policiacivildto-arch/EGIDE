@@ -30,9 +30,24 @@ export function PlanejamentoView({
     planoForm,
     setPlanoForm,
     setOperacoes,
-    operacoes
+    operacoes,
+    userDepartamento,
+    isDTO
 }) {
     const operacoesAprovadas = operations.filter(op => op.status === 'Aprovada pelo DTO');
+
+    // Verificar se o usuário pode cadastrar alvos para a operação selecionada
+    const operacaoAtual = operacoesAprovadas.find(op => op.id === selectedOperationId);
+    const podeAdicionarAlvos = operacaoAtual && (
+        isDTO || // DTO sempre pode
+        operacaoAtual.responsavel_alvos === userDepartamento || // Departamento responsável pelos alvos
+        operacaoAtual.departamento_demandante === userDepartamento // Departamento demandante
+    );
+
+    const podeAdicionarEquipes = operacaoAtual && (
+        isDTO || // DTO sempre pode (gerencia a operação)
+        (!operacaoAtual.precisa_apoio_dto && operacaoAtual.departamento_demandante === userDepartamento) // Operação interna
+    );
 
     return (
         <div className="space-y-6">
@@ -95,20 +110,53 @@ export function PlanejamentoView({
                                     <p className="text-cyan-100 text-sm mt-1">
                                         Configure as equipes e viaturas para esta operação
                                     </p>
+                                    <div className="mt-3 flex gap-3 text-xs">
+                                        <span className="bg-cyan-800/50 px-3 py-1 rounded">
+                                            <strong>Responsável pela Operação:</strong> {operacaoAtual?.responsavel_operacao || 'DTO'}
+                                        </span>
+                                        <span className="bg-yellow-800/50 px-3 py-1 rounded border border-yellow-500">
+                                            <strong>Cadastro de Alvos:</strong> {operacaoAtual?.responsavel_alvos || operacaoAtual?.departamento_demandante || 'Departamento Demandante'}
+                                        </span>
+                                    </div>
                                 </div>
+
+                                {/* Info sobre permissões */}
+                                {!podeAdicionarAlvos && operacaoAtual?.precisa_apoio_dto && (
+                                    <div className="bg-yellow-900/30 border border-yellow-500 rounded-lg p-4">
+                                        <p className="text-yellow-200 text-sm flex items-center gap-2">
+                                            <AlertCircle size={18} />
+                                            <span>
+                                                <strong>Atenção:</strong> O DTO gerencia esta operação, mas o cadastro de alvos 
+                                                é de responsabilidade do departamento demandante ({operacaoAtual?.departamento_demandante}).
+                                            </span>
+                                        </p>
+                                    </div>
+                                )}
 
                                 {/* Botões de Ação */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <button
-                                        onClick={() => setShowAlvoForm(!showAlvoForm)}
-                                        className="bg-red-600 hover:bg-red-700 p-4 rounded-lg flex items-center justify-center space-x-2"
+                                        onClick={() => podeAdicionarAlvos ? setShowAlvoForm(!showAlvoForm) : showNotification('Apenas o departamento demandante pode cadastrar alvos', 'error')}
+                                        disabled={!podeAdicionarAlvos}
+                                        className={`p-4 rounded-lg flex items-center justify-center space-x-2 ${
+                                            podeAdicionarAlvos 
+                                                ? 'bg-red-600 hover:bg-red-700 cursor-pointer' 
+                                                : 'bg-gray-600 cursor-not-allowed opacity-50'
+                                        }`}
+                                        title={!podeAdicionarAlvos ? 'Apenas o departamento demandante pode cadastrar alvos' : ''}
                                     >
                                         <Target size={20} />
                                         <span>Adicionar Alvo</span>
                                     </button>
                                     <button
-                                        onClick={() => setShowEquipeForm(!showEquipeForm)}
-                                        className="bg-blue-600 hover:bg-blue-700 p-4 rounded-lg flex items-center justify-center space-x-2"
+                                        onClick={() => podeAdicionarEquipes ? setShowEquipeForm(!showEquipeForm) : showNotification('Apenas o DTO pode gerenciar equipes nesta operação', 'error')}
+                                        disabled={!podeAdicionarEquipes}
+                                        className={`p-4 rounded-lg flex items-center justify-center space-x-2 ${
+                                            podeAdicionarEquipes 
+                                                ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' 
+                                                : 'bg-gray-600 cursor-not-allowed opacity-50'
+                                        }`}
+                                        title={!podeAdicionarEquipes ? 'Apenas o DTO pode gerenciar equipes' : ''}
                                     >
                                         <Users size={20} />
                                         <span>Adicionar Equipe</span>
@@ -175,6 +223,7 @@ export function PlanejamentoView({
                                         alvos={alvos}
                                         setOperacoes={setOperacoes}
                                         operacoes={operacoes}
+                                        operacaoAtual={operacaoAtual}
                                     />
                                 )}
                             </>

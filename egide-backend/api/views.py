@@ -210,7 +210,11 @@ class OperacaoPolicialViewSet(viewsets.ModelViewSet):
         return OperacaoPolicialSerializer
 
     def perform_create(self, serializer):
-        serializer.save(criado_por=self.request.user)
+        # Salvar com usuário se autenticado, senão salvar sem usuário
+        if self.request.user and self.request.user.is_authenticated:
+            serializer.save(criado_por=self.request.user)
+        else:
+            serializer.save(criado_por=None)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def aprovar(self, request, pk=None):
