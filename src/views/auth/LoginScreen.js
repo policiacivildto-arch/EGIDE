@@ -39,7 +39,7 @@ import { LogIn } from 'lucide-react';
             <form onSubmit={handleLogin} className="space-y-6">
                 <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="seu.email@pcc.ce.gov.br" />
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="seuemail@pcce.com" />
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">Senha</label>

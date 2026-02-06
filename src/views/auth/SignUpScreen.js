@@ -118,7 +118,7 @@ export const SignUpScreen = ({ showNotification, setAuthScreen }) => {
                 {/* --- FIM dos novos campos --- */}
 
                 <input type="tel" placeholder="Telefone" value={formData.telefone} onChange={e => handleChange('telefone', e.target.value)} maxLength="15" className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" required />
-                <input type="email" placeholder="Email" value={formData.email} onChange={e => handleChange('email', e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" required />
+                <input type="email" placeholder="seuemail@pcce.com" value={formData.email} onChange={e => handleChange('email', e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" required />
                 <input type="password" placeholder="Senha (mínimo 6 caracteres)" value={formData.password} onChange={e => handleChange('password', e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" required />
                 <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-500">
                     {isLoading ? <LoadingSpinner /> : <><UserPlus size={20} /><span>Criar Conta</span></>}
