@@ -109,7 +109,7 @@ export default function App() {
         }
     };
 
-    if (loading) return <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center"><img src={PCCE_LOGO_URL} alt="Brasão PCCE" className="h-24 w-24 animate-pulse" /><h1 className="text-3xl font-bold mt-4">Sistema EGIDE</h1><p className="text-lg text-gray-400">Carregando...</p><LoadingSpinner /></div>;
+    if (loading) return <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center"><img src={PCCE_LOGO_URL} alt="Brasão PCCE" className="h-24 w-24 animate-pulse" /><h1 className="text-3xl font-bold mt-4">Sistema SGO</h1><p className="text-lg text-gray-400">Carregando...</p><LoadingSpinner /></div>;
 
     // Lógica de Roteamento de Autenticação
     if (!user) {

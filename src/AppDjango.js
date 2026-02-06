@@ -1,5 +1,5 @@
 /**
- * App Principal - Sistema EGIDE Django
+ * App Principal - Sistema SGO Django
  * Versão integrada com backend Django
  */
 
@@ -18,7 +18,7 @@ const LoadingScreen = () => (
     <div className="text-center">
       <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
       <p className="mt-4 text-xl font-semibold text-gray-700">
-        Carregando Sistema EGIDE...
+        Carregando Sistema SGO...
       </p>
     </div>
   </div>
