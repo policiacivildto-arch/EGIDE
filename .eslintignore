@@ -1,0 +1,17 @@
+src/utils/helpers.js
+src/views/admin/components/AlertsView.js
+src/views/admin/components/ConvoyManagementView.js
+src/views/admin/components/OperationCostView.js
+src/views/admin/components/OperationReportsView.js
+src/views/admin/components/UserManagementView.js
+src/views/admin/useAdminData.js
+src/views/officer/components/HistoricoView.js
+src/views/officer/components/MinhasOperacoesView.js
+src/views/officer/components/VagasCalendarView.js
+src/views/operations/OperationsDashboard.js
+src/views/operations/components/AlvoForm.js
+src/views/operations/components/EquipeForm.js
+src/views/operations/components/MeusAlvosView.js
+src/views/operations/components/PlanejamentoView.js
+src/views/operations/components/PlanoForm.js
+src/views/operations/utils/planoOperacional.js
