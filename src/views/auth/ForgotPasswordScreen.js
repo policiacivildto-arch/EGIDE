@@ -38,7 +38,7 @@ export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
             <form onSubmit={handleResetPassword} className="space-y-6">
                 <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" placeholder="seu.email@pcc.ce.gov.br" required />
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" placeholder="seuemail@pc.ce.gov.br" required />
                 </div>
                 <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-500">
                     {isLoading ? <LoadingSpinner /> : <><Mail size={20} /><span>Enviar Link</span></>}

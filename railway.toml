@@ -1,2 +1,3 @@
 [build]
 dockerfile = "./egide-backend/Dockerfile"
+buildContext = "./egide-backend"
