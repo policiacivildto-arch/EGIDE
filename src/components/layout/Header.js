@@ -7,7 +7,7 @@ export default function Header({ user, setCurrentPage, currentPage, onLogout, on
     // NOVO: Estado para controlar o menu dropdown
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-    const systemTitle = selectedSystem === 'egide' ? 'ÉGIDE' : selectedSystem === 'operacoes' ? 'OPERAÇÕES' : 'Sistema';
+    const systemTitle = selectedSystem === 'egide' ? 'SGO' : selectedSystem === 'operacoes' ? 'OPERAÇÕES' : 'Sistema';
 
     return (
         <header className="bg-gray-900/80 backdrop-blur-sm shadow-lg p-4 flex justify-between items-center sticky top-0 z-40">
