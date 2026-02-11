@@ -16,7 +16,6 @@ import { OperationReportsView } from './components/OperationReportsView';
 import { AlertsView } from './components/AlertsView';
 import { UserManagementView } from './components/UserManagementView';
 import { HolidayManagementView } from './components/HolidayManagementView';
-import { CadastroRapidoView } from './components/CadastroRapidoView';
 export default function AdminDashboard({ userData, showNotification }) {
     const [view, setView] = useState('dashboard');
     const [currentWeek, setCurrentWeek] = useState(getWeekInfo());
