@@ -1,15 +1,52 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactCalendar from 'react-calendar';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { collection, query, where, onSnapshot, getDocs, doc, writeBatch } from 'firebase/firestore';
-import { db, appId } from '../../../config/firebase';
+import { apiClient } from '../../../config/api';
 import { Modal, LoadingSpinner } from '../../../components/ui/Shared';
 import { displayMatricula, formatMatricula, formatPlaca, formatTelefone, normalizeName } from '../../../utils/helpers';
 import { findPolicialByMatricula } from '../../../constants/policiais';
 import { DEPARTMENTS } from '../../../constants/data';
 import { checkLeaderWeeklyLimit, checkWeeklyLimit } from '../../../utils/helpers';
-import { getCycleInfo } from '../../../utils/helpers';
+import { getCycleInfo, getWeekInfo } from '../../../utils/helpers';
 import { Download, ChevronDown, ChevronUp } from 'lucide-react';
+
+const getVagaDateObject = (vaga) => {
+    const rawDate = vaga?.data || vaga?.date;
+    if (!rawDate) return null;
+    if (typeof rawDate === 'string') return new Date(rawDate);
+    if (rawDate?.seconds) return new Date(rawDate.seconds * 1000);
+    return null;
+};
+
+const getVagaDayKey = (vaga) => {
+    const parsedDate = getVagaDateObject(vaga);
+    if (!parsedDate || Number.isNaN(parsedDate.getTime())) return null;
+    return format(parsedDate, 'yyyy-MM-dd');
+};
+
+const getVagaCapacity = (vaga) => Math.max(1, Number(vaga?.posicoes_disponiveis || 1));
+
+const isVagaDisponivel = (vaga) => {
+    const status = String(vaga?.status || '').toLowerCase();
+    return status.includes('dispon');
+};
+
+const normalizeMatriculaDigits = (value) => String(value || '').replace(/\D/g, '');
+
+const teamHasOfficer = (team, user) => {
+    const userMatricula = normalizeMatriculaDigits(user?.matricula);
+    if (!userMatricula || !team) return false;
+
+    if (Array.isArray(team?.membros_detalhes) && team.membros_detalhes.some((m) => normalizeMatriculaDigits(m?.matricula) === userMatricula)) {
+        return true;
+    }
+
+    if (Array.isArray(team?.members) && team.members.some((m) => normalizeMatriculaDigits(m?.matricula) === userMatricula)) {
+        return true;
+    }
+
+    return false;
+};
 
 
 
@@ -23,7 +60,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
 
     useEffect(() => {
         const fetchMonthlyData = async () => {
-            if (!user || !user.matricula) {
+            if (!user) {
                 setLoading(false);
                 return;
             }
@@ -32,47 +69,70 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             const start = startOfMonth(activeDate);
             const end = endOfMonth(activeDate);
 
-            const vagasQuery = query(
-                collection(db, `/artifacts/${appId}/public/data/vagas`),
-                where('date', '>=', start),
-                where('date', '<=', end)
-            );
-            const unsubscribeVagas = onSnapshot(vagasQuery, (snapshot) => {
-                const vagasData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setMonthlyVagas(vagasData);
+            try {
+                const [vagasData, teamsData] = await Promise.all([
+                    apiClient.getVagas({
+                        data__gte: format(start, 'yyyy-MM-dd'),
+                        data__lte: format(end, 'yyyy-MM-dd')
+                    }),
+                    apiClient.getTeams({
+                        vaga__data__gte: format(start, 'yyyy-MM-dd'),
+                        vaga__data__lte: format(end, 'yyyy-MM-dd')
+                    })
+                ]);
+
+                const vagasArray = Array.isArray(vagasData) ? vagasData : (vagasData?.results || []);
+                const teamsArray = Array.isArray(teamsData) ? teamsData : (teamsData?.results || []);
+
+                setMonthlyVagas(vagasArray);
+                setMonthlyTeams(teamsArray);
+            } catch (error) {
+                console.error('Erro ao carregar dados do mês:', error);
+            } finally {
                 setLoading(false);
-            });
-
-            const teamsQuery = query(
-                collection(db, `/artifacts/${appId}/public/data/teams`),
-                where('vagaDate', '>=', start),
-                where('vagaDate', '<=', end)
-            );
-            const unsubscribeTeams = onSnapshot(teamsQuery, (snapshot) => {
-                const teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setMonthlyTeams(teamsData);
-            });
-
-            return () => {
-                unsubscribeVagas();
-                unsubscribeTeams();
-            };
+            }
         };
 
         fetchMonthlyData();
+        
+        // Atualiza dados a cada 20 segundos
+        const interval = setInterval(fetchMonthlyData, 20000);
+        return () => clearInterval(interval);
     }, [user, activeDate]);
 
     const vagasByDay = useMemo(() => {
         return monthlyVagas.reduce((acc, vaga) => {
-            const dayKey = format(new Date(vaga.date.seconds * 1000), 'yyyy-MM-dd');
+            const dayKey = getVagaDayKey(vaga);
+            if (!dayKey) return acc;
             if (!acc[dayKey]) acc[dayKey] = [];
             acc[dayKey].push(vaga);
             return acc;
         }, {});
     }, [monthlyVagas]);
 
+    const teamsByVaga = useMemo(() => {
+        return monthlyTeams.reduce((acc, team) => {
+            const vagaId = Number(team?.vaga || team?.vagaId || team?.vaga_info?.id);
+            if (!vagaId) return acc;
+            if (!acc[vagaId]) acc[vagaId] = [];
+            acc[vagaId].push(team);
+            return acc;
+        }, {});
+    }, [monthlyTeams]);
+
+    const hasRemainingSlots = (vaga) => {
+        const capacity = getVagaCapacity(vaga);
+        const used = (teamsByVaga[Number(vaga?.id)] || []).length;
+        return used < capacity;
+    };
+
     const handleRegister = async (vaga, teamData) => {
-        const isAlreadyLeader = await checkLeaderWeeklyLimit(user.matricula, vaga.weekId);
+        const parsedVagaDate = getVagaDateObject(vaga);
+        const resolvedWeekId = vaga.weekId || (parsedVagaDate ? getWeekInfo(parsedVagaDate).weekId : null);
+
+        const isAlreadyLeader = resolvedWeekId
+            ? await checkLeaderWeeklyLimit(user.matricula, resolvedWeekId)
+            : false;
         if (isAlreadyLeader) {
             showNotification(
                 'Você já é o chefe de uma equipe escalada para esta semana e não pode registrar outra.',
@@ -82,7 +142,9 @@ export const VagasCalendarView = ({ user, showNotification }) => {
         }
 
         const memberMatriculas = teamData.members.map(m => m.matricula);
-        const validation = await checkWeeklyLimit(memberMatriculas, vaga.weekId);
+        const validation = resolvedWeekId
+            ? await checkWeeklyLimit(memberMatriculas, resolvedWeekId)
+            : { conflict: false };
 
         let teamStatus = 'Em Análise';
         let conflictDetails = null;
@@ -101,36 +163,109 @@ export const VagasCalendarView = ({ user, showNotification }) => {
         }
 
         try {
-            const newTeamRef = doc(collection(db, `/artifacts/${appId}/public/data/teams`));
             const leader = teamData.members[0];
-            const team = {
-                id: newTeamRef.id,
-                teamName: leader.delegacia,
-                vagaId: vaga.id,
-                vagaDate: vaga.date,
-                vagaShiftType: vaga.shiftType,
-                weekId: vaga.weekId,
-                cycleId: getCycleInfo(new Date(vaga.date.seconds * 1000)).cycleId,
-                registeringOfficer: leader,
-                members: teamData.members,
-                memberMatriculas: memberMatriculas,
-                vehicle: teamData.vehicle,
-                chefeEquipeTelefone: teamData.telefone,
-                status: teamStatus,
-                ...(conflictDetails && { conflictDetails }),
-                delegaciaPrincipal: leader.delegacia,
+            const vagaDateObj = getVagaDateObject(vaga);
+            if (!vagaDateObj) {
+                showNotification('Data da vaga inválida. Atualize a página e tente novamente.', 'error');
+                return;
+            }
+
+            const resolvePolicialByMatricula = async (matriculaDigits, policiaisByMatricula) => {
+                if (!matriculaDigits) return null;
+
+                const inMemoryMatch = policiaisByMatricula.get(matriculaDigits);
+                if (inMemoryMatch) return inMemoryMatch;
+
+                const searchTerms = [matriculaDigits, displayMatricula(matriculaDigits)];
+
+                for (const term of searchTerms) {
+                    const response = await apiClient.getPoliciais({ search: term });
+                    const results = Array.isArray(response) ? response : (response?.results || []);
+                    const exact = results.find((item) => normalizeMatriculaDigits(item?.matricula) === matriculaDigits);
+                    if (exact) return exact;
+                }
+
+                return null;
             };
 
-            const vagaDocRef = doc(db, `/artifacts/${appId}/public/data/vagas`, vaga.id);
-            const batch = writeBatch(db);
-            batch.set(newTeamRef, team);
-            batch.update(vagaDocRef, { status: 'Ocupada', teamId: newTeamRef.id });
+            const policiaisResponse = await apiClient.getPoliciais();
+            const policiais = Array.isArray(policiaisResponse)
+                ? policiaisResponse
+                : (policiaisResponse?.results || []);
 
-            await batch.commit();
+            const policiaisByMatricula = new Map(
+                policiais.map((p) => [normalizeMatriculaDigits(p?.matricula), p]).filter(([matricula]) => Boolean(matricula))
+            );
 
-            if (teamStatus !== 'Pendente (Conflito)') {
-                showNotification('Equipe enviada para análise do administrador!', 'success');
+            const membrosPoliciais = await Promise.all(
+                teamData.members.map(async (member) => {
+                    const matriculaDigits = normalizeMatriculaDigits(member?.matricula);
+                    return resolvePolicialByMatricula(matriculaDigits, policiaisByMatricula);
+                })
+            );
+
+            const membrosResolvidos = membrosPoliciais.filter(Boolean);
+
+            if (membrosResolvidos.length !== teamData.members.length) {
+                const faltantes = teamData.members
+                    .filter((member, index) => !membrosPoliciais[index])
+                    .map((member) => displayMatricula(member?.matricula || ''))
+                    .join(', ');
+
+                showNotification(`Não foi possível localizar todos os policiais pelas matrículas informadas: ${faltantes}.`, 'error');
+                return;
             }
+
+            const chefePolicialId = membrosResolvidos[0]?.id;
+            const membrosIds = membrosResolvidos.map((p) => p.id);
+
+            if (!chefePolicialId || membrosIds.length === 0) {
+                showNotification('Falha ao vincular equipe ao perfil policial. Tente novamente.', 'error');
+                return;
+            }
+            
+            const team = {
+                vaga: vaga.id,
+                chefe: chefePolicialId,
+                membros: membrosIds,
+                status: teamStatus,
+                telefone_contato: teamData.telefone,
+                observacoes: conflictDetails
+                    ? `Conflito de escala: ${conflictDetails.officerName} (${conflictDetails.officerMatricula})`
+                    : null,
+            };
+
+            // Cria o team
+            const createdTeam = await apiClient.createTeam(team);
+            
+            const refreshedTeams = await apiClient.getTeams({ vaga: vaga.id });
+            const teamsForVaga = Array.isArray(refreshedTeams)
+                ? refreshedTeams
+                : (refreshedTeams?.results || []);
+            const nextStatus = teamsForVaga.length >= getVagaCapacity(vaga) ? 'Ocupada' : 'Disponível';
+            await apiClient.updateVaga(vaga.id, { status: nextStatus });
+
+            showNotification('Candidatura registrada com status Em Análise.', 'success');
+
+            const optimisticTeam = {
+                ...createdTeam,
+                vaga: vaga.id,
+                status: teamStatus,
+                members: teamData.members,
+                membros_detalhes: membrosResolvidos,
+            };
+
+            setMonthlyTeams((prev) => {
+                const filtered = prev.filter((t) => Number(t?.id) !== Number(optimisticTeam?.id));
+                return [...filtered, optimisticTeam];
+            });
+
+            setMonthlyVagas((prev) => prev.map((item) => (
+                Number(item?.id) === Number(vaga?.id)
+                    ? { ...item, status: nextStatus }
+                    : item
+            )));
+
             setModalContent(null);
 
         } catch (error) {
@@ -145,16 +280,18 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             const vagasDoDia = vagasByDay[dayKey] || [];
 
             const myTeamOnThisDay = vagasDoDia
-                .map(vaga => {
-                    if (!vaga.teamId) return null;
-                    return monthlyTeams.find(t => t.id === vaga.teamId);
-                })
-                .find(team => team && team.members.some(m => m.matricula === user.matricula));
+                .map((vaga) => monthlyTeams.find((t) => Number(t?.vaga) === Number(vaga?.id)))
+                .find((team) => teamHasOfficer(team, user));
 
-            const availableVagas = vagasDoDia.filter(v => v.status === 'Disponível');
+            const availableSlots = vagasDoDia.reduce((sum, vaga) => {
+                if (!isVagaDisponivel(vaga)) return sum;
+                const capacity = getVagaCapacity(vaga);
+                const used = (teamsByVaga[Number(vaga?.id)] || []).length;
+                return sum + Math.max(0, capacity - used);
+            }, 0);
 
             if (myTeamOnThisDay) {
-                if (myTeamOnThisDay.status === 'Em Análise') {
+                if (myTeamOnThisDay.status === 'Em Análise' || myTeamOnThisDay.status === 'Pendente (Conflito)') {
                     return (
                         <div className="mt-1 text-xs text-center bg-yellow-600/90 text-white rounded-md p-1 animate-fade-in">Em Análise</div>
                     );
@@ -164,9 +301,9 @@ export const VagasCalendarView = ({ user, showNotification }) => {
                 );
             }
 
-            if (availableVagas.length > 0) {
+            if (availableSlots > 0) {
                 return (
-                    <div className="mt-1 text-xs text-center bg-blue-600/80 text-white rounded-md p-1 animate-fade-in">{availableVagas.length} Vaga(s)</div>
+                    <div className="mt-1 text-xs text-center bg-blue-600/80 text-white rounded-md p-1 animate-fade-in">{availableSlots} Vaga(s)</div>
                 );
             }
         }
@@ -176,7 +313,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
     const handleDayClick = (date) => {
         const dayKey = format(date, 'yyyy-MM-dd');
         const vagasDoDia = vagasByDay[dayKey] || [];
-        const firstAvailableVaga = vagasDoDia.find(v => v.status === 'Disponível');
+        const firstAvailableVaga = vagasDoDia.find((vaga) => isVagaDisponivel(vaga) && hasRemainingSlots(vaga));
 
         if (firstAvailableVaga) {
             setModalContent({ type: 'register', vaga: firstAvailableVaga });
@@ -222,6 +359,11 @@ export const VagasCalendarView = ({ user, showNotification }) => {
                         onChange={setActiveDate}
                         value={activeDate}
                         onActiveStartDateChange={({ activeStartDate }) => setActiveDate(activeStartDate)}
+                        prevLabel="<"
+                        nextLabel=">"
+                        prev2Label={null}
+                        next2Label={null}
+                        formatMonthYear={(_, date) => format(date, 'MM/yyyy')}
                         tileContent={renderTileContent}
                         onClickDay={handleDayClick}
                         locale="pt-BR"
@@ -268,7 +410,7 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
     return (
         <form onSubmit={handleSubmit}>
             <h2 className="text-2xl font-bold mb-4 text-gray-800">Registrar Equipe para Serviço</h2>
-            <p className="mb-6 text-gray-600">Dia: <span className="font-semibold">{new Date(vaga.date.seconds * 1000).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span></p>
+            <p className="mb-6 text-gray-600">Dia: <span className="font-semibold">{(getVagaDateObject(vaga) || new Date()).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span></p>
             {team.map((member, index) => (
                 <div key={index} className="mb-6 p-4 border border-gray-300 rounded-lg bg-white">
                     <h3 className="font-bold text-lg mb-2 text-gray-700">Componente {index + 1} {index === 0 ? "(Chefe da Equipe)" : ""}</h3>

@@ -1,238 +1,287 @@
-// src/views/admin/components/RankingView.js
-import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db, appId } from '../../../config/firebase'; // Import correto!
-import { LoadingSpinner } from '../../../components/ui/Shared'; // Import correto!
-import { displayMatricula } from '../../../utils/helpers'; // Import correto!
+import React, { useState, useEffect, useMemo } from 'react';
+import { apiClient } from '../../../config/api';
+import { LoadingSpinner } from '../../../components/ui/Shared';
+import { ChevronDown, X } from 'lucide-react';
 
-export const RankingView = ({ showNotification, departamento }) => {
-    const [rankingData, setRankingData] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [rankingTitle, setRankingTitle] = useState('Ranking Geral de Participação');
-    
-    // Estados para controlar os filtros
-    const [filterType, setFilterType] = useState('geral'); // Opções: 'geral', 'mes', 'periodo'
-    // NOVO: Estado para controlar o tipo de ranking
-    const [rankingType, setRankingType] = useState('participacoes'); // 'participacoes', 'abordagensPessoas', 'abordagensVeiculos', 'prisoes'
-    
-    const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // Formato 'YYYY-MM'
-    const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+const CRITERIA = [
+    { key: 'prisoes', label: '🔗 Total de Prisões' },
+    { key: 'participacoes', label: '👮 Total de Serviços' },
+    { key: 'abordagensPessoas', label: '👥 Pessoas Abordadas' },
+    { key: 'abordagensVeiculos', label: '🚗 Veículos Abordados' },
+];
 
-    // ATUALIZADO: A função agora busca dados e calcula os rankings corretamente
-const fetchRankingData = async () => {
-    setLoading(true);
-    setRankingData([]);
-
-    const teamsCollectionRef = collection(db, `/artifacts/${appId}/public/data/teams`);
-    const reportsCollectionRef = collection(db, `/artifacts/${appId}/public/data/convoyReports`);
-    const convoysCollectionRef = collection(db, `/artifacts/${appId}/public/data/convoys`);
-    
-    let dateConstraints = [];
-    let departamentoConstraint = departamento ? [where("departamento", "==", departamento)] : [];
-    let titleDatePart = 'Geral';
-
-    // Monta o filtro de data (sem alterações aqui)
-    if (filterType === 'mes') {
-        const [year, month] = selectedMonth.split('-').map(Number);
-        const startOfMonth = new Date(year, month - 1, 1);
-        const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
-        dateConstraints = [where("vagaDate", ">=", startOfMonth), where("vagaDate", "<=", endOfMonth)];
-        const monthName = startOfMonth.toLocaleString('pt-BR', { month: 'long' });
-        titleDatePart = `para ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}/${year}`;
-    } else if (filterType === 'periodo') {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        dateConstraints = [where("vagaDate", ">=", start), where("vagaDate", "<=", end)];
-        titleDatePart = `de ${start.toLocaleDateString('pt-BR')} a ${end.toLocaleDateString('pt-BR')}`;
-    }
-
-    try {
-        const statsMap = new Map();
-
-        const teamsQuery = query(teamsCollectionRef, ...dateConstraints, ...departamentoConstraint);
-        const teamsSnap = await getDocs(teamsQuery);
-        const teamsInPeriod = teamsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        const teamIdToMembersMap = new Map();
-        teamsInPeriod.forEach(team => {
-            teamIdToMembersMap.set(team.id, team.members);
-            team.members.forEach(member => {
-                if (!statsMap.has(member.matricula)) {
-                    statsMap.set(member.matricula, {
-                        name: member.nome, matricula: member.matricula,
-                        participacoes: 0, abordagensPessoas: 0, abordagensVeiculos: 0, prisoes: 0,
-                    });
-                }
-                statsMap.get(member.matricula).participacoes += 1;
-            });
-        });
-        
-        const teamIds = teamsInPeriod.map(t => t.id);
-        if (teamIds.length > 0) {
-            const convoysQuery = query(convoysCollectionRef, where("teamIds", "array-contains-any", teamIds));
-            const convoysSnap = await getDocs(convoysQuery);
-            const convoyIdToTeamIdsMap = new Map();
-            convoysSnap.docs.forEach(doc => convoyIdToTeamIdsMap.set(doc.id, doc.data().teamIds));
-
-            const convoyIdsFromPeriod = [...convoyIdToTeamIdsMap.keys()];
-            if (convoyIdsFromPeriod.length > 0) {
-                const reportsQuery = query(reportsCollectionRef, where("convoyId", "in", convoyIdsFromPeriod));
-                const reportsSnap = await getDocs(reportsQuery);
-                const reportsInPeriod = reportsSnap.docs.map(doc => doc.data());
-
-                reportsInPeriod.forEach(report => {
-                    const teamIds = convoyIdToTeamIdsMap.get(report.convoyId);
-                    if (!teamIds) return;
-
-                    const statsToAdd = {
-                        abordagensPessoas: report.abordagens?.pessoas || 0,
-                        abordagensVeiculos: report.abordagens?.veiculos || 0,
-                        // --- AJUSTE PRINCIPAL AQUI ---
-                        // Em vez de somar "quantidade", contamos o número de itens na lista.
-                        prisoes: report.prisoes?.length || 0,
-                    };
-
-                    teamIds.forEach(teamId => {
-                        const members = teamIdToMembersMap.get(teamId);
-                        if (members) {
-                            members.forEach(member => {
-                                if (statsMap.has(member.matricula)) {
-                                    const currentStats = statsMap.get(member.matricula);
-                                    currentStats.abordagensPessoas += statsToAdd.abordagensPessoas;
-                                    currentStats.abordagensVeiculos += statsToAdd.abordagensVeiculos;
-                                    currentStats.prisoes += statsToAdd.prisoes;
-                                }
-                            });
-                        }
-                    });
-                });
-            }
-        }
-        
-        // O resto da função (ordenar e definir título) continua igual...
-        let sortKey = 'participacoes';
-        let titlePrefix = 'Ranking de Participação';
-        switch (rankingType) {
-            // ... (cases)
-        }
-        const sortedRanking = Array.from(statsMap.values())
-            .filter(entry => entry[sortKey] > 0)
-            .sort((a, b) => b[sortKey] - a[sortKey]);
-        
-        setRankingData(sortedRanking);
-        setRankingTitle(`${titlePrefix} ${titleDatePart}`);
-
-    } catch (error) {
-        console.error("Erro ao buscar dados para o ranking:", error);
-        showNotification("Não foi possível carregar o ranking.", "error");
-    } finally {
-        setLoading(false);
-    }
+const getRankLabel = (index) => {
+    if (index === 0) return '🥇';
+    if (index === 1) return '🥈';
+    if (index === 2) return '🥉';
+    return `#${index + 1}`;
 };
 
-    useEffect(() => {
-        fetchRankingData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+const toArray = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.results)) return payload.results;
+    return [];
+};
 
-    const columnConfig = {
-        participacoes: { header: 'Total de Serviços', key: 'participacoes' },
-        abordagensPessoas: { header: 'Pessoas Abordadas', key: 'abordagensPessoas' },
-        abordagensVeiculos: { header: 'Veículos Abordados', key: 'abordagensVeiculos' },
-        prisoes: { header: 'Total de Prisões', key: 'prisoes' },
+const normalizeOfficer = (raw) => ({
+    id: raw?.id ?? raw?.policial_id ?? raw?.user_id ?? raw?.matricula,
+    nome: raw?.nome || raw?.name || raw?.policial_nome || raw?.username || 'N/A',
+    matricula: raw?.matricula || raw?.policial_matricula || 'N/A',
+});
+
+const getMetricValue = (raw, criterionKey) => {
+    const keyMap = {
+        prisoes: ['prisoes', 'prisoes', 'total_prisoes', 'total', 'valor', 'score'],
+        participacoes: ['participacoes', 'total_servicos', 'servicos', 'total', 'valor', 'score'],
+        abordagensPessoas: ['abordagensPessoas', 'abordagens_pessoas', 'pessoas', 'total', 'valor', 'score'],
+        abordagensVeiculos: ['abordagensVeiculos', 'abordagens_veiculos', 'veiculos', 'total', 'valor', 'score'],
     };
 
+    const keys = keyMap[criterionKey] || [];
+    for (const key of keys) {
+        const value = raw?.[key];
+        if (typeof value === 'number') return value;
+    }
+    return 0;
+};
+
+export const RankingView = ({ showNotification, departamento }) => {
+    const [ranking, setRanking] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedCriteria, setSelectedCriteria] = useState('prisoes'); // Padrão: Prisões
+    const [selectedOfficer, setSelectedOfficer] = useState(null);
+
+    // Carrega dados do ranking
+    useEffect(() => {
+        const loadRanking = async () => {
+            setLoading(true);
+            try {
+                const criterionRequests = CRITERIA.map(async ({ key }) => {
+                    const result = await apiClient.getRankings(key, 'geral', {}, departamento || '');
+                    return { key, rows: toArray(result) };
+                });
+
+                const settled = await Promise.allSettled(criterionRequests);
+                const successful = settled
+                    .filter((item) => item.status === 'fulfilled')
+                    .map((item) => item.value)
+                    .filter((item) => item.rows.length > 0);
+
+                const rankingMap = new Map();
+                successful.forEach(({ key, rows }) => {
+                    rows.forEach((row) => {
+                        const normalized = normalizeOfficer(row);
+                        const mapKey = String(normalized.matricula || normalized.id);
+                        if (!rankingMap.has(mapKey)) {
+                            rankingMap.set(mapKey, {
+                                id: normalized.id,
+                                nome: normalized.nome,
+                                matricula: normalized.matricula,
+                                prisoes: 0,
+                                participacoes: 0,
+                                abordagensPessoas: 0,
+                                abordagensVeiculos: 0,
+                            });
+                        }
+
+                        const current = rankingMap.get(mapKey);
+                        current[key] = getMetricValue(row, key);
+                    });
+                });
+
+                if (rankingMap.size > 0) {
+                    setRanking(Array.from(rankingMap.values()));
+                    return;
+                }
+
+                const policiaisRaw = await apiClient.getPoliciais();
+                const policiais = toArray(policiaisRaw).map((officer) => ({
+                    id: officer.id,
+                    nome: officer.nome || officer.username || 'N/A',
+                    matricula: officer.matricula || 'N/A',
+                    prisoes: 0,
+                    participacoes: 0,
+                    abordagensPessoas: 0,
+                    abordagensVeiculos: 0,
+                }));
+                setRanking(policiais);
+            } catch (error) {
+                console.error('Erro ao carregar ranking:', error);
+                showNotification('Erro ao carregar dados de ranking', 'error');
+                setRanking([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadRanking();
+    }, [departamento, showNotification]);
+
+    // Ordena os dados conforme o critério selecionado
+    const sortedRanking = useMemo(() => {
+        const sorted = [...ranking];
+        sorted.sort((a, b) => (b[selectedCriteria] || 0) - (a[selectedCriteria] || 0));
+        return sorted;
+    }, [ranking, selectedCriteria]);
+
+    if (loading) {
+        return <LoadingSpinner />;
+    }
+
     return (
-        <div>
-            <div className="bg-gray-800 p-4 rounded-lg mb-4">
-                <h4 className="text-xl font-semibold mb-3">Filtrar Ranking</h4>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                    {/* NOVO: Seletor para o tipo de Ranking */}
-                    <div>
-                        <label className="block text-sm font-bold mb-1">Critério do Ranking</label>
-                        <select value={rankingType} onChange={e => setRankingType(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md">
-                            <option value="participacoes">Mais Participações</option>
-                            <option value="abordagensPessoas">Mais Abordagens de Pessoas</option>
-                            <option value="abordagensVeiculos">Mais Abordagens de Veículos</option>
-                            <option value="prisoes">Mais Prisões Realizadas</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-bold mb-1">Tipo de Filtro de Data</label>
-                        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md">
-                            <option value="geral">Geral (Todos)</option>
-                            <option value="mes">Por Mês</option>
-                            <option value="periodo">Período Específico</option>
-                        </select>
-                    </div>
-
-                    {filterType === 'mes' && (
-                        <div>
-                            <label className="block text-sm font-bold mb-1">Mês e Ano</label>
-                            <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md"/>
-                        </div>
-                    )}
-                    
-                    {filterType === 'periodo' && (
-                        <>
-                            <div>
-                                <label className="block text-sm font-bold mb-1">Data de Início</label>
-                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md"/>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold mb-1">Data de Fim</label>
-                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md"/>
-                            </div>
-                        </>
-                    )}
-                    
-                    <button onClick={fetchRankingData} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg md:col-start-4 disabled:bg-gray-500">
-                        {loading ? 'Buscando...' : 'Aplicar Filtros'}
-                    </button>
+        <div className="bg-gray-900/50 p-6 rounded-xl">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-bold text-blue-400">Ranking de Prisões</h2>
+                
+                {/* Menu Suspenso - Seletor de Critério */}
+                <div className="relative">
+                    <select
+                        value={selectedCriteria}
+                        onChange={(e) => setSelectedCriteria(e.target.value)}
+                        className="appearance-none px-4 py-2 pr-10 bg-gray-800 border border-gray-700 rounded-lg text-white font-semibold hover:border-blue-400 transition-colors cursor-pointer"
+                    >
+                        {CRITERIA.map(c => (
+                            <option key={c.key} value={c.key}>{c.label}</option>
+                        ))}
+                    </select>
+                    <ChevronDown size={20} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
             </div>
 
-            {loading ? ( <LoadingSpinner /> ) : (
-                <>
-                    <h3 className="text-2xl font-bold mb-4">{rankingTitle}</h3>
-                    <div className="overflow-x-auto bg-gray-800 rounded-lg">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-gray-400 uppercase">
-                                <tr>
-                                    <th className="px-2 py-2 text-center">Rank</th>
-                                    <th className="px-4 py-2">Nome</th>
-                                    <th className="px-4 py-2">Matrícula</th>
-                                    {/* ALTERADO: Cabeçalho da coluna de valor é dinâmico */}
-                                    <th className="px-4 py-2 text-center">{columnConfig[rankingType].header}</th>
+            {/* Informação do Critério Exibido */}
+            <div className="mb-4 p-3 bg-gray-800 rounded-lg border border-gray-700">
+                <p className="text-sm text-gray-300">
+                    Exibindo: <span className="font-semibold text-blue-400">
+                        {CRITERIA.find(c => c.key === selectedCriteria)?.label}
+                    </span>
+                </p>
+            </div>
+
+            {/* Tabela */}
+            <div className="overflow-x-auto border border-gray-700 rounded-lg">
+                <table className="w-full">
+                    <thead className="bg-gray-800 border-b border-gray-700">
+                        <tr>
+                            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">🥇 Pos.</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Nome</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Matrícula</th>
+                            <th className="px-4 py-3 text-center text-sm font-semibold text-blue-400">
+                                {CRITERIA.find(c => c.key === selectedCriteria)?.label}
+                            </th>
+                        </tr>
+                    </thead>
+                    
+                    <tbody>
+                        {sortedRanking.length === 0 ? (
+                            <tr>
+                                <td colSpan="4" className="px-4 py-8 text-center text-gray-400">
+                                    Nenhum dado disponível
+                                </td>
+                            </tr>
+                        ) : (
+                            sortedRanking.map((officer, index) => (
+                                <tr 
+                                    key={officer.id} 
+                                    onClick={() => setSelectedOfficer(officer)}
+                                    className="border-b border-gray-700 hover:bg-gradient-to-r hover:from-blue-900/30 hover:to-transparent transition-colors cursor-pointer"
+                                >
+                                    <td className="px-4 py-3 text-center text-lg font-bold">
+                                        {getRankLabel(index)}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-200 font-medium">{officer.nome}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-400">{officer.matricula}</td>
+                                    <td className="px-4 py-3 text-center text-lg font-bold text-green-400">
+                                        {officer[selectedCriteria] || 0}
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                {rankingData.length > 0 ? (
-                                    rankingData.map((officer, index) => (
-                                        <tr key={officer.matricula} className="border-b border-gray-700 hover:bg-gray-700/50">
-                                            <td className="px-2 py-2 text-center font-bold text-lg">
-                                                {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}º`}
-                                            </td>
-                                            <td className="px-4 py-2">{officer.name}</td>
-                                            <td className="px-4 py-2 font-mono whitespace-nowrap">{displayMatricula(officer.matricula)}</td>
-                                            {/* ALTERADO: Célula de valor é dinâmica */}
-                                            <td className="px-4 py-2 text-center font-bold text-lg text-blue-400">{officer[columnConfig[rankingType].key]}</td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan="4" className="text-center p-6 text-gray-400">
-                                            Nenhum dado encontrado para os filtros selecionados.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Cards Resumo */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-gradient-to-br from-yellow-900/30 to-yellow-900/10 p-4 rounded-lg border border-yellow-700">
+                    <p className="text-xs text-gray-400 mb-1">🏆 Campeão</p>
+                    <p className="text-lg font-bold text-yellow-400">{sortedRanking[0]?.nome || '-'}</p>
+                    <p className="text-2xl font-bold text-yellow-300 mt-1">{sortedRanking[0]?.[selectedCriteria] || 0}</p>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <p className="text-xs text-gray-400 mb-1">📊 Total Geral</p>
+                    <p className="text-2xl font-bold text-blue-400">
+                        {sortedRanking.reduce((sum, o) => sum + (o[selectedCriteria] || 0), 0)}
+                    </p>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <p className="text-xs text-gray-400 mb-1">📈 Média</p>
+                    <p className="text-2xl font-bold text-green-400">
+                        {sortedRanking.length > 0 
+                            ? (sortedRanking.reduce((sum, o) => sum + (o[selectedCriteria] || 0), 0) / sortedRanking.length).toFixed(1)
+                            : '0'
+                        }
+                    </p>
+                </div>
+            </div>
+
+            {/* Modal de Detalhes */}
+            {selectedOfficer && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto border border-gray-700">
+                        <div className="sticky top-0 bg-gray-900 border-b border-gray-700 p-6 flex justify-between items-center">
+                            <h3 className="text-2xl font-bold text-blue-400">Detalhes do Policial</h3>
+                            <button
+                                onClick={() => setSelectedOfficer(null)}
+                                className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                            >
+                                <X size={24} className="text-gray-400" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
+                                <p className="text-sm text-gray-400 mb-1">Nome</p>
+                                <p className="text-2xl font-bold text-white mb-4">{selectedOfficer.nome}</p>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-sm text-gray-400 mb-1">Matrícula</p>
+                                        <p className="text-lg font-semibold text-blue-300">{selectedOfficer.matricula}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-400 mb-1">ID</p>
+                                        <p className="text-lg font-semibold text-gray-300">{selectedOfficer.id}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                {CRITERIA.map((criterion) => {
+                                    const allValues = ranking.map((r) => Number(r[criterion.key] || 0));
+                                    const avgValue = allValues.length > 0
+                                        ? allValues.reduce((a, b) => a + b, 0) / allValues.length
+                                        : 0;
+                                    const value = Number(selectedOfficer[criterion.key] || 0);
+                                    const difference = value - avgValue;
+                                    const isAbove = difference > 0;
+
+                                    return (
+                                        <div key={criterion.key} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
+                                            <p className="text-xs text-gray-400 mb-2">{criterion.label}</p>
+                                            <p className="text-2xl font-bold text-blue-400">{value}</p>
+                                            <p className="text-xs text-gray-500 mt-1">Média: {avgValue.toFixed(2)}</p>
+                                            <p className={`text-xs font-semibold mt-1 ${isAbove ? 'text-green-400' : 'text-red-400'}`}>
+                                                {difference > 0 ? '+' : ''}{difference.toFixed(2)}
+                                            </p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     </div>
-                </>
+                </div>
             )}
         </div>
     );

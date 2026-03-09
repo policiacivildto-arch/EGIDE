@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';           
-import { auth, db, appId } from '../../config/firebase';
+import { apiClient } from '../../config/api';
 import { AuthLayout } from '../../components/auth/AuthLayout';
 import { UserPlus } from 'lucide-react';
 import { LoadingSpinner } from '../../components/ui/Shared';
@@ -55,30 +53,30 @@ export const SignUpScreen = ({ showNotification, setAuthScreen }) => {
         }
         setIsLoading(true);
         try {
-            const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
-            const user = userCredential.user;
-            
-            // --- ALTERADO: Adicionado 'cargo' e 'classe' aos dados do usuário a serem salvos ---
             const userData = {
+                username: formData.email.trim().split('@')[0],
+                password: formData.password,
+                email: formData.email.trim(),
                 nome: normalizeName(formData.nome),
                 matricula: formData.matricula,
                 departamento: formData.departamento,
                 delegacia: formData.delegacia,
                 telefone: formData.telefone,
-                cargo: formData.cargo,   // --- NOVO ---
-                classe: formData.classe, // --- NOVO ---
-                role: 'policial' // Todos os novos usuários são policiais por padrão
+                cargo: formData.cargo,
+                classe: formData.classe,
+                role: 'policial'
             };
             
-            await setDoc(doc(db, `/artifacts/${appId}/users`, user.uid), userData);
+            await apiClient.register(userData);
             showNotification("Conta criada com sucesso! Você já pode fazer o login.", "success");
             setAuthScreen('login');
         } catch (error) {
-            console.error("Erro ao criar conta:", error.code);
-            if (error.code === 'auth/email-already-in-use') {
+            console.error("Erro ao criar conta:", error);
+            const message = (error?.message || '').toLowerCase();
+            if (message.includes('already') || message.includes('já existe')) {
                 showNotification("Este email já está em uso por outra conta.", "error");
             } else {
-                showNotification("Ocorreu um erro ao criar a conta.", "error");
+                showNotification("Ocorreu um erro ao criar a conta no Django.", "error");
             }
         } finally {
             setIsLoading(false);

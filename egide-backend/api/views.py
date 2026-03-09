@@ -13,7 +13,8 @@ from .models import (
     Equipe, Operacao, Comboio,
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
-    EventoOperacao, DepartamentoEvento, EscalaPolicial
+    EventoOperacao, DepartamentoEvento, EscalaPolicial,
+    Feriado
 )
 from .serializers import (
     DepartamentoSerializer, DelegaciaSerializer, PolicialSerializer,
@@ -24,7 +25,8 @@ from .serializers import (
     ResultadoOperacaoSerializer, AporteFinanceiroSerializer,
     EventoOperacaoSerializer, EventoOperacaoListSerializer,
     DepartamentoEventoSerializer, DepartamentoEventoSimplificadoSerializer,
-    EscalaPolicialSerializer
+    EscalaPolicialSerializer,
+    FeriadoSerializer
 )
 
 
@@ -88,10 +90,28 @@ class VagaViewSet(viewsets.ModelViewSet):
     serializer_class = VagaSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['delegacia', 'turno', 'data', 'status']
+    filterset_fields = {
+        'delegacia': ['exact'],
+        'turno': ['exact'],
+        'status': ['exact'],
+        'data': ['exact', 'gte', 'lte'],
+    }
     search_fields = ['delegacia__nome']
     ordering_fields = ['data', 'turno', 'criado_em']
     ordering = ['-data', 'turno']
+
+    def create(self, request, *args, **kwargs):
+        """Cria nova vaga com tratamento de erro de integridade (duplicata)"""
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            from django.db import IntegrityError
+            if 'unique constraint failed' in str(e).lower():
+                return Response(
+                    {'non_field_errors': ['Vaga já existe: Esta combinação de data, turno e delegacia já foi criada.']},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            raise
 
     @action(detail=False, methods=['get'])
     def vagas_disponiveis(self, request):
@@ -113,7 +133,12 @@ class EquipeViewSet(viewsets.ModelViewSet):
     serializer_class = EquipeSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['vaga', 'chefe', 'status']
+    filterset_fields = {
+        'vaga': ['exact'],
+        'chefe': ['exact'],
+        'status': ['exact'],
+        'vaga__data': ['exact', 'gte', 'lte'],
+    }
     search_fields = ['chefe__nome']
     ordering_fields = ['data_criacao', 'status']
     ordering = ['-data_criacao']
@@ -703,4 +728,14 @@ class EscalaPolicialViewSet(viewsets.ModelViewSet):
             'escalas': EscalaPolicialSerializer(escalas_criadas, many=True).data,
             'detalhes_erros': erros
         })
+
+
+class FeriadoViewSet(viewsets.ModelViewSet):
+    """ViewSet para gerenciar Feriados e datas especiais"""
+    queryset = Feriado.objects.all()
+    serializer_class = FeriadoSerializer
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['nome', 'descricao']
+    ordering_fields = ['data', 'criado_em']
+    ordering = ['data']
 

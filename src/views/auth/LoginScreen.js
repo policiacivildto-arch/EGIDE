@@ -1,34 +1,39 @@
 import React, { useState } from 'react';
 
-import { auth } from '../../config/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { apiClient } from '../../config/api'; // Substituiu Firebase
 import { AuthLayout, LoadingSpinner } from '../../App';
 import { LogIn } from 'lucide-react';
 
     
- export const LoginScreen = ({ showNotification, setAuthScreen }) => {
+ export const LoginScreen = ({ showNotification, setAuthScreen, onLoginSuccess }) => {
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [loginError, setLoginError] = useState('');
 
     const handleLogin = async (e) => {
         e.preventDefault();
+        setLoginError(''); // Limpa erro anterior
         const trimmedEmail = email.trim();
         if (!trimmedEmail || !password) {
-            showNotification("Por favor, preencha o email e a senha.", "error");
+            setLoginError("Por favor, preencha o email e a senha.");
             return;
         }
         setIsLoading(true);
         try {
-            await signInWithEmailAndPassword(auth, trimmedEmail, password);
-        } catch (error) {
-            console.error("Erro de login:", error.code);
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                showNotification("Email ou senha inválidos. Verifique suas credenciais.", "error");
-            } else {
-                showNotification("Ocorreu um erro ao tentar fazer o login.", "error");
+            const { access, refresh } = await apiClient.login(trimmedEmail, password);
+            // Salva o token JWT e refresh token
+            apiClient.setToken(access);
+            if (refresh) {
+                localStorage.setItem('refresh_token', refresh);
             }
+            if (typeof onLoginSuccess === 'function') {
+                await onLoginSuccess();
+            }
+        } catch (error) {
+            console.error("Erro de login:", error.message);
+            setLoginError("Email ou senha inválidos. Verifique suas credenciais.");
         } finally {
             setIsLoading(false);
         }
@@ -36,6 +41,11 @@ import { LogIn } from 'lucide-react';
 
     return (
         <AuthLayout title="Acesso ao Sistema">
+            {loginError && (
+                <div className="mb-6 p-4 bg-red-900 border border-red-700 rounded-lg">
+                    <p className="text-red-200 text-sm font-medium">{loginError}</p>
+                </div>
+            )}
             <form onSubmit={handleLogin} className="space-y-6">
                 <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>

@@ -1,7 +1,6 @@
 // src/views/admin/componets/Management.js
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, doc, setDoc } from 'firebase/firestore';         
-import { db, appId } from '../../../config/firebase';
+import { apiClient } from '../../../config/api';
 import { LoadingSpinner } from '../../../components/ui/Shared';
 import { UserPlus, Edit } from 'lucide-react';
 import { displayMatricula } from '../../../utils/helpers';
@@ -20,25 +19,49 @@ export const UserManagementView = ({ userData, showNotification }) => {
             setLoading(false);
             return;
         }
-        setLoading(true);
-        const q = query(collection(db, `/artifacts/${appId}/users`));
-        const unsub = onSnapshot(q, (snap) => {
-            setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            setLoading(false);
-        }, (error) => {
-            console.error("Permission denied fetching users:", error);
-            showNotification("Você não tem permissão para ver a lista de usuários.", "error");
-            setLoading(false);
-        });
-        return () => unsub();
+
+        const loadUsers = async () => {
+            try {
+                setLoading(true);
+                const usersData = await apiClient.getPoliciais();
+                setUsers(Array.isArray(usersData) ? usersData : []);
+            } catch (error) {
+                console.error("Erro ao carregar usuários:", error);
+                showNotification("Erro ao carregar lista de usuários.", "error");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadUsers();
+        
+        // Atualiza lista a cada 20 segundos
+        const interval = setInterval(loadUsers, 20000);
+        return () => clearInterval(interval);
     }, [userData, showNotification]);
 
     const handleSaveUser = async (userDataToSave) => {
-        const userRef = doc(db, `/artifacts/${appId}/users`, userDataToSave.id);
-        await setDoc(userRef, userDataToSave, { merge: true });
-        showNotification(`Policial ${editingUser ? 'atualizado' : 'salvo'} com sucesso!`, 'success');
-        setModalOpen(false);
-        setEditingUser(null);
+        try {
+            if (editingUser) {
+                // Atualiza usuário existente
+                await apiClient.updatePolicial(userDataToSave.id, userDataToSave);
+                showNotification('Policial atualizado com sucesso!', 'success');
+            } else {
+                // Cria novo usuário
+                await apiClient.createPolicial(userDataToSave);
+                showNotification('Policial cadastrado com sucesso!', 'success');
+            }
+            
+            // Recarrega lista
+            const usersData = await apiClient.getPoliciais();
+            setUsers(Array.isArray(usersData) ? usersData : []);
+            
+            setModalOpen(false);
+            setEditingUser(null);
+        } catch (error) {
+            console.error("Erro ao salvar usuário:", error);
+            showNotification(`Erro ao ${editingUser ? 'atualizar' : 'cadastrar'} policial.`, 'error');
+        }
     };
     if (loading) return <LoadingSpinner />;
     return (

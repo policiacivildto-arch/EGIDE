@@ -153,6 +153,70 @@ function calcularValorTrabalho(horasTrabalhadas, horaInicio, cargo, classe, diaD
   return totalPago;
 }
 
+function normalizarTextoBase(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function normalizeCargo(cargoRaw) {
+  const cargo = normalizarTextoBase(cargoRaw);
+
+  const map = {
+    OIP: 'OIP',
+    OFICIAL: 'OIP',
+    'OFICIAL DE INVESTIGACAO': 'OIP',
+    'OFICIAL DE INVESTIGACOES': 'OIP',
+    INSPETOR: 'INV',
+    INSPETORA: 'INV',
+    INVESTIGADOR: 'INV',
+    INVESTIGADORA: 'INV',
+    'POLICIAL CIVIL': 'INV',
+    POLICIAL: 'INV',
+    ESCRIVAO: 'ESC',
+    ESCRIVA: 'ESC',
+    ESC: 'ESC',
+    DPC: 'DPC',
+    DEL: 'DEL',
+    DELEGADO: 'DPC',
+    DELEGADA: 'DPC',
+    'DELEGADO DE POLICIA CIVIL': 'DPC',
+  };
+
+  return map[cargo] || cargo;
+}
+
+function normalizeClasse(classeRaw, cargoNormalizado) {
+  const classe = normalizarTextoBase(classeRaw);
+
+  if (!classe) {
+    return cargoNormalizado === 'DPC' || cargoNormalizado === 'DEL' ? 'Especial' : 'A';
+  }
+
+  if (classe === 'ESPECIAL') return 'Especial';
+  if (classe === 'PRACA') return 'A';
+
+  const match = classe.match(/[ABCD]/);
+  if (match) return match[0];
+
+  const map = {
+    PRIMEIRA: 'A',
+    SEGUNDA: 'B',
+    TERCEIRA: 'C',
+    QUARTA: 'D',
+    'CLASSE A': 'A',
+    'CLASSE B': 'B',
+    'CLASSE C': 'C',
+    'CLASSE D': 'D',
+  };
+
+  if (map[classe]) return map[classe];
+
+  return cargoNormalizado === 'DPC' || cargoNormalizado === 'DEL' ? 'Especial' : 'A';
+}
+
 /**
  * Função principal para calcular custo de um turno
  * @param {Object} usuario - Dados do usuário (cargo, classe)
@@ -190,9 +254,8 @@ export function calculateShiftCost(usuario, data, horaEntrada, horaSaida, feriad
     horasTrabalhadas = 1440;
   }
 
-  const cargo = usuario.cargo.toString().trim().toUpperCase();
-  const classe = usuario.classe.toString().trim().charAt(0).toUpperCase() + 
-                 usuario.classe.toString().trim().slice(1).toLowerCase();
+  const cargo = normalizeCargo(usuario.cargo);
+  const classe = normalizeClasse(usuario.classe, cargo);
 
   return calcularValorTrabalho(horasTrabalhadas, horaInicio, cargo, classe, diaDaSemana, feriado);
 }

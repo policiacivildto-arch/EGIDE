@@ -2,7 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { normalizeName, displayMatricula } from '../../../utils/helpers';   
 
 export const AdminEditTeamModal = ({ teamToEdit, allUsers, onSave, onCancel, showNotification }) => {
-    const [members, setMembers] = useState([...teamToEdit.members]);
+    const initialMembers = Array.isArray(teamToEdit?.members)
+        ? teamToEdit.members
+        : Array.isArray(teamToEdit?.membros_detalhes)
+            ? teamToEdit.membros_detalhes.map((m) => ({ ...m, uid: m.id }))
+            : [];
+    const [members, setMembers] = useState(initialMembers);
     const [substitutingIndex, setSubstitutingIndex] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -29,14 +34,24 @@ export const AdminEditTeamModal = ({ teamToEdit, allUsers, onSave, onCancel, sho
     };
 
     const handleSaveChanges = async () => {
+        if (members.length === 0) {
+            showNotification("Esta equipe não possui membros editáveis neste formato.", "warning");
+            return;
+        }
         setIsLoading(true);
         try {
+            const memberIds = members.map((m) => m.id || m.uid).filter(Boolean);
+            const leaderId = members[0]?.id || members[0]?.uid;
+
+            if (!leaderId || memberIds.length === 0) {
+                showNotification("Não foi possível identificar os policiais da equipe para salvar.", "error");
+                return;
+            }
+
             const updatedTeamData = {
-                members: members,
-                memberMatriculas: members.map(m => m.matricula),
-                registeringOfficer: members[0], // O primeiro é sempre o chefe
-                delegaciaPrincipal: members[0].delegacia,
-                chefeEquipeTelefone: members[0].telefone || ''
+                chefe: leaderId,
+                membros: memberIds,
+                telefone_contato: members[0].telefone || ''
             };
             await onSave(teamToEdit.id, updatedTeamData);
         } catch (error) {
@@ -50,8 +65,14 @@ export const AdminEditTeamModal = ({ teamToEdit, allUsers, onSave, onCancel, sho
         <div className="text-gray-800">
             <h2 className="text-2xl font-bold mb-4">Editar Equipe</h2>
             <p className="mb-6 text-sm text-gray-600">
-                Data: <span className="font-semibold">{new Date(teamToEdit.vagaDate.seconds * 1000).toLocaleDateString('pt-BR')}</span> | 
-                Viatura: <span className="font-semibold">{teamToEdit.vehicle}</span>
+                Data: <span className="font-semibold">{(() => {
+                    const rawDate = teamToEdit?.vagaDate || teamToEdit?.vaga_info?.data;
+                    if (!rawDate) return 'N/A';
+                    if (typeof rawDate === 'string') return new Date(rawDate).toLocaleDateString('pt-BR');
+                    if (rawDate?.seconds) return new Date(rawDate.seconds * 1000).toLocaleDateString('pt-BR');
+                    return 'N/A';
+                })()}</span> | 
+                Viatura: <span className="font-semibold">{teamToEdit.vehicle || teamToEdit.viatura_placa || 'N/A'}</span>
             </p>
 
             {substitutingIndex !== null ? (
@@ -74,6 +95,11 @@ export const AdminEditTeamModal = ({ teamToEdit, allUsers, onSave, onCancel, sho
                 <div className="mb-4 p-4 border rounded-lg bg-white">
                     <h3 className="font-bold text-lg mb-2">Membros da Equipe</h3>
                     <div className="space-y-2">
+                        {members.length === 0 && (
+                            <div className="p-2 bg-yellow-100 rounded text-yellow-800">
+                                Não há membros detalhados disponíveis para edição nesta equipe.
+                            </div>
+                        )}
                         {members.map((member, index) => (
                             <div key={member.uid || index} className="flex justify-between items-center p-2 bg-gray-100 rounded">
                                 <span className="font-medium">

@@ -8,7 +8,138 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
+from django.db import transaction
+from django.db.models import Q
 from api.models_security import LogAuditoria, PerfilDepartamento
+from api.models import Delegacia, Policial
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register_view(request):
+    """
+    Registro de usuário (frontend SignUp)
+
+    POST /api/auth/register/
+    """
+    username = (request.data.get('username') or '').strip()
+    email = (request.data.get('email') or '').strip().lower()
+    password = request.data.get('password') or ''
+    nome = (request.data.get('nome') or '').strip()
+    matricula = ''.join(filter(str.isdigit, str(request.data.get('matricula') or '')))
+    telefone = request.data.get('telefone') or ''
+    cargo_front = (request.data.get('cargo') or '').strip().upper()
+    classe_front = (request.data.get('classe') or '').strip()
+    delegacia_value = request.data.get('delegacia')
+    departamento_value = request.data.get('departamento')
+
+    required_fields = {
+        'username': username,
+        'email': email,
+        'password': password,
+        'nome': nome,
+        'matricula': matricula,
+        'delegacia': delegacia_value,
+    }
+    missing = [field for field, value in required_fields.items() if not value]
+    if missing:
+        return Response(
+            {'error': f"Campos obrigatórios ausentes: {', '.join(missing)}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if len(password) < 6:
+        return Response({'error': 'A senha deve ter no mínimo 6 caracteres'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if len(matricula) != 8:
+        return Response({'error': 'Matrícula deve ter 8 dígitos'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if User.objects.filter(username=username).exists():
+        return Response({'error': 'username já existe'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if User.objects.filter(email__iexact=email).exists():
+        return Response({'error': 'email já existe'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if Policial.objects.filter(matricula=matricula).exists():
+        return Response({'error': 'matricula já existe'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Mapeamento do payload do frontend para choices do model
+    if cargo_front == 'DPC':
+        cargo_model = 'Delegado'
+    elif cargo_front == 'OIP':
+        cargo_model = 'OIP'
+    else:
+        cargo_model = 'Policial Civil'
+
+    if classe_front in ('Oficial', 'Praça'):
+        classe_model = classe_front
+    else:
+        classe_model = 'Oficial' if cargo_model == 'Delegado' else 'Praça'
+
+    delegacias_qs = Delegacia.objects.select_related('departamento')
+    if isinstance(delegacia_value, int) or (isinstance(delegacia_value, str) and str(delegacia_value).isdigit()):
+        delegacia = delegacias_qs.filter(id=int(delegacia_value)).first()
+    else:
+        delegacia_name = str(delegacia_value).strip()
+        departamento_name = str(departamento_value).strip() if departamento_value else ''
+        if departamento_name:
+            delegacia = delegacias_qs.filter(
+                nome__iexact=delegacia_name
+            ).filter(
+                Q(departamento__sigla__iexact=departamento_name) | Q(departamento__nome__iexact=departamento_name)
+            ).first()
+        else:
+            delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
+
+    if not delegacia:
+        return Response({'error': 'Delegacia não encontrada para o cadastro'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password,
+                first_name=nome,
+            )
+
+            policial = Policial.objects.create(
+                usuario=user,
+                matricula=matricula,
+                nome=nome,
+                classe=classe_model,
+                cargo=cargo_model,
+                delegacia=delegacia,
+                telefone=telefone,
+                email=email,
+                ativo=True,
+            )
+
+        LogAuditoria.registrar(
+            acao='registro',
+            usuario=user,
+            descricao=f'Registro de novo usuário: {user.username}',
+            nivel='info',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+
+        return Response({
+            'message': 'Conta criada com sucesso',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+            },
+            'policial': {
+                'id': policial.id,
+                'nome': policial.nome,
+                'matricula': policial.matricula,
+                'delegacia': policial.delegacia.nome if policial.delegacia else None,
+            }
+        }, status=status.HTTP_201_CREATED)
+    except Exception as exc:
+        return Response({'error': f'Falha ao registrar usuário: {exc}'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
@@ -30,23 +161,40 @@ def login_view(request):
         "perfil_departamento": {...}
     }
     """
-    username = request.data.get('username')
+    username_or_email = request.data.get('username')
     password = request.data.get('password')
     
-    if not username or not password:
+    # DEBUG - Log dos dados recebidos
+    print(f'🔍 DEBUG Login - Data recebido: {request.data}')
+    print(f'🔍 DEBUG Login - Username/Email: {username_or_email}')
+    print(f'🔍 DEBUG Login - Password: {"*" * len(password) if password else None}')
+    
+    if not username_or_email or not password:
         return Response(
-            {'error': 'Username e password são obrigatórios'},
+            {'error': 'Username/Email e password são obrigatórios'},
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Autenticar usuário
-    user = authenticate(username=username, password=password)
+    # Tenta autenticar com username ou email
+    user = authenticate(username=username_or_email, password=password)
+    
+    # Se falhar, tenta buscar por email e autenticar com username
+    if user is None and '@' in username_or_email:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            user_obj = User.objects.get(email=username_or_email)
+            user = authenticate(username=user_obj.username, password=password)
+            print(f'🔍 DEBUG Login - Tentou com email, username encontrado: {user_obj.username}')
+        except User.DoesNotExist:
+            print(f'🔍 DEBUG Login - Email não encontrado')
+            pass
     
     if user is None:
         # Registrar tentativa de login falha
         LogAuditoria.registrar(
             acao='login_falhou',
-            descricao=f'Tentativa de login falhou: {username}',
+            descricao=f'Tentativa de login falhou: {username_or_email}',
             nivel='warning',
             ip_address=request.META.get('REMOTE_ADDR')
         )
@@ -118,7 +266,9 @@ def logout_view(request):
         refresh_token = request.data.get('refresh')
         if refresh_token:
             token = RefreshToken(refresh_token)
-            token.blacklist()
+            blacklist_method = getattr(token, 'blacklist', None)
+            if callable(blacklist_method):
+                blacklist_method()
         
         # Registrar logout
         LogAuditoria.registrar(

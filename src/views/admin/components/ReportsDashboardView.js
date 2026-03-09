@@ -1,10 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db, appId } from '../../../config/firebase';   
+import { apiClient } from '../../../config/api';
 import { getCycleInfo } from '../../../utils/helpers';
 import { LoadingSpinner } from '../../../components/ui/Shared';
-import { ChevronUp, ChevronDown, Download } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Pie, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
@@ -13,30 +12,31 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
  export  const ReportsDashboardView = ({ showNotification, departamento }) => {
      const [cycle, setCycle] = useState(getCycleInfo());
      const [reports, setReports] = useState([]);
-     const [loading, setLoading] = useState(true);
+     const [loading, setLoading] = useState(false);
  
      useEffect(() => {
+         // Temporariamente desabilitado - migração para Django em andamento
+         setLoading(false);
+         setReports([]);
+         
+         /* TODO: Implementar busca de relatórios via Django API
          setLoading(true);
-         let reportsQuery = query(
-             collection(db, `/artifacts/${appId}/public/data/convoyReports`), 
-             where("cycleId", "==", cycle.cycleId)
-         );
-         
-         // Se houver departamento, adicionar filtro
-         if (departamento) {
-             reportsQuery = query(
-                 collection(db, `/artifacts/${appId}/public/data/convoyReports`), 
-                 where("cycleId", "==", cycle.cycleId),
-                 where("departamento", "==", departamento)
-             );
-         }
-         
-         const unsubReports = onSnapshot(reportsQuery, (snap) => {
-             setReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-             setLoading(false);
-         });
- 
-         return () => unsubReports();
+         const loadReports = async () => {
+             try {
+                 const data = await apiClient.getReports({ 
+                     cycle_id: cycle.cycleId,
+                     departamento: departamento 
+                 });
+                 setReports(Array.isArray(data) ? data : []);
+             } catch (error) {
+                 console.error('Erro ao carregar relatórios:', error);
+                 setReports([]);
+             } finally {
+                 setLoading(false);
+             }
+         };
+         loadReports();
+         */
      }, [cycle, departamento]);
  
      const goToPreviousCycle = () => {
@@ -211,10 +211,10 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
                  <div className="flex items-center space-x-4">
                      <div className="flex items-center bg-gray-800 p-1 rounded-lg">
                          <button onClick={goToPreviousCycle} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Ciclo Anterior">
-                             <ChevronDown className="-rotate-90" />
+                             <ChevronLeft size={24} />
                          </button>
                          <button onClick={goToNextCycle} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Ciclo Seguinte">
-                             <ChevronUp className="rotate-90" />
+                             <ChevronRight size={24} />
                          </button>
                      </div>
                      {reports.length > 0 && (

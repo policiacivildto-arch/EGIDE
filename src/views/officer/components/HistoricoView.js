@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db, appId } from '../../../config/firebase';
+import { apiClient } from '../../../config/api';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { LoadingSpinner, Modal } from '../../../App';
+import { LoadingSpinner } from '../../../App';
 import { displayMatricula } from '../../../utils/helpers';
 import { Download, ChevronUp, ChevronDown } from 'lucide-react';
 
@@ -12,15 +11,58 @@ export const HistoricoView = ({ user, showNotification }) => {
     const [loading, setLoading] = useState(true);
     const [expandedRows, setExpandedRows] = useState([]);
 
+    const parseDate = (rawDate) => {
+        if (!rawDate) return null;
+        if (typeof rawDate === 'string') return new Date(rawDate);
+        if (rawDate?.seconds) return new Date(rawDate.seconds * 1000);
+        return null;
+    };
+
+    const resolveTeamDate = (team) => parseDate(team?.vaga_info?.data || team?.vagaDate);
+
+    const resolveShift = (team) => team?.vaga_info?.turno || team?.vagaShiftType || 'day';
+
+    const resolveLeaderName = (team) => team?.registeringOfficer?.nome || team?.chefe_nome || 'N/A';
+
+    const resolveVehicle = (team) => team?.vehicle || team?.viatura_placa || 'N/A';
+
+    const resolveMembers = (team) => {
+        if (Array.isArray(team?.members) && team.members.length > 0) return team.members;
+        if (Array.isArray(team?.membros_detalhes) && team.membros_detalhes.length > 0) {
+            return team.membros_detalhes.map((member) => ({
+                nome: member?.nome || 'Sem nome',
+                matricula: member?.matricula || '',
+                delegacia: member?.delegacia_nome || '',
+            }));
+        }
+        return [];
+    };
+
     const toggleRow = (id) => setExpandedRows(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
     useEffect(() => {
         const fetchHistory = async () => {
             if (!user || !user.matricula) { setLoading(false); return; }
-            const q = query(collection(db, `/artifacts/${appId}/public/data/teams`), where('memberMatriculas', 'array-contains', user.matricula));
-            const snap = await getDocs(q);
-            setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.vagaDate.seconds - a.vagaDate.seconds));
-            setLoading(false);
+            try {
+                const teamsData = await apiClient.getTeams({ member_matricula: user.matricula });
+                const teams = Array.isArray(teamsData)
+                    ? teamsData
+                    : (teamsData?.results || []);
+
+                const sortedHistory = teams
+                    .sort((a, b) => {
+                        const dateA = resolveTeamDate(a);
+                        const dateB = resolveTeamDate(b);
+                        const timeA = dateA && !Number.isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+                        const timeB = dateB && !Number.isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+                        return timeB - timeA;
+                    });
+                setHistory(sortedHistory);
+            } catch (error) {
+                console.error('Erro ao carregar histórico:', error);
+            } finally {
+                setLoading(false);
+            }
         };
         fetchHistory();
     }, [user]);
@@ -45,13 +87,15 @@ export const HistoricoView = ({ user, showNotification }) => {
         pdf.text(`Matrícula: ${displayMatricula(user.matricula)}`, 14, 30);
 
         const tableBody = history.map(team => {
-            const horas = team.vagaShiftType === 'day' ? 12 : 6;
+            const shift = resolveShift(team);
+            const horas = shift === 'day' ? 12 : 6;
             totalHoras += horas;
+            const teamDate = resolveTeamDate(team);
             return [
-                new Date(team.vagaDate.seconds * 1000).toLocaleDateString('pt-BR'),
-                team.vagaShiftType === 'day' ? 'DIURNO (12h)' : 'NOTURNO (6h)',
-                team.registeringOfficer.nome,
-                team.vehicle,
+                teamDate && !Number.isNaN(teamDate.getTime()) ? teamDate.toLocaleDateString('pt-BR') : 'N/A',
+                shift === 'day' ? 'DIURNO (12h)' : 'NOTURNO (6h)',
+                resolveLeaderName(team),
+                resolveVehicle(team),
             ];
         });
 
@@ -99,10 +143,13 @@ export const HistoricoView = ({ user, showNotification }) => {
                                 <React.Fragment key={team.id}>
                                     <tr className="border-b border-gray-700 hover:bg-gray-700/50 cursor-pointer" onClick={() => toggleRow(team.id)}>
                                         <td className="px-4 py-2 text-center">{expandedRows.includes(team.id) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</td>
-                                        <td className="px-4 py-2">{new Date(team.vagaDate.seconds * 1000).toLocaleDateString('pt-BR')}</td>
-                                        <td className="px-4 py-2">{team.vagaShiftType === 'day' ? '08h-20h' : '19h-01h'}</td>
-                                        <td className="px-4 py-2">{team.registeringOfficer.nome}</td>
-                                        <td className="px-4 py-2">{team.vehicle}</td>
+                                        <td className="px-4 py-2">{(() => {
+                                            const date = resolveTeamDate(team);
+                                            return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('pt-BR') : 'N/A';
+                                        })()}</td>
+                                        <td className="px-4 py-2">{resolveShift(team) === 'day' ? '08h-20h' : '19h-01h'}</td>
+                                        <td className="px-4 py-2">{resolveLeaderName(team)}</td>
+                                        <td className="px-4 py-2">{resolveVehicle(team)}</td>
                                     </tr>
                                     {expandedRows.includes(team.id) && (
                                         <tr className="bg-gray-900/50">
@@ -110,7 +157,11 @@ export const HistoricoView = ({ user, showNotification }) => {
                                                 <div className="p-2 bg-gray-800 rounded">
                                                     <h5 className="font-bold mb-1 text-xs">Componentes da Equipe:</h5>
                                                     <ul className="list-disc list-inside text-xs">
-                                                        {team.members.map(m => <li key={m.matricula}>{m.nome} ({displayMatricula(m.matricula)}) - {m.delegacia}</li>)}
+                                                        {resolveMembers(team).map((member, index) => (
+                                                            <li key={member.matricula || index}>
+                                                                {member.nome} {member.matricula ? `(${displayMatricula(member.matricula)})` : ''} {member.delegacia ? `- ${member.delegacia}` : ''}
+                                                            </li>
+                                                        ))}
                                                     </ul>
                                                 </div>
                                             </td>

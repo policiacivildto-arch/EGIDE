@@ -6,14 +6,14 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from api.views import (
     DepartamentoViewSet, DelegaciaViewSet, PolicialViewSet,
     ViaturaViewSet, VagaViewSet, EquipeViewSet, OperacaoViewSet,
-    ComboioViewSet,
+    ComboioViewSet, FeriadoViewSet,
     # Sistema de Operações
     OperacaoPolicialViewSet, AlvoViewSet, EquipeOperacaoViewSet,
     ResultadoOperacaoViewSet, AporteFinanceiroViewSet,
     # Sistema de Eventos
     EventoOperacaoViewSet, DepartamentoEventoViewSet, EscalaPolicialViewSet
 )
-from api.views_auth import login_view, logout_view, me_view
+from api.views_auth import login_view, logout_view, me_view, register_view
 
 def api_root(request):
     """View raiz da API com informações sobre endpoints disponíveis"""
@@ -59,6 +59,7 @@ router.register(r'vagas', VagaViewSet)
 router.register(r'equipes', EquipeViewSet)
 router.register(r'operacoes', OperacaoViewSet)
 router.register(r'comboios', ComboioViewSet)
+router.register(r'feriados', FeriadoViewSet)
 
 # Rotas do Sistema de Operações
 router.register(r'operacoes-policiais', OperacaoPolicialViewSet, basename='operacaopolicial')
@@ -78,6 +79,7 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api-auth/', include('rest_framework.urls')),
     # Autenticação JWT personalizada
+    path('api/auth/register/', register_view, name='register'),
     path('api/auth/login/', login_view, name='login'),
     path('api/auth/logout/', logout_view, name='logout'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

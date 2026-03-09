@@ -1,8 +1,7 @@
 
 
 import { useState } from 'react';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../../config/firebase';
+import { apiClient } from '../../config/api';
 import { Mail } from 'lucide-react';
 import { AuthLayout, LoadingSpinner } from '../../App'; 
 
@@ -21,11 +20,11 @@ export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
         }
         setIsLoading(true);
         try {
-            await sendPasswordResetEmail(auth, trimmedEmail);
+            await apiClient.requestPasswordReset(trimmedEmail);
             showNotification("Email de redefinição de senha enviado! Verifique sua caixa de entrada.", "success");
             setAuthScreen('login');
         } catch (error) {
-            console.error("Erro ao redefinir senha:", error.code);
+            console.error("Erro ao redefinir senha:", error);
             showNotification("Ocorreu um erro. Verifique se o email está correto.", "error");
         } finally {
             setIsLoading(false);

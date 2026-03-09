@@ -23,7 +23,7 @@ export const AdminRegistrationForm = ({ vaga, allUsers, onSubmit, onCancel, show
 
     const removeMember = (uid) => {
         setTeam(team.filter(m => m.uid !== uid));
-        if (leaderUid === uid) setLeaderUid('');
+        if (String(leaderUid) === String(uid)) setLeaderUid('');
     };
 
     const handleSubmit = (e) => {
@@ -35,10 +35,22 @@ export const AdminRegistrationForm = ({ vaga, allUsers, onSubmit, onCancel, show
         onSubmit(vaga, { members: team, vehicle, leaderUid });
     };
 
+    const vagaDate = (() => {
+        const rawDate = vaga?.date || vaga?.data;
+        if (!rawDate) return new Date();
+        if (typeof rawDate === 'string') {
+            const isoDateMatch = rawDate.match(/^(\d{4}-\d{2}-\d{2})/);
+            if (isoDateMatch) return new Date(`${isoDateMatch[1]}T12:00:00`);
+            return new Date(rawDate);
+        }
+        if (rawDate?.seconds) return new Date(rawDate.seconds * 1000);
+        return new Date();
+    })();
+
     return (
         <form onSubmit={handleSubmit} className="text-gray-800">
             <h2 className="text-2xl font-bold mb-4">Registrar Equipe (Admin)</h2>
-            <p className="mb-6">Dia: <span className="font-semibold">{new Date(vaga.date.seconds * 1000).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span></p>
+            <p className="mb-6">Dia: <span className="font-semibold">{vagaDate.toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span></p>
 
             <div className="mb-4 p-4 border rounded-lg bg-white">
                 <h3 className="font-bold text-lg mb-2">Membros da Equipe</h3>

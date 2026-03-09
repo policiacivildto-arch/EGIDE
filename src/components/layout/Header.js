@@ -12,7 +12,7 @@ export default function Header({ user, setCurrentPage, currentPage, onLogout, on
     return (
         <header className="bg-gray-900/80 backdrop-blur-sm shadow-lg p-4 flex justify-between items-center sticky top-0 z-40">
             <div className="flex items-center space-x-4">
-                <img src={PCCE_LOGO_URL} alt="Brasão PCCE" className="h-16" />
+                <img src={PCCE_LOGO_URL} alt="Brasão PCCE" className="h-16 w-auto object-contain" />
                 <div className="hidden sm:block">
                     <h1 className="text-2xl font-bold text-white">{systemTitle}</h1>
                     <p className="text-sm text-gray-400">Polícia Civil do Estado do Ceará</p>
@@ -40,8 +40,8 @@ export default function Header({ user, setCurrentPage, currentPage, onLogout, on
                 <div className="relative">
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-700 transition-colors">
                         <div className="text-right">
-                            <p className="font-semibold text-sm sm:text-base">{user?.nome.split(' ')[0]}</p>
-                            <p className="text-xs text-gray-400 hidden sm:block">Mat. {displayMatricula(user?.matricula)}</p>
+                            <p className="font-semibold text-sm sm:text-base">{user?.nome ? user.nome.split(' ')[0] : user?.username || 'Usuário'}</p>
+                            <p className="text-xs text-gray-400 hidden sm:block">{user?.matricula ? `Mat. ${displayMatricula(user.matricula)}` : user?.email || ''}</p>
                         </div>
                         {isMenuOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                     </button>

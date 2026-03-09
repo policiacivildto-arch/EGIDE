@@ -1,5 +1,5 @@
 // Serviço de API para integração com Django Backend
-const API_BASE_URL = process.env.REACT_APP_DJANGO_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_DJANGO_API_URL || 'http://127.0.0.1:8000/api';
 
 // Helper para obter token JWT do localStorage
 const getAuthToken = () => localStorage.getItem('django_token');

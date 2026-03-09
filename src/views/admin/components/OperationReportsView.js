@@ -1,11 +1,10 @@
 
 import React, { useState } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { db, appId } from '../../../config/firebase';   
+import { apiClient } from '../../../config/api';
 import { Modal, LoadingSpinner } from '../../../components/ui/Shared';
 import ViewReport from './ViewReport';
 import OperationReportForm from './OperationReportForm';
-import { Download } from 'lucide-react';        
+      
 
 
 
@@ -20,6 +19,32 @@ export const OperationReportsView = ({ showNotification, departamento }) => {
     // --- NOVO: Estado para controlar o modal de EDIÇÃO ---
     const [editingReport, setEditingReport] = useState(null);
 
+    const toArray = (payload) => {
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.results)) return payload.results;
+        return [];
+    };
+
+    const parseDateValue = (raw) => {
+        if (!raw) return null;
+        if (typeof raw === 'string') return new Date(raw);
+        if (typeof raw === 'number') return new Date(raw);
+        if (raw?.seconds) return new Date(raw.seconds * 1000);
+        return null;
+    };
+
+    const getIsoDate = (raw) => {
+        const date = parseDateValue(raw);
+        if (!date || Number.isNaN(date.getTime())) return null;
+        return date.toISOString().split('T')[0];
+    };
+
+    const getSupervisorName = (value) => {
+        if (!value) return 'N/A';
+        if (typeof value === 'string' || typeof value === 'number') return String(value);
+        return value?.nome || value?.name || value?.username || 'N/A';
+    };
+
     const fetchReports = async () => {
         if (!startDate || !endDate) {
             showNotification("Por favor, selecione as datas de início e fim.", "error");
@@ -28,28 +53,34 @@ export const OperationReportsView = ({ showNotification, departamento }) => {
         setLoading(true);
         setReports([]);
         try {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
+            const [reportsResult, convoysResult] = await Promise.allSettled([
+                apiClient.getConvoyReports(),
+                apiClient.getConvoys(),
+            ]);
 
-            let reportsQuery = query(
-                collection(db, `/artifacts/${appId}/public/data/convoyReports`),
-                where("submittedAt", ">=", start),
-                where("submittedAt", "<=", end)
-            );
-            
-            // Se houver departamento, adicionar filtro
-            if (departamento) {
-                reportsQuery = query(
-                    collection(db, `/artifacts/${appId}/public/data/convoyReports`),
-                    where("submittedAt", ">=", start),
-                    where("submittedAt", "<=", end),
-                    where("departamento", "==", departamento)
-                );
+            const reportsResponse = reportsResult.status === 'fulfilled' ? reportsResult.value : [];
+            const convoysResponse = convoysResult.status === 'fulfilled' ? convoysResult.value : [];
+
+            if (reportsResult.status === 'rejected') {
+                console.warn('Falha ao carregar convoy-reports, usando fallback local:', reportsResult.reason);
             }
-            
-            const reportsSnap = await getDocs(reportsQuery);
-            const fetchedReports = reportsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            if (convoysResult.status === 'rejected') {
+                console.warn('Falha ao carregar comboios:', convoysResult.reason);
+            }
+
+            const allReports = toArray(reportsResponse);
+            const allConvoys = toArray(convoysResponse);
+
+            const fetchedReports = allReports.filter((report) => {
+                const submittedAt = report?.submittedAt || report?.submitted_at || report?.criado_em;
+                if (!submittedAt) return false;
+                const isoDate = getIsoDate(submittedAt);
+                if (!isoDate) return false;
+
+                const inRange = isoDate >= startDate && isoDate <= endDate;
+                const deptOk = !departamento || report?.departamento === departamento;
+                return inRange && deptOk;
+            });
 
             if (fetchedReports.length === 0) {
                 showNotification("Nenhum relatório encontrado para o período.", "info");
@@ -57,23 +88,32 @@ export const OperationReportsView = ({ showNotification, departamento }) => {
                 return;
             }
 
-            const convoyIds = [...new Set(fetchedReports.map(r => r.convoyId))];
-            const convoysQuery = query(collection(db, `/artifacts/${appId}/public/data/convoys`), where("id", "in", convoyIds));
-            const convoysSnap = await getDocs(convoysQuery);
-            const convoyMap = new Map(convoysSnap.docs.map(doc => [doc.id, doc.data()]));
+            const convoyMap = new Map(allConvoys.map((convoy) => [convoy.id, convoy]));
 
             let combinedData = fetchedReports.map(report => {
-                const convoyInfo = convoyMap.get(report.convoyId) || {};
-                const convoyTitle = `DPC ${convoyInfo.dpc || 'N/A'} | OIP ${convoyInfo.oip || 'N/A'}`;
+                const reportConvoyId = report.convoyId || report.convoy_id || report.comboio;
+                const convoyInfo = convoyMap.get(reportConvoyId) || {};
+                const dpcName = getSupervisorName(convoyInfo?.dpc_nome || convoyInfo?.dpc);
+                const oipName = getSupervisorName(convoyInfo?.oip_nome || convoyInfo?.oip);
+                const convoyTitle = `DPC ${dpcName} | OIP ${oipName}`;
                 
                 return {
                     ...report,
+                    convoyId: reportConvoyId,
                     convoyInfo,
                     convoyTitle,
                 };
             });
             
-            combinedData.sort((a, b) => (b.convoyInfo.date?.seconds || 0) - (a.convoyInfo.date?.seconds || 0));
+            combinedData.sort((a, b) => {
+                const dateA = a?.convoyInfo?.data || a?.convoyInfo?.date;
+                const dateB = b?.convoyInfo?.data || b?.convoyInfo?.date;
+                const parsedA = parseDateValue(dateA);
+                const parsedB = parseDateValue(dateB);
+                const timeA = parsedA && !Number.isNaN(parsedA.getTime()) ? parsedA.getTime() : 0;
+                const timeB = parsedB && !Number.isNaN(parsedB.getTime()) ? parsedB.getTime() : 0;
+                return timeB - timeA;
+            });
 
             setReports(combinedData);
 
@@ -89,14 +129,12 @@ export const OperationReportsView = ({ showNotification, departamento }) => {
     const handleUpdateReport = async (reportId, updatedData) => {
         setLoading(true);
         try {
-            const reportRef = doc(db, `/artifacts/${appId}/public/data/convoyReports`, reportId);
-            
             const dataToSave = {
                 ...updatedData,
-                lastEditedAt: new Date(), // Campo opcional para auditoria
+                lastEditedAt: new Date().toISOString(),
             };
 
-            await updateDoc(reportRef, dataToSave);
+            await apiClient.updateConvoyReport(reportId, dataToSave);
             showNotification("Relatório atualizado com sucesso!", "success");
             setEditingReport(null); // Fecha o modal
             await fetchReports(); // Recarrega a lista para mostrar os dados atualizados
@@ -158,7 +196,12 @@ export const OperationReportsView = ({ showNotification, departamento }) => {
                                 <tr key={report.id} className="border-b border-gray-700 hover:bg-gray-700/50">
                                     <td className="px-4 py-2">
                                          <p className="font-semibold">{report.convoyTitle}</p>
-                                         <p className="text-xs text-gray-400">{new Date(report.convoyInfo.date?.seconds * 1000).toLocaleDateString('pt-BR')}</p>
+                                         <p className="text-xs text-gray-400">{(() => {
+                                            const convoyDate = report?.convoyInfo?.data || report?.convoyInfo?.date;
+                                                          const parsed = parseDateValue(convoyDate);
+                                                          if (!parsed || Number.isNaN(parsed.getTime())) return 'N/A';
+                                                          return parsed.toLocaleDateString('pt-BR');
+                                         })()}</p>
                                     </td>
                                     <td className="px-4 py-2">{`AIS ${report.convoyInfo.ais || 'N/A'}`}</td>
                                     <td className="px-4 py-2">{`${report.abordagens?.pessoas || 0} / ${report.abordagens?.veiculos || 0}`}</td>

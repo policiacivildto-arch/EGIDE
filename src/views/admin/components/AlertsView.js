@@ -1,30 +1,21 @@
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { db, appId } from '../../../config/firebase';
+import { apiClient } from '../../../config/api';
 import { AlertTriangle } from 'lucide-react';
 import { LoadingSpinner } from '../../../components/ui/Shared';
 import { getCycleInfo, getWeekInfo, displayMatricula } from '../../../utils/helpers';
 
 export const AlertsView = ({ showNotification, setView, setCurrentWeek, departamento }) => {
     const [savedAlerts, setSavedAlerts] = useState([]);
-    const [loadingSaved, setLoadingSaved] = useState(true);
+    const [loadingSaved, setLoadingSaved] = useState(false);
 
     const [scanCycle, setScanCycle] = useState(getCycleInfo().cycleId);
     const [loadingScan, setLoadingScan] = useState(false);
     const [foundIssues, setFoundIssues] = useState([]);
 
     useEffect(() => {
-        let q = query(collection(db, `/artifacts/${appId}/public/data/alerts`));
-        if (departamento) {
-            q = query(collection(db, `/artifacts/${appId}/public/data/alerts`), where("departamento", "==", departamento));
-        }
-        const unsub = onSnapshot(q, (snap) => {
-            setSavedAlerts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            setLoadingSaved(false);
-        });
-        return () => unsub();
-    }, [departamento]);
+        setSavedAlerts([]);
+    }, []);
 
     const handleGoToSchedule = (date) => {
         if (!date || !setView || !setCurrentWeek) return;
@@ -38,19 +29,19 @@ export const AlertsView = ({ showNotification, setView, setCurrentWeek, departam
         showNotification("Iniciando verificação... Isso pode levar alguns segundos.", "info");
 
         try {
-            let teamsQuery = query(
-                collection(db, `/artifacts/${appId}/public/data/teams`),
-                where("cycleId", "==", scanCycle)
-            );
-            if (departamento) {
-                teamsQuery = query(
-                    collection(db, `/artifacts/${appId}/public/data/teams`),
-                    where("cycleId", "==", scanCycle),
-                    where("departamento", "==", departamento)
-                );
-            }
-            const teamsSnap = await getDocs(teamsQuery);
-            const teams = teamsSnap.docs.map(doc => doc.data());
+            const [year, month] = scanCycle.split('-').map(Number);
+            const cycleStart = new Date(year, month - 1, 1);
+            const cycleEnd = new Date(year, month, 0);
+            const startIso = cycleStart.toISOString().split('T')[0];
+            const endIso = cycleEnd.toISOString().split('T')[0];
+
+            const teamsResponse = await apiClient.getTeams({
+                'vaga__data__gte': startIso,
+                'vaga__data__lte': endIso,
+            });
+            const teams = Array.isArray(teamsResponse)
+                ? teamsResponse
+                : (teamsResponse?.results || []);
 
             if (teams.length === 0) {
                 showNotification("Nenhuma equipe encontrada para o ciclo selecionado.", "warning");
@@ -60,15 +51,28 @@ export const AlertsView = ({ showNotification, setView, setCurrentWeek, departam
 
             const officerSchedules = new Map();
             teams.forEach(team => {
-                team.members.forEach(member => {
-                    if (!officerSchedules.has(member.matricula)) {
-                        officerSchedules.set(member.matricula, { info: member, shifts: [] });
-                    }
-                    officerSchedules.get(member.matricula).shifts.push({
-                        date: new Date(team.vagaDate.seconds * 1000),
-                        shiftType: team.vagaShiftType,
-                        team: team.teamName || team.delegaciaPrincipal,
+                const leaderName = team?.chefe_nome;
+                const leaderMatricula = team?.chefe_matricula || team?.chefe?.matricula || null;
+                const vagaDate = team?.vaga_info?.data || team?.vagaDate;
+                const parsedDate = typeof vagaDate === 'string'
+                    ? new Date(vagaDate)
+                    : vagaDate?.seconds
+                        ? new Date(vagaDate.seconds * 1000)
+                        : null;
+
+                if (!leaderName || !leaderMatricula || !parsedDate || Number.isNaN(parsedDate.getTime())) return;
+
+                if (!officerSchedules.has(leaderMatricula)) {
+                    officerSchedules.set(leaderMatricula, {
+                        info: { nome: leaderName, matricula: leaderMatricula },
+                        shifts: [],
                     });
+                }
+
+                officerSchedules.get(leaderMatricula).shifts.push({
+                    date: parsedDate,
+                    shiftType: team?.vaga_info?.turno || team?.vagaShiftType,
+                    team: team?.vaga_info?.delegacia_nome || team?.delegaciaPrincipal || 'Equipe',
                 });
             });
 
@@ -122,10 +126,7 @@ export const AlertsView = ({ showNotification, setView, setCurrentWeek, departam
         }
     };
 
-    const handleReview = async (id) => {
-        await updateDoc(doc(db, `/artifacts/${appId}/public/data/alerts`, id), { status: 'reviewed' });
-        showNotification("Alerta marcado como revisado.", "success");
-    };
+    const handleReview = async () => showNotification("Recurso de revisão de alertas salvos será habilitado quando existir endpoint Django dedicado.", "info");
 
     return (
         <div>
@@ -175,14 +176,14 @@ export const AlertsView = ({ showNotification, setView, setCurrentWeek, departam
                 <h4 className="text-xl font-bold mb-3 text-gray-300">Alertas do Sistema Salvos</h4>
                 {loadingSaved ? <LoadingSpinner /> : (
                     <div className="space-y-4">
-                        {savedAlerts.length === 0 && <p className="text-gray-400">Nenhum alerta salvo no sistema.</p>}
-                        {savedAlerts.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds).map(alert => (
+                        {savedAlerts.length === 0 && <p className="text-gray-400">Sem endpoint Django para alertas persistidos no momento.</p>}
+                        {savedAlerts.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).map(alert => (
                             <div key={alert.id} className={`p-4 rounded-lg ${alert.status === 'new' ? 'bg-yellow-900/50' : 'bg-gray-900'}`}>
                                 <div className="flex justify-between items-center">
                                     <div>
                                         <p className="font-bold text-yellow-300">{alert.type.replace('_', ' ')}</p>
                                         <p className="text-sm">{alert.message}</p>
-                                        <p className="text-xs text-gray-400">Em: {new Date(alert.createdAt.seconds * 1000).toLocaleString('pt-BR')}</p>
+                                        <p className="text-xs text-gray-400">Em: {alert.createdAt?.seconds ? new Date(alert.createdAt.seconds * 1000).toLocaleString('pt-BR') : 'N/A'}</p>
                                     </div>
                                     {alert.status === 'new' && (<button onClick={() => handleReview(alert.id)} className="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-lg text-xs">Revisado</button>)}
                                 </div>

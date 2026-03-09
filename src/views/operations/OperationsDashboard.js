@@ -3,6 +3,7 @@ import {
     Shield, Menu, X, LayoutDashboard, Plus, ClipboardList, CheckCircle, 
     FileText, Target, BarChart, Users
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import policiaisData from '../../data/policiais.json';
 import { DEPARTMENTS } from '../../constants/data';
 
@@ -11,6 +12,7 @@ import { DashboardView } from './components/DashboardView';
 import { NovaDemandaView } from './components/NovaDemandaView';
 import { PlanejamentoView } from './components/PlanejamentoView';
 import { RelatorioView } from './components/RelatorioView';
+import { ResultadosOperacaoView } from './components/ResultadosOperacaoView';
 import { MeusAlvosView } from './components/MeusAlvosView';
 import { EstatisticasView } from './components/EstatisticasView';
 import { AprovacaoDTO } from './components/AprovacaoDTO';
@@ -34,6 +36,7 @@ export default function OperationsDashboard({ userData, showNotification }) {
     console.log('isDepartamento:', isDepartamento);
     console.log('userDepartamento:', userDepartamento);
     
+    const [searchParams, setSearchParams] = useSearchParams();
     const [activeView, setActiveView] = useState(isPolicialOperacional ? 'relatorio' : 'dashboard');
     const [operations, setOperations] = useState([]);
     const [selectedOperation, setSelectedOperation] = useState(null);
@@ -117,6 +120,41 @@ export default function OperationsDashboard({ userData, showNotification }) {
     const [alvos, setAlvos] = useState([]);
     const [equipes, setEquipes] = useState([]);
     const [draggedAlvo, setDraggedAlvo] = useState(null);
+
+    const defaultView = isPolicialOperacional ? 'relatorio' : 'dashboard';
+    const availableViews = new Set([
+        'relatorio',
+        'relatorio-operacao',
+        ...(isDTO || isDepartamento ? ['dashboard', 'nova-demanda', 'planejamento', 'equipes', 'vincular-alvos', 'estatisticas'] : []),
+        ...(isDTO ? ['aprovacao'] : []),
+        ...(isPolicialOperacional ? ['meus-alvos'] : []),
+    ]);
+
+    const setActiveViewAndSyncUrl = (nextView) => {
+        const safeView = availableViews.has(nextView) ? nextView : defaultView;
+
+        if (safeView === activeView) return;
+
+        setActiveView(safeView);
+        const nextParams = new URLSearchParams(searchParams);
+        if (safeView === defaultView) {
+            nextParams.delete('view');
+        } else {
+            nextParams.set('view', safeView);
+        }
+        setSearchParams(nextParams, { replace: true });
+    };
+
+    useEffect(() => {
+        const viewFromUrl = searchParams.get('view');
+        const targetView = viewFromUrl && availableViews.has(viewFromUrl)
+            ? viewFromUrl
+            : defaultView;
+
+        if (targetView !== activeView) {
+            setActiveView(targetView);
+        }
+    }, [searchParams, activeView, defaultView, isDTO, isDepartamento, isPolicialOperacional]);
     
     // Função para buscar policial por matrícula
     const buscarPolicialPorMatricula = (matricula) => {
@@ -132,7 +170,6 @@ export default function OperationsDashboard({ userData, showNotification }) {
         const saved = localStorage.getItem('resultadosOperacao');
         return saved ? JSON.parse(saved) : {};
     });
-    const [showResultadosModal, setShowResultadosModal] = useState(false);
     const [informacoesAlvos, setInformacoesAlvos] = useState(() => {
         // Carregar informações dos alvos do localStorage
         const saved = localStorage.getItem('informacoesAlvos');
@@ -574,7 +611,7 @@ export default function OperationsDashboard({ userData, showNotification }) {
                 responsavel_alvos: userDepartamento || ''
             });
             
-            setActiveView('dashboard');
+            setActiveViewAndSyncUrl('dashboard');
             await loadOperations(); // Recarregar operações do backend
             
         } catch (error) {
@@ -689,27 +726,26 @@ export default function OperationsDashboard({ userData, showNotification }) {
             <nav className="mt-4">
                 {(isDTO || isDepartamento) && (
                     <>
-                        <MenuItem icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeView === 'dashboard'} onClick={() => setActiveView('dashboard')} collapsed={!sidebarOpen} />
-                        <MenuItem icon={<Plus size={20} />} label="Nova Demanda" active={activeView === 'nova-demanda'} onClick={() => setActiveView('nova-demanda')} collapsed={!sidebarOpen} />
-                        {stats.aprovadas > 0 && (
-                            <MenuItem icon={<ClipboardList size={20} />} label="Planejamento" active={activeView === 'planejamento'} onClick={() => setActiveView('planejamento')} collapsed={!sidebarOpen} badge={stats.aprovadas} />
-                        )}
+                        <MenuItem icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeView === 'dashboard'} onClick={() => setActiveViewAndSyncUrl('dashboard')} collapsed={!sidebarOpen} />
+                        <MenuItem icon={<Plus size={20} />} label="Nova Demanda" active={activeView === 'nova-demanda'} onClick={() => setActiveViewAndSyncUrl('nova-demanda')} collapsed={!sidebarOpen} />
                         {isDTO && (
-                            <MenuItem icon={<CheckCircle size={20} />} label="Aprovação" active={activeView === 'aprovacao'} onClick={() => setActiveView('aprovacao')} collapsed={!sidebarOpen} badge={stats.aguardandoAprovacao} />
+                            <MenuItem icon={<CheckCircle size={20} />} label="Aprovações" active={activeView === 'aprovacao'} onClick={() => setActiveViewAndSyncUrl('aprovacao')} collapsed={!sidebarOpen} badge={stats.aguardandoAprovacao} />
                         )}
+                        <MenuItem icon={<Users size={20} />} label="Equipes" active={activeView === 'equipes'} onClick={() => setActiveViewAndSyncUrl('equipes')} collapsed={!sidebarOpen} />
+                        {stats.aprovadas > 0 && (
+                            <MenuItem icon={<ClipboardList size={20} />} label="Planejamento" active={activeView === 'planejamento'} onClick={() => setActiveViewAndSyncUrl('planejamento')} collapsed={!sidebarOpen} badge={stats.aprovadas} />
+                        )}
+                        <MenuItem icon={<Target size={20} />} label="Vincular Alvos" active={activeView === 'vincular-alvos'} onClick={() => setActiveViewAndSyncUrl('vincular-alvos')} collapsed={!sidebarOpen} />
                     </>
                 )}
-                <MenuItem icon={<FileText size={20} />} label="Relatório" active={activeView === 'relatorio'} onClick={() => setActiveView('relatorio')} collapsed={!sidebarOpen} />
-                {(isDTO || isDepartamento) && (
-                    <MenuItem icon={<Users size={20} />} label="Equipes" active={activeView === 'equipes'} onClick={() => setActiveView('equipes')} collapsed={!sidebarOpen} />
-                )}
+                <MenuItem icon={<FileText size={20} />} label="Frequência Operacional" active={activeView === 'relatorio'} onClick={() => setActiveViewAndSyncUrl('relatorio')} collapsed={!sidebarOpen} />
+                <MenuItem icon={<FileText size={20} />} label="Relatório" active={activeView === 'relatorio-operacao'} onClick={() => setActiveViewAndSyncUrl('relatorio-operacao')} collapsed={!sidebarOpen} />
                 {isPolicialOperacional && (
-                    <MenuItem icon={<Target size={20} />} label="Meus Alvos" active={activeView === 'meus-alvos'} onClick={() => setActiveView('meus-alvos')} collapsed={!sidebarOpen} />
+                    <MenuItem icon={<Target size={20} />} label="Meus Alvos" active={activeView === 'meus-alvos'} onClick={() => setActiveViewAndSyncUrl('meus-alvos')} collapsed={!sidebarOpen} />
                 )}
                 {(isDTO || isDepartamento) && (
                     <>
-                        <MenuItem icon={<Target size={20} />} label="Vincular Alvos" active={activeView === 'vincular-alvos'} onClick={() => setActiveView('vincular-alvos')} collapsed={!sidebarOpen} />
-                        <MenuItem icon={<BarChart size={20} />} label="Estatísticas" active={activeView === 'estatisticas'} onClick={() => setActiveView('estatisticas')} collapsed={!sidebarOpen} />
+                        <MenuItem icon={<BarChart size={20} />} label="Estatísticas" active={activeView === 'estatisticas'} onClick={() => setActiveViewAndSyncUrl('estatisticas')} collapsed={!sidebarOpen} />
                     </>
                 )}
             </nav>
@@ -767,7 +803,7 @@ export default function OperationsDashboard({ userData, showNotification }) {
                             stats={stats} 
                             operations={operacoesDoPolicialAtual} 
                             setSelectedOperation={setSelectedOperation} 
-                            setActiveView={setActiveView} 
+                            setActiveView={setActiveViewAndSyncUrl} 
                         />
                     )}
                     {(isDTO || isDepartamento) && activeView === 'nova-demanda' && (
@@ -822,10 +858,18 @@ export default function OperationsDashboard({ userData, showNotification }) {
                             setPoliciaisPresenca={setPoliciaisPresenca}
                             showNotification={showNotification}
                             setShowSubstituicaoModal={setShowSubstituicaoModal}
-                            setShowResultadosModal={setShowResultadosModal}
-                            resultadosOperacao={resultadosOperacao}
                             setEquipes={setEquipes}
                             userData={userData}
+                        />
+                    )}
+                    {activeView === 'relatorio-operacao' && (
+                        <ResultadosOperacaoView
+                            operations={operations}
+                            isPolicialOperacional={isPolicialOperacional}
+                            equipesDoPolicialAtual={equipesDoPolicialAtual}
+                            resultadosOperacao={resultadosOperacao}
+                            setResultadosOperacao={setResultadosOperacao}
+                            showNotification={showNotification}
                         />
                     )}
                     {isPolicialOperacional && activeView === 'meus-alvos' && (
@@ -1249,238 +1293,6 @@ export default function OperationsDashboard({ userData, showNotification }) {
                 </div>
             )}
 
-            {/* Modal de Resultados da Operação em Tempo Real */}
-            {showResultadosModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-                    <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full my-8">
-                        <h3 className="text-2xl font-bold text-white mb-6 flex items-center space-x-2">
-                            <CheckCircle size={28} className="text-green-400" />
-                            <span>Registrar Resultados da Operação - Tempo Real</span>
-                        </h3>
-                        
-                        <form onSubmit={(e) => {
-                            e.preventDefault();
-                            const formData = new FormData(e.target);
-                            
-                            const resultados = {
-                                operacaoId: selectedOperationRelatorio,
-                                mpCumpridos: parseInt(formData.get('mpCumpridos') || 0),
-                                mpDiligenciados: parseInt(formData.get('mpDiligenciados') || 0),
-                                flagrante: parseInt(formData.get('flagrante') || 0),
-                                buscaCumpridos: parseInt(formData.get('buscaCumpridos') || 0),
-                                mbaDiligenciados: parseInt(formData.get('mbaDiligenciados') || 0),
-                                qtdCelular: parseInt(formData.get('qtdCelular') || 0),
-                                qtdVeiculo: parseInt(formData.get('qtdVeiculo') || 0),
-                                qtdMunicoes: parseInt(formData.get('qtdMunicoes') || 0),
-                                qtdArma: parseInt(formData.get('qtdArma') || 0),
-                                dinheiro: parseFloat(formData.get('dinheiro') || 0),
-                                medidasCautelares: parseInt(formData.get('medidasCautelares') || 0),
-                                droga: formData.get('droga') || '',
-                                observacoes: formData.get('observacoes') || '',
-                                timestamp: new Date().toISOString()
-                            };
-                            
-                            setResultadosOperacao({
-                                ...resultadosOperacao,
-                                [selectedOperationRelatorio]: resultados
-                            });
-                            
-                            setShowResultadosModal(false);
-                            showNotification('Resultados salvos com sucesso em tempo real!', 'success');
-                        }}>
-                            {/* Mandados e Prisões */}
-                            <div className="mb-6">
-                                <h4 className="text-lg font-semibold text-cyan-400 mb-4">Mandados e Prisões</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            MP Cumpridos
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="mpCumpridos"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.mpCumpridos || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            MP Diligenciados
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="mpDiligenciados"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.mpDiligenciados || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            Flagrante
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="flagrante"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.flagrante || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            Busca Cumpridos
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="buscaCumpridos"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.buscaCumpridos || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            MBA Diligenciados
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="mbaDiligenciados"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.mbaDiligenciados || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            Medidas Cautelares
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="medidasCautelares"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.medidasCautelares || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Apreensões */}
-                            <div className="mb-6">
-                                <h4 className="text-lg font-semibold text-cyan-400 mb-4">Apreensões</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            Quantidade de Celulares
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="qtdCelular"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.qtdCelular || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            Quantidade de Veículos
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="qtdVeiculo"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.qtdVeiculo || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            Quantidade de Munições
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="qtdMunicoes"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.qtdMunicoes || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            Quantidade de Armas
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="qtdArma"
-                                            min="0"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.qtdArma || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            Dinheiro (R$)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="dinheiro"
-                                            min="0"
-                                            step="0.01"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.dinheiro || 0}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            Droga
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="droga"
-                                            placeholder="Ex: 5kg cocaína, 2kg maconha"
-                                            defaultValue={resultadosOperacao[selectedOperationRelatorio]?.droga || ''}
-                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Observações */}
-                            <div className="mb-6">
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Observações da Diligência (Tempo Real)
-                                </label>
-                                <textarea
-                                    name="observacoes"
-                                    rows="4"
-                                    placeholder="Descreva os detalhes da diligência em tempo real..."
-                                    defaultValue={resultadosOperacao[selectedOperationRelatorio]?.observacoes || ''}
-                                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500"
-                                />
-                            </div>
-
-                            {/* Botões */}
-                            <div className="flex space-x-3">
-                                <button
-                                    type="submit"
-                                    className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white font-semibold"
-                                >
-                                    💾 Salvar Resultados em Tempo Real
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowResultadosModal(false)}
-                                    className="px-6 py-3 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors text-white"
-                                >
-                                    Cancelar
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

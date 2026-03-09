@@ -1,7 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { collection, doc, writeBatch, updateDoc } from 'firebase/firestore';
-import { db, appId } from '../../../config/firebase';       
+import { apiClient } from '../../../config/api';
 import { getCycleInfo, displayMatricula } from '../../../utils/helpers';
 
 import { Modal } from '../../../components/ui/Shared';
@@ -16,13 +15,66 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
     const [modalContent, setModalContent] = useState(null);
     const [editingTeam, setEditingTeam] = useState(null);
 
+  const getVagaCapacity = (vaga) => Math.max(1, Number(vaga?.posicoes_disponiveis || 1));
+
+  const getTeamsForVaga = (vagaId) => teams.filter((t) => Number(resolveTeamVagaId(t)) === Number(vagaId));
+
+  const getRemainingSlots = (vaga) => {
+    const capacity = getVagaCapacity(vaga);
+    const used = getTeamsForVaga(vaga?.id).length;
+    return Math.max(0, capacity - used);
+  };
+
+  const parseDate = (value) => {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (isoDateMatch) {
+        return new Date(`${isoDateMatch[1]}T12:00:00`);
+      }
+      return new Date(value);
+    }
+    if (value?.seconds) return new Date(value.seconds * 1000);
+    return null;
+  };
+
+  const resolveVagaDate = (vaga) => parseDate(vaga?.date || vaga?.data);
+
+  const resolveVagaShift = (vaga) => vaga?.shiftType || vaga?.turno;
+
+  const resolveTeamVagaId = (team) => team?.vagaId || team?.vaga || team?.vaga_info?.id;
+
+  const resolveTeamLeadName = (team) => team?.registeringOfficer?.nome || team?.chefe_nome || '---';
+
+  const resolveTeamLeadPhone = (team) => team?.chefeEquipeTelefone || team?.telefone_contato || 'Não informado';
+
+  const resolveTeamMembers = (team) => {
+    if (Array.isArray(team?.members) && team.members.length > 0) return team.members;
+    if (Array.isArray(team?.membros_detalhes) && team.membros_detalhes.length > 0) {
+      return team.membros_detalhes.map((m) => ({
+        uid: m.id,
+        nome: m.nome,
+        matricula: m.matricula,
+        delegacia: m.delegacia_nome,
+      }));
+    }
+    if (team?.chefe_nome) {
+      return [{
+        uid: team?.chefe,
+        nome: team.chefe_nome,
+        matricula: '',
+        delegacia: team?.vaga_info?.delegacia_nome || '',
+      }];
+    }
+    return [];
+  };
+
     const toggleRow = (id) => setExpandedRows(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
     const handleConfirmTeam = async (teamId) => {
         if (!window.confirm("Tem certeza que deseja confirmar esta equipe?")) return;
         try {
-            const teamRef = doc(db, `/artifacts/${appId}/public/data/teams`, teamId);
-            await updateDoc(teamRef, { status: 'Confirmada' });
+      await apiClient.updateTeam(teamId, { status: 'Aprovada' });
             showNotification("Equipe confirmada com sucesso!", "success");
         } catch (error) {
             console.error("Erro ao confirmar equipe:", error);
@@ -33,14 +85,16 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
     const handleRejectTeam = async (team) => {
         if (!window.confirm("Tem certeza que deseja RECUSAR esta equipe? A vaga voltará a ficar disponível.")) return;
         try {
-            const batch = writeBatch(db);
-            const teamRef = doc(db, `/artifacts/${appId}/public/data/teams`, team.id);
-            const vagaRef = doc(db, `/artifacts/${appId}/public/data/vagas`, team.vagaId);
-
-            batch.delete(teamRef);
-            batch.update(vagaRef, { status: 'Disponível', teamId: '' });
-            
-            await batch.commit();
+        await apiClient.deleteTeam(team.id);
+        const vagaId = resolveTeamVagaId(team);
+        if (vagaId) {
+          const refreshedTeams = await apiClient.getTeams({ vaga: vagaId });
+          const teamsForVaga = Array.isArray(refreshedTeams) ? refreshedTeams : (refreshedTeams?.results || []);
+          const vagaRef = vagas.find((v) => Number(v?.id) === Number(vagaId));
+          const capacity = Math.max(1, Number(vagaRef?.posicoes_disponiveis || 1));
+          const nextStatus = teamsForVaga.length >= capacity ? 'Ocupada' : 'Disponível';
+          await apiClient.updateVaga(vagaId, { status: nextStatus });
+        }
             showNotification("Inscrição da equipe recusada com sucesso. A vaga está disponível novamente.", "success");
         } catch (error) {
             console.error("Erro ao recusar equipe:", error);
@@ -50,8 +104,7 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
 
     const handleUpdateTeam = async (teamId, updatedData) => {
         try {
-            const teamRef = doc(db, `/artifacts/${appId}/public/data/teams`, teamId);
-            await updateDoc(teamRef, updatedData);
+            await apiClient.updateTeam(teamId, updatedData);
             showNotification("Equipe atualizada com sucesso!", "success");
             setEditingTeam(null);
         } catch (error) {
@@ -63,9 +116,7 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
 const handleConfirmConflict = async (teamId) => {
      if (!window.confirm("Confirmar esta equipe mesmo com o conflito de escala dupla identificado?")) return;
      try {
-         const teamRef = doc(db, `/artifacts/${appId}/public/data/teams`, teamId);
-         // Simplesmente muda o status para 'Confirmada', aceitando o conflito
-         await updateDoc(teamRef, { status: 'Confirmada' });
+   await apiClient.updateTeam(teamId, { status: 'Aprovada' });
          showNotification("Conflito ignorado e equipe confirmada!", "success");
      } catch (error) {
          console.error("Erro ao confirmar conflito:", error);
@@ -75,12 +126,16 @@ const handleConfirmConflict = async (teamId) => {
     const handleDeleteTeam = async (team) => {
         if (!window.confirm("Tem certeza que deseja remover esta equipe da escala? A ação não pode ser desfeita.")) return;
         try {
-            const batch = writeBatch(db);
-            const teamRef = doc(db, `/artifacts/${appId}/public/data/teams`, team.id);
-            const vagaRef = doc(db, `/artifacts/${appId}/public/data/vagas`, team.vagaId);
-            batch.delete(teamRef);
-            batch.update(vagaRef, { status: 'Disponível', teamId: '' });
-            await batch.commit();
+            await apiClient.deleteTeam(team.id);
+      const vagaId = resolveTeamVagaId(team);
+      if (vagaId) {
+        const refreshedTeams = await apiClient.getTeams({ vaga: vagaId });
+        const teamsForVaga = Array.isArray(refreshedTeams) ? refreshedTeams : (refreshedTeams?.results || []);
+        const vagaRef = vagas.find((v) => Number(v?.id) === Number(vagaId));
+        const capacity = Math.max(1, Number(vagaRef?.posicoes_disponiveis || 1));
+        const nextStatus = teamsForVaga.length >= capacity ? 'Ocupada' : 'Disponível';
+        await apiClient.updateVaga(vagaId, { status: nextStatus });
+      }
             showNotification("Equipe removida com sucesso.", "success");
         } catch (error) {
             console.error("Erro ao remover equipe:", error);
@@ -90,11 +145,12 @@ const handleConfirmConflict = async (teamId) => {
 
    // DENTRO de ScheduleManagementView
 const handleAdminRegister = async (vaga, teamData) => {
+  const vagaWeekId = vaga.weekId || weekId;
     const memberMatriculas = teamData.members.map(m => m.matricula);
     // Verifica conflito, mas não bloqueia
-    const validation = await checkWeeklyLimit(memberMatriculas, vaga.weekId);
+  const validation = await checkWeeklyLimit(memberMatriculas, vagaWeekId);
 
-    let teamStatus = 'Confirmada'; // Admin registra como confirmada por padrão
+    let teamStatus = 'Aprovada'; // Admin registra como aprovada por padrão
     let conflictDetails = null;
 
     if (validation.conflict) {
@@ -111,25 +167,36 @@ const handleAdminRegister = async (vaga, teamData) => {
     }
 
     try {
-        const newTeamRef = doc(collection(db, `/artifacts/${appId}/public/data/teams`));
-        const leader = teamData.members.find(m => m.uid === teamData.leaderUid); // Garante que pegamos o líder correto
+        const leader = teamData.members.find((member) => String(member.uid) === String(teamData.leaderUid));
+      if (!leader) {
+        showNotification("Selecione um líder da equipe.", "error");
+        return;
+      }
+
+      const leaderPolicialId = leader.id || leader.uid;
+      const membrosIds = teamData.members
+        .map((member) => member.id || member.uid)
+        .filter(Boolean);
+
+      const vagaDate = resolveVagaDate(vaga);
         const team = {
-            id: newTeamRef.id, vagaId: vaga.id, vagaDate: vaga.date, vagaShiftType: vaga.shiftType, weekId: weekId, // Certifique-se que weekId está disponível no escopo
-            cycleId: getCycleInfo(new Date(vaga.date.seconds * 1000)).cycleId,
-            registeringOfficer: leader,
-            members: teamData.members, memberMatriculas: memberMatriculas, vehicle: teamData.vehicle,
-            chefeEquipeTelefone: leader?.telefone || '', // Pega telefone do líder selecionado
-            // --- ALTERAÇÃO: Usa o status definido ---
+        vaga: vaga.id,
+        chefe: leaderPolicialId,
+        membros: membrosIds,
             status: teamStatus,
-            ...(conflictDetails && { conflictDetails }), // Adiciona detalhes se houver conflito
-            delegaciaPrincipal: leader?.delegacia || '', // Pega delegacia do líder selecionado
-            departamento: departamento || 'N/A', // Adiciona departamento
+        viatura: null,
+        telefone_contato: leader?.telefone || '',
+        observacoes: conflictDetails
+          ? `Conflito de escala: ${conflictDetails.officerName} (${conflictDetails.officerMatricula})`
+          : `Viatura: ${teamData.vehicle}${vagaDate ? ` | Ciclo ${getCycleInfo(vagaDate).cycleId}` : ''}${departamento ? ` | Departamento: ${departamento}` : ''}`,
         };
-        const vagaDocRef = doc(db, `/artifacts/${appId}/public/data/vagas`, vaga.id);
-        const batch = writeBatch(db);
-        batch.set(newTeamRef, team);
-        batch.update(vagaDocRef, { status: 'Ocupada', teamId: newTeamRef.id });
-        await batch.commit();
+      await apiClient.createTeam(team);
+
+      const refreshedTeams = await apiClient.getTeams({ vaga: vaga.id });
+      const teamsForVaga = Array.isArray(refreshedTeams) ? refreshedTeams : (refreshedTeams?.results || []);
+      const capacity = getVagaCapacity(vaga);
+      const nextStatus = teamsForVaga.length >= capacity ? 'Ocupada' : 'Disponível';
+      await apiClient.updateVaga(vaga.id, { status: nextStatus });
 
         // --- ALTERAÇÃO: Notificação condicional ---
         if (teamStatus === 'Pendente (Conflito)') {
@@ -145,7 +212,9 @@ const handleAdminRegister = async (vaga, teamData) => {
 };
     const vagasByDay = useMemo(() => {
         return vagas.reduce((acc, vaga) => { 
-            const dayKey = new Date(vaga.date.seconds * 1000).toDateString(); 
+            const parsedDate = resolveVagaDate(vaga);
+            if (!parsedDate || Number.isNaN(parsedDate.getTime())) return acc;
+            const dayKey = parsedDate.toDateString(); 
             if (!acc[dayKey]) acc[dayKey] = []; 
             acc[dayKey].push(vaga); 
             return acc; 
@@ -174,12 +243,13 @@ const handleAdminRegister = async (vaga, teamData) => {
                 {sortedDays.map(dayKey => {
                     const dayVagas = vagasByDay[dayKey];
                     const dayDate = new Date(dayKey);
-                    const preenchidas = dayVagas.filter(v => v.status === 'Ocupada').length;
+                  const totalSlots = dayVagas.reduce((sum, v) => sum + getVagaCapacity(v), 0);
+                  const preenchidas = dayVagas.reduce((sum, v) => sum + getTeamsForVaga(v.id).length, 0);
                     return (
                         <div key={dayKey} className="bg-gray-800 p-2 rounded-lg">
                             <h4 className="text-lg font-bold text-blue-400 capitalize flex justify-between mb-2">
                                 <span>{dayDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit' })}</span>
-                                <span>{preenchidas} / {dayVagas.length} Vagas</span>
+                              <span>{preenchidas} / {totalSlots} Vagas</span>
                             </h4>
                            <div className="overflow-x-auto">
   <table className="min-w-full text-sm text-left border-collapse">
@@ -194,8 +264,16 @@ const handleAdminRegister = async (vaga, teamData) => {
     </thead>
 
     <tbody className="divide-y divide-gray-700">
-      {dayVagas.sort(/* ... */).map(vaga => {
-        const team = teams.find(t => t.vagaId === vaga.id);
+      {dayVagas.sort((a, b) => {
+        const turnA = resolveVagaShift(a) === 'day' ? 0 : 1;
+        const turnB = resolveVagaShift(b) === 'day' ? 0 : 1;
+        return turnA - turnB;
+      }).map(vaga => {
+        const teamsForVaga = getTeamsForVaga(vaga.id);
+        const team = teamsForVaga[0];
+        const capacity = getVagaCapacity(vaga);
+        const used = teamsForVaga.length;
+        const hasSlots = used < capacity;
         const isConflict = team?.status === 'Pendente (Conflito)';
         const isExpanded = expandedRows.includes(vaga.id);
 
@@ -212,13 +290,13 @@ const handleAdminRegister = async (vaga, teamData) => {
               </td>
 
               <td className="px-4 py-2 text-center w-28">
-                {vaga.shiftType === 'day' ? '08h-20h' : '19h-01h'}
+                {resolveVagaShift(vaga) === 'day' ? '08h-20h' : '19h-01h'}
               </td>
 
               <td className="px-4 py-2 text-center w-44">
-                {vaga.status === 'Disponível' ? (
+                {hasSlots ? (
                   <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-green-900 text-green-300">
-                    Disponível
+                    Disponível ({used}/{capacity})
                   </span>
                 ) : isConflict ? (
                   <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-900 text-yellow-300">
@@ -237,13 +315,13 @@ const handleAdminRegister = async (vaga, teamData) => {
 
               <td
                 className="px-4 py-2 text-left w-64 whitespace-nowrap overflow-hidden text-ellipsis"
-                title={team ? team.registeringOfficer.nome : ''}
+                title={team ? resolveTeamLeadName(team) : ''}
               >
-                {team ? team.registeringOfficer.nome : '---'}
+                {team ? resolveTeamLeadName(team) : '---'}
               </td>
 
               <td className="px-4 py-2 text-center w-36 space-x-2">
-                {vaga.status === 'Disponível' && (
+                {hasSlots && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -257,6 +335,16 @@ const handleAdminRegister = async (vaga, teamData) => {
                 )}
                 {isConflict && (
                   <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTeam(team);
+                      }}
+                      className="text-blue-400 hover:text-blue-200"
+                      title="Editar Equipe"
+                    >
+                      <Edit size={18} />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -281,6 +369,16 @@ const handleAdminRegister = async (vaga, teamData) => {
                 )}
                 {team?.status === 'Em Análise' && (
                   <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTeam(team);
+                      }}
+                      className="text-blue-400 hover:text-blue-200"
+                      title="Editar Equipe"
+                    >
+                      <Edit size={18} />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -345,15 +443,15 @@ const handleAdminRegister = async (vaga, teamData) => {
                     )}
                     <h5 className="font-bold mb-2 text-white">COMPONENTES DA EQUIPE:</h5>
                     <ul className="list-disc list-inside space-y-1">
-                      {team.members.map((m) => (
-                        <li key={m.matricula}>
-                          {m.nome} ({displayMatricula(m.matricula)}) - {m.delegacia}
+                      {resolveTeamMembers(team).map((m, index) => (
+                        <li key={m.uid || m.matricula || index}>
+                          {m.nome} {m.matricula ? `(${displayMatricula(m.matricula)})` : ''} {m.delegacia ? `- ${m.delegacia}` : ''}
                         </li>
                       ))}
                     </ul>
                     <p className="mt-2 pt-2 border-t border-gray-700">
                       <strong>Telefone do Chefe:</strong>{' '}
-                      {team.chefeEquipeTelefone || 'Não informado'}
+                      {resolveTeamLeadPhone(team)}
                     </p>
                   </div>
                 </td>

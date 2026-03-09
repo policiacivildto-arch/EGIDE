@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, Shield, History } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import VagasCalendarView from './components/VagasCalendarView';
 import MinhasOperacoesView from './components/MinhasOperacoesView';
 import HistoricoView from './components/HistoricoView';
@@ -7,6 +8,7 @@ import HistoricoView from './components/HistoricoView';
 
 export default function OfficerDashboard({ user, showNotification }) {
     const [officerView, setOfficerView] = useState('calendario');
+    const [searchParams, setSearchParams] = useSearchParams();
 
     // Adicionamos a nova view 'operacoes'
     const views = {
@@ -14,6 +16,27 @@ export default function OfficerDashboard({ user, showNotification }) {
         operacoes: { label: 'Minhas Operações', icon: Shield }, // <-- NOVA VIEW
         historico: { label: 'Meu Histórico', icon: History },
     };
+
+    const setOfficerViewAndSyncUrl = (nextView) => {
+        if (nextView === officerView) return;
+        setOfficerView(nextView);
+        const nextParams = new URLSearchParams(searchParams);
+        if (nextView === 'calendario') {
+            nextParams.delete('view');
+        } else {
+            nextParams.set('view', nextView);
+        }
+        setSearchParams(nextParams, { replace: true });
+    };
+
+    React.useEffect(() => {
+        const viewFromUrl = searchParams.get('view');
+        const targetView = viewFromUrl && views[viewFromUrl] ? viewFromUrl : 'calendario';
+
+        if (targetView !== officerView) {
+            setOfficerView(targetView);
+        }
+    }, [searchParams, officerView]);
 
     const renderContent = () => {
         switch (officerView) {
@@ -35,7 +58,7 @@ export default function OfficerDashboard({ user, showNotification }) {
                 {Object.entries(views).map(([key, { label, icon: Icon }]) => (
                     <button
                         key={key}
-                        onClick={() => setOfficerView(key)}
+                        onClick={() => setOfficerViewAndSyncUrl(key)}
                         className={`p-6 rounded-xl shadow-lg flex flex-col items-center justify-center transition-all duration-300 transform hover:-translate-y-1 ${
                             officerView === key ? 'bg-blue-600 text-white' : 'bg-gray-900/50 hover:bg-gray-700'
                         }`}

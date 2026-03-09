@@ -5,7 +5,8 @@ from .models import (
     Equipe, Operacao, Comboio,
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
-    EventoOperacao, DepartamentoEvento, EscalaPolicial
+    EventoOperacao, DepartamentoEvento, EscalaPolicial,
+    Feriado
 )
 from .models_security import (
     PerfilPolicial, PerfilDepartamento,
@@ -68,11 +69,13 @@ class EquipeSerializer(serializers.ModelSerializer):
     chefe_nome = serializers.CharField(source='chefe.nome', read_only=True)
     vaga_info = VagaSerializer(source='vaga', read_only=True)
     viatura_placa = serializers.CharField(source='viatura.placa', read_only=True)
+    membros = serializers.PrimaryKeyRelatedField(queryset=Policial.objects.all(), many=True, required=False)
+    membros_detalhes = PolicialSerializer(source='membros', many=True, read_only=True)
     membros_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Equipe
-        fields = ['id', 'vaga', 'vaga_info', 'chefe', 'chefe_nome', 'membros_count', 'viatura', 'viatura_placa', 'status', 'telefone_contato', 'observacoes', 'data_criacao', 'data_aprovacao', 'aprovado_por']
+        fields = ['id', 'vaga', 'vaga_info', 'chefe', 'chefe_nome', 'membros', 'membros_detalhes', 'membros_count', 'viatura', 'viatura_placa', 'status', 'telefone_contato', 'observacoes', 'data_criacao', 'data_aprovacao', 'aprovado_por']
         read_only_fields = ['data_criacao', 'data_aprovacao']
 
     def get_membros_count(self, obj):
@@ -398,4 +401,11 @@ class EventoOperacaoListSerializer(serializers.ModelSerializer):
         from django.db.models import Sum
         total = obj.departamentos_participantes.aggregate(Sum('quantidade_policiais'))['quantidade_policiais__sum']
         return total if total else 0
+
+
+class FeriadoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Feriado
+        fields = ['id', 'data', 'nome', 'descricao', 'tipo', 'criado_em', 'atualizado_em']
+        read_only_fields = ['criado_em', 'atualizado_em']
 

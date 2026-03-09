@@ -1,6 +1,6 @@
 // RelatorioView.js - Componente de Relatório de Operações em Tempo Real
 import React from 'react';
-import { FileText, ArrowRight, ArrowLeft, CheckCircle, AlertCircle, Users, Plus } from 'lucide-react';
+import { FileText, ArrowRight, ArrowLeft, AlertCircle, Users, Plus } from 'lucide-react';
 
 export function RelatorioView({ 
     operations, 
@@ -13,8 +13,6 @@ export function RelatorioView({
     setPoliciaisPresenca,
     showNotification,
     setShowSubstituicaoModal,
-    setShowResultadosModal,
-    resultadosOperacao,
     setEquipes,
     userData
 }) {
@@ -77,9 +75,9 @@ export function RelatorioView({
             <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-2xl font-bold text-white mb-2 flex items-center space-x-2">
                     <FileText className="text-cyan-400" size={28} />
-                    <span>Relatório de Operações - Tempo Real</span>
+                    <span>Frequência Operacional</span>
                 </h2>
-                <p className="text-gray-400 mb-6">Controle de presença e registro de resultados em tempo real</p>
+                <p className="text-gray-400 mb-6">Controle de presença e faltas em tempo real</p>
 
                 {operacoesParaRelatorio.length === 0 ? (
                     <div className="text-center py-12 text-gray-400">
@@ -93,7 +91,6 @@ export function RelatorioView({
                         {operacoesParaRelatorio.map(operacao => {
                             const equipesOperacao = equipes.filter(eq => eq.operacaoId === operacao.id);
                             const equipesNaoChegaram = getEquipesFaltam(operacao.id);
-                            const temResultados = resultadosOperacao[operacao.id];
                             
                             return (
                                 <div 
@@ -123,12 +120,6 @@ export function RelatorioView({
                                                 {equipesNaoChegaram.length > 0 && (
                                                     <span className="bg-yellow-600 px-2 py-1 rounded text-xs">
                                                         ⚠️ {equipesNaoChegaram.length} pendente(s)
-                                                    </span>
-                                                )}
-                                                {temResultados && (
-                                                    <span className="bg-green-600 px-2 py-1 rounded text-xs flex items-center space-x-1">
-                                                        <CheckCircle size={14} />
-                                                        <span>Resultados Registrados</span>
                                                     </span>
                                                 )}
                                             </div>
@@ -177,13 +168,6 @@ export function RelatorioView({
                                             </p>
                                         </div>
                                         <div className="flex items-center space-x-3">
-                                            <button
-                                                onClick={() => setShowResultadosModal(true)}
-                                                className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white font-semibold"
-                                            >
-                                                <CheckCircle size={20} />
-                                                <span>Registrar Resultados</span>
-                                            </button>
                                             <span className={`px-4 py-2 rounded font-semibold ${
                                                 operacao.status === 'Em Execução' 
                                                     ? 'bg-green-600 text-white' 
@@ -194,80 +178,6 @@ export function RelatorioView({
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* Resultados da Operação em Tempo Real */}
-                                {resultadosOperacao[selectedOperationRelatorio] && (
-                                    <div className="bg-green-900/30 border border-green-600 rounded-lg p-6 mb-6">
-                                        <h3 className="text-xl font-bold text-green-400 mb-4 flex items-center space-x-2">
-                                            <CheckCircle size={24} />
-                                            <span>Resultados Registrados em Tempo Real</span>
-                                        </h3>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">MP Cumpridos</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].mpCumpridos}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">MP Diligenciados</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].mpDiligenciados}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">Flagrante</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].flagrante}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">Busca Cumpridos</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].buscaCumpridos}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">MBA Diligenciados</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].mbaDiligenciados}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">Celulares</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].qtdCelular}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">Veículos</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].qtdVeiculo}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">Munições</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].qtdMunicoes}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">Armas</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].qtdArma}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">Dinheiro</div>
-                                                <div className="text-2xl font-bold text-green-400">
-                                                    R$ {resultadosOperacao[selectedOperationRelatorio].dinheiro.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                                                </div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">Medidas Cautelares</div>
-                                                <div className="text-2xl font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].medidasCautelares}</div>
-                                            </div>
-                                            <div className="bg-gray-800 p-3 rounded">
-                                                <div className="text-sm text-gray-400">Droga</div>
-                                                <div className="text-lg font-bold text-white">{resultadosOperacao[selectedOperationRelatorio].droga || 'N/A'}</div>
-                                            </div>
-                                        </div>
-                                        {resultadosOperacao[selectedOperationRelatorio].observacoes && (
-                                            <div className="mt-4 bg-gray-800 p-4 rounded">
-                                                <div className="text-sm text-gray-400 mb-2">Observações</div>
-                                                <div className="text-white">{resultadosOperacao[selectedOperationRelatorio].observacoes}</div>
-                                            </div>
-                                        )}
-                                        <button
-                                            onClick={() => setShowResultadosModal(true)}
-                                            className="mt-4 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white"
-                                        >
-                                            Atualizar Resultados
-                                        </button>
-                                    </div>
-                                )}
 
                                 {/* Alerta de Equipes Faltando */}
                                 {equipesNaoChegaram.length > 0 && (

@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
-import { db, appId } from '../../config/firebase';
+import { apiClient } from '../../config/api';
 
 export const useAdminData = () => {
   const [vagas, setVagas] = useState([]);
@@ -10,44 +9,42 @@ export const useAdminData = () => {
   const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
-    const qVagas = query(collection(db, `/artifacts/${appId}/public/data/vagas`));
-    const unsubVagas = onSnapshot(qVagas, snap => setVagas(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  // Função para carregar todos os dados
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [vagasData, teamsData, convoysData, usersData, holidaysData] = await Promise.all([
+        apiClient.getVagas(),
+        apiClient.getTeams(),
+        apiClient.getConvoys(),
+        apiClient.getPoliciais(),
+        apiClient.getHolidays(),
+      ]);
 
-    const qTeams = query(collection(db, `/artifacts/${appId}/public/data/teams`));
-    const unsubTeams = onSnapshot(qTeams, snap => setTeams(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-
-    const qConvoys = query(collection(db, `/artifacts/${appId}/public/data/convoys`));
-    const unsubConvoys = onSnapshot(qConvoys, snap => setConvoys(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-
-    const qUsers = query(collection(db, `/artifacts/${appId}/users`));
-    const unsubUsers = onSnapshot(qUsers, snap => setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-
-    const qHolidays = query(collection(db, `/artifacts/${appId}/public/data/holidays`));
-    const unsubHolidays = onSnapshot(qHolidays, snap => setHolidays(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-
-    setLoading(false);
-    return () => {
-      unsubVagas(); unsubTeams(); unsubConvoys(); unsubUsers(); unsubHolidays();
-    };
+      setVagas(Array.isArray(vagasData) ? vagasData : []);
+      setTeams(Array.isArray(teamsData) ? teamsData : []);
+      setConvoys(Array.isArray(convoysData) ? convoysData : []);
+      setAllUsers(Array.isArray(usersData) ? usersData : []);
+      setHolidays(Array.isArray(holidaysData) ? holidaysData : []);
+    } catch (error) {
+      console.error('Erro ao carregar dados do admin:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Carrega dados na inicialização
+  useEffect(() => {
+    loadData();
+    
+    // Opcional: polling para atualizar dados a cada 30 segundos
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   const refresh = useCallback(async () => {
-    const [vagasSnap, teamsSnap, convoysSnap, usersSnap, holidaysSnap] = await Promise.all([
-      getDocs(query(collection(db, `/artifacts/${appId}/public/data/vagas`))),
-      getDocs(query(collection(db, `/artifacts/${appId}/public/data/teams`))),
-      getDocs(query(collection(db, `/artifacts/${appId}/public/data/convoys`))),
-      getDocs(query(collection(db, `/artifacts/${appId}/users`))),
-      getDocs(query(collection(db, `/artifacts/${appId}/public/data/holidays`))),
-    ]);
-
-    setVagas(vagasSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    setTeams(teamsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    setConvoys(convoysSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    setAllUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    setHolidays(holidaysSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-  }, []);
+    await loadData();
+  }, [loadData]);
 
   return { vagas, teams, convoys, allUsers, holidays, loading, refresh };
 };

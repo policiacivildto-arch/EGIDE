@@ -29,5 +29,5 @@ RUN python manage.py migrate --noinput || true
 # Expor porta (Railway injeta PORT automaticamente)
 EXPOSE 8000
 
-# Iniciar Gunicorn
-CMD ["gunicorn", "egide_backend.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
+# Iniciar Gunicorn (porta dinâmica do Railway)
+CMD ["sh", "-c", "gunicorn egide_backend.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 4"]

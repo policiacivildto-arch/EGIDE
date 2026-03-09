@@ -49,8 +49,7 @@ class Policial(models.Model):
     CARGOS = (
         ('Policial Civil', 'Policial Civil'),
         ('Delegado', 'Delegado'),
-        ('Inspetor', 'Inspetor'),
-        ('Escrivão', 'Escrivão'),
+        ('OIP', 'OIP'),
         ('Investigador', 'Investigador'),
     )
 
@@ -594,3 +593,30 @@ class EscalaPolicial(models.Model):
         """Override save para calcular automaticamente"""
         self.calcular_horas()
         super().save(*args, **kwargs)
+
+
+class Feriado(models.Model):
+    """Feriados e datas especiais para controle de operações"""
+    data = models.DateField(unique=True)
+    nome = models.CharField(max_length=255)
+    descricao = models.TextField(blank=True, null=True)
+    tipo = models.CharField(
+        max_length=20,
+        choices=[
+            ('feriado_nacional', 'Feriado Nacional'),
+            ('feriado_estadual', 'Feriado Estadual'),
+            ('data_especial', 'Data Especial'),
+            ('carnaval', 'Carnaval'),
+            ('outro', 'Outro'),
+        ],
+        default='outro'
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['data']
+        verbose_name_plural = 'Feriados'
+
+    def __str__(self):
+        return f"{self.nome} ({self.data.strftime('%d/%m/%Y')})"
