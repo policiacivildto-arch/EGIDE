@@ -6,6 +6,6 @@
   "deploy": {
     "numReplicas": 1,
     "restartPolicyType": "on_failure",
-    "restartPolicyMaxRetries": 0
+    "restartPolicyMaxRetries": 1
   }
 }
