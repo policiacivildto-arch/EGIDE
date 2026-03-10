@@ -6,16 +6,16 @@ import MinhasOperacoesView from './components/MinhasOperacoesView';
 import HistoricoView from './components/HistoricoView';
         
 
+// Adicionamos a nova view 'operacoes'
+const views = {
+    calendario: { label: 'Calendário de Vagas', icon: Calendar },
+    operacoes: { label: 'Minhas Operações', icon: Shield }, // <-- NOVA VIEW
+    historico: { label: 'Meu Histórico', icon: History },
+};
+
 export default function OfficerDashboard({ user, showNotification }) {
     const [officerView, setOfficerView] = useState('calendario');
     const [searchParams, setSearchParams] = useSearchParams();
-
-    // Adicionamos a nova view 'operacoes'
-    const views = {
-        calendario: { label: 'Calendário de Vagas', icon: Calendar },
-        operacoes: { label: 'Minhas Operações', icon: Shield }, // <-- NOVA VIEW
-        historico: { label: 'Meu Histórico', icon: History },
-    };
 
     const setOfficerViewAndSyncUrl = (nextView) => {
         if (nextView === officerView) return;
