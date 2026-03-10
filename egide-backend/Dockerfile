@@ -8,14 +8,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements
-COPY egide-backend/requirements.txt .
+COPY requirements.txt .
 
 # Instalar dependências Python
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
 # Copiar código da aplicação
-COPY egide-backend/. .
+COPY . .
 
 # Criar pasta para arquivos estáticos
 RUN mkdir -p /app/staticfiles
