@@ -2,6 +2,8 @@
 
 Backend completo da aplicação ÉGIDE (Sistema de Escala e Gestão de Operações da Polícia Civil) desenvolvido com Django e Django REST Framework.
 
+_Nota: atualização de documentação para disparo de deploy do backend._
+
 ## 📋 Funcionalidades
 
 - **Gerenciamento de Policiais**: Cadastro, edição e controle de oficiais
