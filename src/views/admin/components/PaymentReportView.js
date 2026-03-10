@@ -1,7 +1,7 @@
 // src/views/admin/componets/PaymentReport.js
 
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { apiClient } from '../../../config/api';
 import { 
     normalizeName, 
@@ -29,7 +29,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         return map;
     }, [allUsers]);
 
-    const fetchServices = async () => {
+    const fetchServices = useCallback(async () => {
         if (!startDate || !endDate) {
             showNotification("Por favor, selecione as datas de início e fim.", "error");
             return;
@@ -71,13 +71,13 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         } finally {
             setLoading(false);
         }
-    };
+    }, [startDate, endDate, showNotification]);
 
     useEffect(() => {
         if (startDate && endDate) {
             fetchServices();
         }
-    }, [startDate, endDate]);
+    }, [startDate, endDate, fetchServices]);
 
     // ALTERAÇÃO CENTRAL: Lógica reescrita para garantir supervisores únicos por dia
     const allWorkEntries = useMemo(() => {

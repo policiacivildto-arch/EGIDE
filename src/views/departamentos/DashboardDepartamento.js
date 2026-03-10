@@ -20,6 +20,18 @@ import { useSearchParams } from 'react-router-dom';
  * Dashboard de Departamento - Sistema EGIDE
  * Mesmas funcionalidades do Admin, mas filtradas por departamento
  */
+const viewNames = { 
+    dashboard: 'Dashboard', 
+    ranking: 'Ranking',
+    schedule: 'Escalas', 
+    convoys: 'Criação da Operação', 
+    paymentReport: 'Relatório de Pagamento',
+    operationCost: 'Custo da Operação',
+    operationReports: 'Relatórios de Operação', 
+    alerts: 'Alertas', 
+    holidays: 'Feriados' 
+};
+
 export default function DashboardDepartamento({ userData, showNotification }) {
     const [view, setView] = useState('dashboard');
     const [searchParams, setSearchParams] = useSearchParams();
@@ -34,18 +46,6 @@ export default function DashboardDepartamento({ userData, showNotification }) {
 
     // Departamento do usuário logado
     const userDepartamento = userData?.departamento || '';
-
-    const viewNames = { 
-        dashboard: 'Dashboard', 
-        ranking: 'Ranking',
-        schedule: 'Escalas', 
-        convoys: 'Criação da Operação', 
-        paymentReport: 'Relatório de Pagamento',
-        operationCost: 'Custo da Operação',
-        operationReports: 'Relatórios de Operação', 
-        alerts: 'Alertas', 
-        holidays: 'Feriados' 
-    };
 
     const setViewAndSyncUrl = (nextView) => {
         if (nextView === view) return;

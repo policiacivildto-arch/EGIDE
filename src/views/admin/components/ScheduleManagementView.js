@@ -9,6 +9,21 @@ import { AdminRegistrationForm } from './AdminRegistrationForm';
 import { AdminEditTeamModal } from './AdminEditTeamModal';
 import { checkWeeklyLimit } from '../../../utils/helpers'; 
 
+const parseDate = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (isoDateMatch) {
+      return new Date(`${isoDateMatch[1]}T12:00:00`);
+    }
+    return new Date(value);
+  }
+  if (value?.seconds) return new Date(value.seconds * 1000);
+  return null;
+};
+
+const resolveVagaDate = (vaga) => parseDate(vaga?.date || vaga?.data);
+
     
 export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotification, weekId, departamento }) => {
     const [expandedRows, setExpandedRows] = useState([]);
@@ -24,21 +39,6 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
     const used = getTeamsForVaga(vaga?.id).length;
     return Math.max(0, capacity - used);
   };
-
-  const parseDate = (value) => {
-    if (!value) return null;
-    if (typeof value === 'string') {
-      const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
-      if (isoDateMatch) {
-        return new Date(`${isoDateMatch[1]}T12:00:00`);
-      }
-      return new Date(value);
-    }
-    if (value?.seconds) return new Date(value.seconds * 1000);
-    return null;
-  };
-
-  const resolveVagaDate = (vaga) => parseDate(vaga?.date || vaga?.data);
 
   const resolveVagaShift = (vaga) => vaga?.shiftType || vaga?.turno;
 
