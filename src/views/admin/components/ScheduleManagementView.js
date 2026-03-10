@@ -34,12 +34,6 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
 
   const getTeamsForVaga = (vagaId) => teams.filter((t) => Number(resolveTeamVagaId(t)) === Number(vagaId));
 
-  const getRemainingSlots = (vaga) => {
-    const capacity = getVagaCapacity(vaga);
-    const used = getTeamsForVaga(vaga?.id).length;
-    return Math.max(0, capacity - used);
-  };
-
   const resolveVagaShift = (vaga) => vaga?.shiftType || vaga?.turno;
 
   const resolveTeamVagaId = (team) => team?.vagaId || team?.vaga || team?.vaga_info?.id;

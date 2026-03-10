@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { apiClient } from '../../../config/api';
 import { getCycleInfo } from '../../../utils/helpers';
 import { LoadingSpinner } from '../../../components/ui/Shared';
-import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Pie, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';

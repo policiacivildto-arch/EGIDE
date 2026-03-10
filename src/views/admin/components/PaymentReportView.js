@@ -4,8 +4,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { apiClient } from '../../../config/api';
 import { 
-    normalizeName, 
-    calculateHours, 
     displayMatricula 
 } from '../../../utils/helpers'
 import { LoadingSpinner } from '../../../components/ui/Shared';
@@ -20,14 +18,6 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     const [attendanceStatus, setAttendanceStatus] = useState({});
     const [substitutions, setSubstitutions] = useState({});
     const [substituteSelectorOpen, setSubstituteSelectorOpen] = useState({});
-
-    const userMatriculaMap = useMemo(() => {
-        const map = new Map();
-        allUsers.forEach(user => {
-            map.set(normalizeName(user.nome), user.matricula);
-        });
-        return map;
-    }, [allUsers]);
 
     const fetchServices = useCallback(async () => {
         if (!startDate || !endDate) {
@@ -79,105 +69,6 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         }
     }, [startDate, endDate, fetchServices]);
 
-    // ALTERAÇÃO CENTRAL: Lógica reescrita para garantir supervisores únicos por dia
-    const allWorkEntries = useMemo(() => {
-        if (services.length === 0 && convoysForPeriod.length === 0) return [];
-
-        const teamEntries = [];
-        const serviceMap = new Map(services.map(s => [s.id, s]));
-
-        // 1. Adiciona os membros das equipes operacionais (sem alteração aqui)
-        services.forEach(service => {
-            const vagaDate = service?.vaga_info?.data || service?.vagaDate;
-            const data = typeof vagaDate === 'string' ? new Date(vagaDate) : new Date(vagaDate?.seconds * 1000);
-            if (!data || Number.isNaN(data.getTime())) return;
-
-            const turno = service?.vaga_info?.turno || service?.vagaShiftType;
-            const inicio = service.horarioEntrada || (turno === 'day' ? '08:00' : '19:00');
-            const fim = service.horarioSaida || (turno === 'day' ? '20:00' : '01:00');
-            const horas = calculateHours(inicio, fim);
-            const lotacao = service.teamName || service.delegaciaPrincipal || service?.vaga_info?.delegacia_nome || 'N/A';
-            const leaderName = service?.registeringOfficer?.nome || service?.chefe_nome || 'Chefe não informado';
-            const leaderMatricula = service?.registeringOfficer?.matricula || userMatriculaMap.get(normalizeName(leaderName)) || 'N/A';
-
-            teamEntries.push({
-                id: `${service.id}-${leaderMatricula}`,
-                isService: true,
-                serviceObject: service,
-                date: data,
-                station: lotacao,
-                officerName: leaderName,
-                matricula: leaderMatricula,
-                startTime: inicio,
-                endTime: fim,
-                totalHours: horas,
-                paymentStatus: service.paymentStatus || 'pending'
-            });
-        });
-
-        // 2. Cria uma lista de supervisores únicos por dia
-        const supervisorEntriesMap = new Map(); // Usado para garantir a unicidade
-        convoysForPeriod.forEach(convoy => {
-            const convoyDate = convoy?.data || convoy?.date;
-            const data = typeof convoyDate === 'string' ? new Date(convoyDate) : new Date(convoyDate?.seconds * 1000);
-            if (!data || Number.isNaN(data.getTime())) return;
-            const dateKey = data.toISOString().split('T')[0];
-            const representativeTeam = serviceMap.values().next().value;
-            const representativeShift = representativeTeam?.vaga_info?.turno || representativeTeam?.vagaShiftType || 'day';
-            const inicio = representativeTeam?.horarioEntrada || (representativeShift === 'day' ? '08:00' : '19:00');
-            const fim = representativeTeam?.horarioSaida || (representativeShift === 'day' ? '20:00' : '01:00');
-            const horas = calculateHours(inicio, fim);
-
-            // Adiciona DPC se não existir para esse dia
-            if (convoy.dpc) {
-                const entryKey = `${dateKey}-${convoy.dpc}`;
-                if (!supervisorEntriesMap.has(entryKey)) {
-                    supervisorEntriesMap.set(entryKey, {
-                        id: `${convoy.id || dateKey}-dpc`,
-                        isService: false,
-                        isSupervisor: true,
-                        convoyId: convoy.id,
-                        supervisorRole: 'dpc',
-                        date: data,
-                        station: 'SUPERVISÃO DPC',
-                        officerName: convoy.dpc,
-                        matricula: userMatriculaMap.get(normalizeName(convoy.dpc)) || 'N/A',
-                        startTime: inicio,
-                        endTime: fim,
-                        totalHours: horas,
-                        paymentStatus: 'confirmed'
-                    });
-                }
-            }
-            // Adiciona OIP se não existir para esse dia
-            if (convoy.oip) {
-                const entryKey = `${dateKey}-${convoy.oip}`;
-                if (!supervisorEntriesMap.has(entryKey)) {
-                    supervisorEntriesMap.set(entryKey, {
-                        id: `${convoy.id || dateKey}-oip`,
-                        isService: false,
-                        isSupervisor: true,
-                        convoyId: convoy.id,
-                        supervisorRole: 'oip',
-                        date: data,
-                        station: 'SUPERVISÃO OIP',
-                        officerName: convoy.oip,
-                        matricula: userMatriculaMap.get(normalizeName(convoy.oip)) || 'N/A',
-                        startTime: inicio,
-                        endTime: fim,
-                        totalHours: horas,
-                        paymentStatus: 'confirmed'
-                    });
-                }
-            }
-        });
-        
-        const supervisorEntries = Array.from(supervisorEntriesMap.values());
-        
-        // 3. Combina as duas listas e ordena por data
-        return [...teamEntries, ...supervisorEntries].sort((a, b) => b.date - a.date);
-
-    }, [services, convoysForPeriod, userMatriculaMap]);
 
     const convoysByDate = useMemo(() => {
         const map = new Map();
