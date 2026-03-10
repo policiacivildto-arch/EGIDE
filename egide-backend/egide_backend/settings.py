@@ -12,14 +12,22 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 # ALLOWED_HOSTS configurado para desenvolvimento e produção
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS', 
-    default='localhost,127.0.0.1,10.18.200.78',
+    default='localhost,127.0.0.1,10.18.200.78,.railway.app,.up.railway.app,.onrender.com',
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
+
+# Railway define este domínio automaticamente; inclui quando disponível.
+railway_public_domain = config('RAILWAY_PUBLIC_DOMAIN', default='').strip()
+if railway_public_domain:
+    ALLOWED_HOSTS.append(railway_public_domain)
 
 # Se estiver em produção no Render ou Railway
 if not DEBUG:
     ALLOWED_HOSTS.append('.onrender.com')
     ALLOWED_HOSTS.append('.railway.app')
+
+# Remove duplicidades mantendo a ordem.
+ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 INSTALLED_APPS = [
     'django.contrib.admin',
