@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 // Configurações e Utilitários
-import { apiClient } from './config/api'; // Substituiu Firebase
+import { apiClient } from './config/api';
 import { PCCE_LOGO_URL } from './constants/data';
 
 

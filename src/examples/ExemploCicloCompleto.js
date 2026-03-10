@@ -394,7 +394,7 @@ const ExemploCicloCompleto = () => {
           <li><strong>DELETE:</strong> Clique em "Deletar" → Confirme → Registro removido do banco Django</li>
         </ol>
         
-        <p><strong>💾 Onde está salvo?</strong> Todos os dados estão no banco de dados PostgreSQL do Django (não no Firebase!)</p>
+        <p><strong>💾 Onde está salvo?</strong> Todos os dados estão no banco de dados PostgreSQL do Django.</p>
         <p><strong>🔍 Onde verificar?</strong> Acesse http://127.0.0.1:8000/admin/ → Login → Veja os policiais salvos</p>
       </div>
     </div>

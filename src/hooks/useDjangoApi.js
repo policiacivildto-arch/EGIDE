@@ -4,7 +4,7 @@ import djangoApi from '../services/djangoApi';
 
 /**
  * Hook para buscar vagas do Django
- * Substitui o Firebase Firestore
+ * Substitui a camada de dados antiga
  * 
  * Exemplo de uso:
  * const { vagas, loading, error, refresh } = useVagasDjango();

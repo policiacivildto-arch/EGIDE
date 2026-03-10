@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import './index.css';
-import App from './App'; // App original do Firebase
+import App from './App'; // App principal
 // import AppDepartamentos from './AppDepartamentos'; // Versão antiga
 // import AppDjango from './AppDjango'; // Versão completa com React Router
 import reportWebVitals from './reportWebVitals';

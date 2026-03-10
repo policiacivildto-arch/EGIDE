@@ -10,7 +10,7 @@ import {
 /**
  * Hook customizado para buscar todos os dados necessários no Admin Dashboard
  * 
- * Substitui: src/views/admin/useAdminData.js (versão Firebase)
+ * Substitui: src/views/admin/useAdminData.js (versão antiga)
  * 
  * @returns {Object} Dados do admin dashboard
  */
@@ -63,7 +63,7 @@ export const useAdminDataDjango = () => {
   }, [fetchAllData]);
 
   // Polling: atualizar dados a cada 30 segundos
-  // (substitui onSnapshot do Firebase)
+  // (substitui o listener em tempo real da versão antiga)
   useEffect(() => {
     const interval = setInterval(fetchAllData, 30000);
     return () => clearInterval(interval);

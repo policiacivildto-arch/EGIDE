@@ -24,7 +24,7 @@ export const UserForm = ({ user, onSave }) => {
     return (
         <form onSubmit={handleSubmit} className="space-y-4 text-gray-800">
             <h2 className="text-xl font-bold">{user ? 'Editar Policial' : 'Novo Policial'}</h2>
-            {!user && <p className="text-sm text-red-600 bg-red-100 p-2 rounded">Lembrete: Crie primeiro o usuário no painel do Firebase Authentication. O UID gerado deve ser colado no campo "UID do Usuário".</p>}
+            {!user && <p className="text-sm text-red-600 bg-red-100 p-2 rounded">Lembrete: cadastre primeiro o usuário no sistema e informe o identificador no campo "UID do Usuário".</p>}
             {!user && <div><label className="font-semibold">UID do Usuário (ID do Documento)</label><input type="text" value={formData.id || ''} onChange={e => handleChange('id', e.target.value)} className="w-full p-2 border rounded mt-1" required /></div>}
             <div><label className="font-semibold">Nome</label><input type="text" value={formData.nome} onChange={e => handleChange('nome', normalizeName(e.target.value))} className="w-full p-2 border rounded mt-1 uppercase" required /></div>
             <div><label className="font-semibold">Matrícula</label><input type="text" value={formData.matricula} onChange={e => handleChange('matricula', formatMatricula(e.target.value))} className="w-full p-2 border rounded mt-1" required /></div>

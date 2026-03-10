@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import { apiClient } from '../../config/api'; // Substituiu Firebase
+import { apiClient } from '../../config/api';
 import { AuthLayout, LoadingSpinner } from '../../App';
 import { LogIn } from 'lucide-react';
 

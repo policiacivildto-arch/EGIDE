@@ -1,13 +1,12 @@
-// EXEMPLO: Como migrar um componente Firebase → Django API
+// EXEMPLO: Como migrar um componente legado para Django API
 import React from 'react';
 import { useVagasDjango, useCreateVaga } from '../hooks/useDjangoApi';
 
 /**
- * Exemplo de componente migrando de Firebase para Django
+ * Exemplo de componente migrando da camada antiga para Django
  * 
- * ANTES (Firebase):
- * import { collection, getDocs } from 'firebase/firestore';
- * const snapshot = await getDocs(collection(db, 'vagas'));
+ * ANTES (camada antiga):
+ * const snapshot = await legacyClient.list('vagas');
  * 
  * DEPOIS (Django):
  * import { useVagasDjango } from '../hooks/useDjangoApi';
