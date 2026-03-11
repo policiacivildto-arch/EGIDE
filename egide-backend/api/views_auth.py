@@ -245,8 +245,10 @@ def login_view(request):
         "perfil_departamento": {...}
     }
     """
-    username_or_email = request.data.get('username')
-    password = request.data.get('password')
+    username_or_email = str(
+        request.data.get('username') or request.data.get('email') or ''
+    ).strip()
+    password = request.data.get('password') or ''
     
     # DEBUG - Log dos dados recebidos
     print(f'🔍 DEBUG Login - Data recebido: {request.data}')
@@ -273,6 +275,20 @@ def login_view(request):
         except User.DoesNotExist:
             print(f'🔍 DEBUG Login - Email não encontrado')
             pass
+
+    # Fallback final: valida senha diretamente no usuário localizado.
+    # Isso evita falhas intermitentes de backend de autenticação em alguns ambientes.
+    if user is None:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        candidate = None
+        if '@' in username_or_email:
+            candidate = User.objects.filter(email__iexact=username_or_email).first()
+        else:
+            candidate = User.objects.filter(username__iexact=username_or_email).first()
+
+        if candidate and candidate.check_password(password) and candidate.is_active:
+            user = candidate
     
     if user is None:
         # Registrar tentativa de login falha
