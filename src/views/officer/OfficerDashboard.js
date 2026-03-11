@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Calendar, Shield, History } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import VagasCalendarView from './components/VagasCalendarView';
@@ -11,11 +11,11 @@ export default function OfficerDashboard({ user, showNotification }) {
     const [searchParams, setSearchParams] = useSearchParams();
 
     // Adicionamos a nova view 'operacoes'
-    const views = {
+    const views = useMemo(() => ({
         calendario: { label: 'Calendário de Vagas', icon: Calendar },
         operacoes: { label: 'Minhas Operações', icon: Shield }, // <-- NOVA VIEW
         historico: { label: 'Meu Histórico', icon: History },
-    };
+    }), []);
 
     const setOfficerViewAndSyncUrl = (nextView) => {
         if (nextView === officerView) return;
@@ -36,7 +36,7 @@ export default function OfficerDashboard({ user, showNotification }) {
         if (targetView !== officerView) {
             setOfficerView(targetView);
         }
-    }, [searchParams, officerView]);
+    }, [searchParams, officerView, views]);
 
     const renderContent = () => {
         switch (officerView) {
