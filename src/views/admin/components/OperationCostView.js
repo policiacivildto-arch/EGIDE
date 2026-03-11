@@ -556,7 +556,7 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(8);
             doc.text(
-                `POLÍCIA CIVIL DO CEARÁ | DTO | Relatório Operacional | Emissão: ${dataEmissao}`,
+                `POLÍCIA CIVIL DO CEARÁ | DTO | Relatório de Pagamento | Emissão: ${dataEmissao}`,
                 pageWidth / 2,
                 pageHeight - 8,
                 { align: 'center' }
@@ -583,7 +583,7 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
 
         cursorY += 6;
         doc.setFont('helvetica', 'bold');
-        addCentered('RELATÓRIO OPERACIONAL', 14, 7);
+        addCentered('RELATÓRIO DE PAGAMENTO', 14, 7);
         addCentered('OPERAÇÃO “ÉGIDE”', 14, 7);
         addCentered(`PLANO OPERACIONAL Nº ${planoNumero}`, 12, 6);
 
@@ -591,7 +591,7 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
         doc.setFont('helvetica', 'normal');
         addWrapped(`Ao ${diretor}`, 14, 11, 6);
         addWrapped(`Referência: Plano Operacional n° ${planoNumero} – DTO/PCCE`, 14, 11, 6);
-        addWrapped(`Apresentamos a seguir o relatório de atividade das equipes da Polícia Civil do Ceará que participaram da Operação “ÉGIDE”, coordenada pelo DTO. As equipes policiais realizaram o serviço operacional no dia ${dataReferencia}, de acordo com o Plano Operacional n° ${planoNumero} – DTO/PCCE.`, 14, 11, 6);
+        addWrapped(`Apresentamos a seguir o relatório de pagamento das equipes da Polícia Civil do Ceará que participaram da Operação “ÉGIDE”, coordenada pelo DTO. As equipes policiais realizaram o serviço operacional no dia ${dataReferencia}, de acordo com o Plano Operacional n° ${planoNumero} – DTO/PCCE.`, 14, 11, 6);
 
         cursorY += 2;
         doc.setFont('helvetica', 'bold');

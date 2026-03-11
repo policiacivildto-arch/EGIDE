@@ -16,6 +16,7 @@ import { AuthLayout } from './components/auth/AuthLayout';
 import { LoginScreen } from './views/auth/LoginScreen'; 
 import { SignUpScreen } from './views/auth/SignUpScreen';
 import { ForgotPasswordScreen } from './views/auth/ForgotPasswordScreen';
+import { ResetPasswordScreen } from './views/auth/ResetPasswordScreen';
 
 // Dashboards Principais
 import OfficerDashboard from './views/officer/OfficerDashboard';
@@ -220,6 +221,10 @@ export default function App() {
             <Route
                 path="/forgot-password"
                 element={user ? <Navigate to="/home" replace /> : <ForgotPasswordScreen showNotification={showNotification} setAuthScreen={resolveAuthScreen} />}
+            />
+            <Route
+                path="/reset-password"
+                element={user ? <Navigate to="/home" replace /> : <ResetPasswordScreen showNotification={showNotification} />}
             />
 
             <Route

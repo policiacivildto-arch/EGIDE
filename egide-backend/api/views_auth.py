@@ -10,11 +10,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
 from django.utils.text import slugify
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from urllib.parse import urlencode
 from api.models_security import LogAuditoria, PerfilDepartamento
 from api.models import Delegacia, Policial, Departamento
 
@@ -289,13 +292,47 @@ def password_reset_view(request):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
 
-        # Mantemos resposta genérica por segurança; token retornado apenas para fluxo frontend local.
+        frontend_url = str(getattr(settings, 'FRONTEND_URL', '') or '').rstrip('/')
+        reset_path = str(getattr(settings, 'RESET_PASSWORD_PATH', '/reset-password') or '/reset-password')
+        if not reset_path.startswith('/'):
+            reset_path = f'/{reset_path}'
+
+        query = urlencode({'uid': uid, 'token': token})
+        reset_link = f'{frontend_url}{reset_path}?{query}' if frontend_url else ''
+
+        subject = 'Redefinição de senha - EGIDE'
+        if reset_link:
+            message = (
+                f'Olá {user.first_name or user.username},\n\n'
+                f'Recebemos uma solicitação para redefinir sua senha no EGIDE.\n'
+                f'Acesse o link abaixo para continuar:\n\n'
+                f'{reset_link}\n\n'
+                f'Se você não solicitou essa alteração, ignore este email.'
+            )
+        else:
+            # Fallback para ambientes sem FRONTEND_URL configurado.
+            message = (
+                f'Olá {user.first_name or user.username},\n\n'
+                f'Recebemos uma solicitação para redefinir sua senha no EGIDE.\n'
+                f'Use os dados abaixo para concluir a redefinição:\n\n'
+                f'uid: {uid}\n'
+                f'token: {token}\n\n'
+                f'Se você não solicitou essa alteração, ignore este email.'
+            )
+
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                recipient_list=[email],
+                fail_silently=False,
+            )
+        except Exception as exc:
+            return Response({'error': f'Falha ao enviar email de redefinição: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         return Response({
             'message': 'Se o email existir, um link de redefinição foi enviado.',
-            'reset': {
-                'uid': uid,
-                'token': token,
-            }
         })
 
     return Response({'message': 'Se o email existir, um link de redefinição foi enviado.'})

@@ -24,6 +24,7 @@ if railway_public_domain:
 
 frontend_url = config('FRONTEND_URL', default='').strip()
 backend_public_url = config('BACKEND_PUBLIC_URL', default='').strip()
+reset_password_path = config('RESET_PASSWORD_PATH', default='/reset-password').strip() or '/reset-password'
 
 for public_url in [frontend_url, backend_public_url]:
     if not public_url:
@@ -198,6 +199,24 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
 }
+
+# Configuração de email (recuperação de senha)
+if DEBUG:
+    EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+else:
+    EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'nao-responda@egide.local')
+
+# Expostos para uso nas views de autenticação
+FRONTEND_URL = frontend_url
+RESET_PASSWORD_PATH = reset_password_path
 
 # Logging
 LOGGING = {

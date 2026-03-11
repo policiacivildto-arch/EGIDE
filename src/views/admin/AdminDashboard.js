@@ -28,7 +28,6 @@ export default function AdminDashboard({ userData, showNotification }) {
 
     const viewNames = {
         dashboard: 'Dashboard',
-        cadastro: 'Cadastro Rapido',
         ranking: 'Ranking',
         schedule: 'Escalas',
         convoys: 'Criacao da Operacao',
