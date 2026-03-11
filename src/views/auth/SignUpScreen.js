@@ -73,10 +73,14 @@ export const SignUpScreen = ({ showNotification, setAuthScreen }) => {
         } catch (error) {
             console.error("Erro ao criar conta:", error);
             const message = (error?.message || '').toLowerCase();
-            if (message.includes('already') || message.includes('já existe')) {
+            if (message.includes('email já existe') || message.includes('email already')) {
                 showNotification("Este email já está em uso por outra conta.", "error");
+            } else if (message.includes('matricula já existe') || message.includes('matrícula já existe')) {
+                showNotification("Esta matrícula já está cadastrada. Verifique o número informado.", "error");
+            } else if (message.includes('já existe') || message.includes('already')) {
+                showNotification("Dados já cadastrados por outra conta.", "error");
             } else {
-                showNotification("Ocorreu um erro ao criar a conta no Django.", "error");
+                showNotification(error?.message || "Ocorreu um erro ao criar a conta.", "error");
             }
         } finally {
             setIsLoading(false);
