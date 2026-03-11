@@ -176,7 +176,8 @@ def register_view(request):
             ).order_by('nome').first()
 
     if not delegacia:
-        return Response({'error': 'Delegacia não encontrada para o cadastro'}, status=status.HTTP_400_BAD_REQUEST)
+        # Fallback final para ambientes com base incompleta.
+        delegacia = Delegacia.objects.filter(ativo=True).order_by('id').first()
 
     try:
         with transaction.atomic():
