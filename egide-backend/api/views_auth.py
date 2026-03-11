@@ -97,8 +97,15 @@ def register_view(request):
     if len(matricula) != 8:
         return Response({'error': 'Matrícula deve ter 8 dígitos'}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Se o username derivado do e-mail já existir, gera um sufixo numérico único.
     if User.objects.filter(username=username).exists():
-        return Response({'error': 'username já existe'}, status=status.HTTP_400_BAD_REQUEST)
+        base_username = username
+        counter = 1
+        while counter <= 100 and User.objects.filter(username=f"{base_username}{counter}").exists():
+            counter += 1
+        if counter > 100:
+            return Response({'error': 'Não foi possível gerar um username único. Tente outro email.'}, status=status.HTTP_400_BAD_REQUEST)
+        username = f"{base_username}{counter}"
 
     if User.objects.filter(email__iexact=email).exists():
         return Response({'error': 'email já existe'}, status=status.HTTP_400_BAD_REQUEST)
@@ -262,17 +269,16 @@ def login_view(request):
     # Tenta autenticar com username ou email
     user = authenticate(username=username_or_email, password=password)
     
-    # Se falhar, tenta buscar por email e autenticar com username
+    # Se falhar, tenta buscar por email (sem distinção de maiúsculas) e autenticar com username
     if user is None and '@' in username_or_email:
         from django.contrib.auth import get_user_model
         User = get_user_model()
-        try:
-            user_obj = User.objects.get(email=username_or_email)
+        user_obj = User.objects.filter(email__iexact=username_or_email).first()
+        if user_obj:
             user = authenticate(username=user_obj.username, password=password)
             print(f'🔍 DEBUG Login - Tentou com email, username encontrado: {user_obj.username}')
-        except User.DoesNotExist:
+        else:
             print(f'🔍 DEBUG Login - Email não encontrado')
-            pass
     
     if user is None:
         # Registrar tentativa de login falha
