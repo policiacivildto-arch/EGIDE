@@ -13,7 +13,7 @@ from api.views import (
     # Sistema de Eventos
     EventoOperacaoViewSet, DepartamentoEventoViewSet, EscalaPolicialViewSet
 )
-from api.views_auth import login_view, logout_view, me_view, register_view
+from api.views_auth import login_view, logout_view, me_view, register_view, regras_view
 
 def api_root(request):
     """View raiz da API com informações sobre endpoints disponíveis"""
@@ -24,6 +24,14 @@ def api_root(request):
             'admin': '/admin/',
             'api': '/api/',
             'api_auth': '/api-auth/',
+            'auth': {
+                'register': '/api/auth/register/',
+                'login': '/api/auth/login/',
+                'logout': '/api/auth/logout/',
+                'me': '/api/auth/me/',
+                'regras': '/api/auth/regras/',
+                'refresh': '/api/auth/refresh/',
+            },
             'sistema_egide': {
                 'departamentos': '/api/departamentos/',
                 'delegacias': '/api/delegacias/',
@@ -84,4 +92,5 @@ urlpatterns = [
     path('api/auth/logout/', logout_view, name='logout'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/me/', me_view, name='me'),
+    path('api/auth/regras/', regras_view, name='regras'),
 ]
