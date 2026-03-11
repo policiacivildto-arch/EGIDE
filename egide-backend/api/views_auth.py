@@ -390,6 +390,90 @@ def logout_view(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def regras_view(request):
+    """
+    Retorna as regras e permissões do usuário autenticado no sistema
+
+    GET /api/auth/regras/
+    Headers: Authorization: Bearer {access_token}
+
+    Response:
+    {
+        "role": "admin" | "coordenador" | "policial" | "departamento",
+        "descricao": "...",
+        "permissoes": { ... }
+    }
+    """
+    user = request.user
+
+    # Superuser / staff → admin
+    if user.is_superuser or user.is_staff:
+        return Response({
+            'role': 'admin',
+            'descricao': 'Administrador do sistema',
+            'permissoes': {
+                'pode_criar_operacoes': True,
+                'pode_aprovar_escalas': True,
+                'pode_gerenciar_usuarios': True,
+                'pode_ver_operacoes': True,
+                'pode_responder_notificacoes': True,
+                'pode_informar_efetivo': True,
+            },
+        })
+
+    # Perfil de departamento
+    try:
+        if hasattr(user, 'perfil_departamento'):
+            perfil = user.perfil_departamento
+            return Response({
+                'role': 'departamento',
+                'descricao': str(perfil),
+                'is_dto': perfil.is_dto,
+                'permissoes': {
+                    'pode_ver_operacoes': perfil.pode_ver_operacoes,
+                    'pode_responder_notificacoes': perfil.pode_responder_notificacoes,
+                    'pode_informar_efetivo': perfil.pode_informar_efetivo,
+                },
+            })
+    except AttributeError:
+        pass
+
+    # Perfil de policial
+    try:
+        perfil = user.policial.perfil
+        has_elevated_role = perfil.is_admin or perfil.is_coordenador
+        return Response({
+            'role': perfil.tipo,
+            'descricao': perfil.get_tipo_display(),
+            'permissoes': {
+                'pode_criar_operacoes': has_elevated_role or perfil.pode_criar_operacoes,
+                'pode_aprovar_escalas': has_elevated_role or perfil.pode_aprovar_escalas,
+                'pode_gerenciar_usuarios': perfil.is_admin or perfil.pode_gerenciar_usuarios,
+                'pode_ver_operacoes': True,
+                'pode_responder_notificacoes': False,
+                'pode_informar_efetivo': False,
+            },
+        })
+    except AttributeError:
+        pass
+
+    # Fallback: usuário sem perfil definido
+    return Response({
+        'role': 'policial',
+        'descricao': 'Policial Civil',
+        'permissoes': {
+            'pode_criar_operacoes': False,
+            'pode_aprovar_escalas': False,
+            'pode_gerenciar_usuarios': False,
+            'pode_ver_operacoes': True,
+            'pode_responder_notificacoes': False,
+            'pode_informar_efetivo': False,
+        },
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def me_view(request):
     """
     Retorna informações do usuário autenticado
