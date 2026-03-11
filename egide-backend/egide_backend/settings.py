@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from decouple import config
 import dj_database_url
+from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,6 +21,16 @@ ALLOWED_HOSTS = config(
 railway_public_domain = config('RAILWAY_PUBLIC_DOMAIN', default='').strip()
 if railway_public_domain:
     ALLOWED_HOSTS.append(railway_public_domain)
+
+frontend_url = config('FRONTEND_URL', default='').strip()
+backend_public_url = config('BACKEND_PUBLIC_URL', default='').strip()
+
+for public_url in [frontend_url, backend_public_url]:
+    if not public_url:
+        continue
+    parsed = urlparse(public_url)
+    if parsed.hostname:
+        ALLOWED_HOSTS.append(parsed.hostname)
 
 # Se estiver em produção no Render ou Railway
 if not DEBUG:
@@ -148,9 +159,8 @@ CORS_ALLOWED_ORIGINS_PROD = config(
     cast=lambda v: [s.strip() for s in v.split(',')] if v else []
 )
 
-FRONTEND_URL = config('FRONTEND_URL', default='').strip()
-if FRONTEND_URL:
-    CORS_ALLOWED_ORIGINS_PROD.append(FRONTEND_URL)
+if frontend_url:
+    CORS_ALLOWED_ORIGINS_PROD.append(frontend_url)
 
 CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD
 
