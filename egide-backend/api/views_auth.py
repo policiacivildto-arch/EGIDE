@@ -9,9 +9,12 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
 from django.db.models import Q
 from django.utils.text import slugify
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from api.models_security import LogAuditoria, PerfilDepartamento
 from api.models import Delegacia, Policial, Departamento
 
@@ -57,6 +60,12 @@ def _resolve_delegacia(delegacias_qs, delegacia_name, departamento_obj=None):
     return None
 
 
+def _is_pre_registered_user(user):
+    if not user:
+        return False
+    return user.username.startswith('precad_') and user.email.endswith('@precad.egide.local')
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_view(request):
@@ -65,7 +74,7 @@ def register_view(request):
 
     POST /api/auth/register/
     """
-    username = (request.data.get('username') or '').strip()
+    username = (request.data.get('username') or '').strip().lower()
     email = (request.data.get('email') or '').strip().lower()
     password = request.data.get('password') or ''
     nome = (request.data.get('nome') or '').strip()
@@ -77,7 +86,6 @@ def register_view(request):
     departamento_value = request.data.get('departamento')
 
     required_fields = {
-        'username': username,
         'email': email,
         'password': password,
         'nome': nome,
@@ -97,13 +105,30 @@ def register_view(request):
     if len(matricula) != 8:
         return Response({'error': 'Matrícula deve ter 8 dígitos'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if User.objects.filter(username=username).exists():
+    # Se o frontend não enviar username, usa o email como base.
+    # Isso evita colisões comuns de prefixo do email (ex.: joao@gmail e joao@pcce).
+    if not username:
+        username = email
+
+    # Garante username único sem bloquear registro quando apenas o prefixo colide.
+    existing_policial = Policial.objects.select_related('usuario').filter(matricula=matricula).first()
+    pre_registered_user = existing_policial.usuario if existing_policial and _is_pre_registered_user(existing_policial.usuario) else None
+
+    if User.objects.filter(username=username).exclude(id=pre_registered_user.id if pre_registered_user else None).exists():
+        username_base = username
+        for suffix in range(1, 1000):
+            candidate = f'{username_base}_{suffix}'
+            if not User.objects.filter(username=candidate).exclude(id=pre_registered_user.id if pre_registered_user else None).exists():
+                username = candidate
+                break
+
+    if User.objects.filter(username=username).exclude(id=pre_registered_user.id if pre_registered_user else None).exists():
         return Response({'error': 'username já existe'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if User.objects.filter(email__iexact=email).exists():
+    if User.objects.filter(email__iexact=email).exclude(id=pre_registered_user.id if pre_registered_user else None).exists():
         return Response({'error': 'email já existe'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if Policial.objects.filter(matricula=matricula).exists():
+    if existing_policial and not pre_registered_user:
         return Response({'error': 'matricula já existe'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Mapeamento do payload do frontend para choices do model
@@ -181,24 +206,44 @@ def register_view(request):
 
     try:
         with transaction.atomic():
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password,
-                first_name=nome,
-            )
+            if pre_registered_user:
+                user = pre_registered_user
+                user.username = username
+                user.email = email
+                user.first_name = nome
+                user.is_active = True
+                user.set_password(password)
+                user.save(update_fields=['username', 'email', 'first_name', 'is_active', 'password'])
 
-            policial = Policial.objects.create(
-                usuario=user,
-                matricula=matricula,
-                nome=nome,
-                classe=classe_model,
-                cargo=cargo_model,
-                delegacia=delegacia,
-                telefone=telefone,
-                email=email,
-                ativo=True,
-            )
+                policial = existing_policial
+                policial.usuario = user
+                policial.nome = nome
+                policial.classe = classe_model
+                policial.cargo = cargo_model
+                policial.delegacia = delegacia
+                policial.telefone = telefone
+                policial.email = email
+                policial.ativo = True
+                policial.save()
+            else:
+                user = User.objects.create_user(
+                    username=username,
+                    email=email,
+                    password=password,
+                    first_name=nome,
+                )
+
+                policial = Policial.objects.create(
+                    usuario=user,
+                    matricula=matricula,
+                    nome=nome,
+                    classe=classe_model,
+                    cargo=cargo_model,
+                    delegacia=delegacia,
+                    telefone=telefone,
+                    email=email,
+                    ativo=True,
+                )
 
         LogAuditoria.registrar(
             acao='registro',
@@ -224,6 +269,88 @@ def register_view(request):
         }, status=status.HTTP_201_CREATED)
     except Exception as exc:
         return Response({'error': f'Falha ao registrar usuário: {exc}'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_view(request):
+    """
+    Solicitação de redefinição de senha.
+
+    POST /api/auth/password-reset/
+    Body: { "email": "usuario@dominio.com" }
+    """
+    email = str(request.data.get('email') or '').strip().lower()
+    if not email:
+        return Response({'error': 'email é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = User.objects.filter(email__iexact=email).first()
+    if user:
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+
+        # Mantemos resposta genérica por segurança; token retornado apenas para fluxo frontend local.
+        return Response({
+            'message': 'Se o email existir, um link de redefinição foi enviado.',
+            'reset': {
+                'uid': uid,
+                'token': token,
+            }
+        })
+
+    return Response({'message': 'Se o email existir, um link de redefinição foi enviado.'})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_confirm_view(request):
+    """
+    Confirma redefinição de senha.
+
+    POST /api/auth/password-reset-confirm/
+    Body: {
+      "uid": "...",            # opcional se token vier como "uid:token"
+      "token": "...",
+      "new_password": "..."
+    }
+    """
+    uid = str(request.data.get('uid') or '').strip()
+    token = str(request.data.get('token') or '').strip()
+    new_password = str(request.data.get('new_password') or '')
+
+    if not token or not new_password:
+        return Response({'error': 'token e new_password são obrigatórios'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if len(new_password) < 6:
+        return Response({'error': 'A senha deve ter no mínimo 6 caracteres'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not uid and ':' in token:
+        uid, token = token.split(':', 1)
+
+    if not uid:
+        return Response({'error': 'uid ausente para confirmação de senha'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user_id = force_str(urlsafe_base64_decode(uid))
+        user = User.objects.get(pk=user_id)
+    except Exception:
+        return Response({'error': 'Link de redefinição inválido'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not default_token_generator.check_token(user, token):
+        return Response({'error': 'Token inválido ou expirado'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user.set_password(new_password)
+    user.save(update_fields=['password'])
+
+    LogAuditoria.registrar(
+        acao='alterar_senha',
+        usuario=user,
+        descricao=f'Redefinição de senha via token: {user.username}',
+        nivel='info',
+        ip_address=request.META.get('REMOTE_ADDR')
+    )
+
+    return Response({'message': 'Senha redefinida com sucesso'})
 
 
 @api_view(['POST'])

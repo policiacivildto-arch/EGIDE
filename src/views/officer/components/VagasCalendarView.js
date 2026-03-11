@@ -163,71 +163,34 @@ export const VagasCalendarView = ({ user, showNotification }) => {
         }
 
         try {
-            const leader = teamData.members[0];
             const vagaDateObj = getVagaDateObject(vaga);
             if (!vagaDateObj) {
                 showNotification('Data da vaga inválida. Atualize a página e tente novamente.', 'error');
                 return;
             }
 
-            const resolvePolicialByMatricula = async (matriculaDigits, policiaisByMatricula) => {
-                if (!matriculaDigits) return null;
+            const membrosMatriculas = teamData.members
+                .map((member) => normalizeMatriculaDigits(member?.matricula))
+                .filter(Boolean);
 
-                const inMemoryMatch = policiaisByMatricula.get(matriculaDigits);
-                if (inMemoryMatch) return inMemoryMatch;
+            if (membrosMatriculas.length !== teamData.members.length) {
+                showNotification('Informe a matrícula válida de todos os integrantes da equipe.', 'error');
+                return;
+            }
 
-                const searchTerms = [matriculaDigits, displayMatricula(matriculaDigits)];
-
-                for (const term of searchTerms) {
-                    const response = await apiClient.getPoliciais({ search: term });
-                    const results = Array.isArray(response) ? response : (response?.results || []);
-                    const exact = results.find((item) => normalizeMatriculaDigits(item?.matricula) === matriculaDigits);
-                    if (exact) return exact;
+            const membrosNomes = teamData.members.reduce((acc, member) => {
+                const matricula = normalizeMatriculaDigits(member?.matricula);
+                if (matricula) {
+                    acc[matricula] = member?.nome || '';
                 }
-
-                return null;
-            };
-
-            const policiaisResponse = await apiClient.getPoliciais();
-            const policiais = Array.isArray(policiaisResponse)
-                ? policiaisResponse
-                : (policiaisResponse?.results || []);
-
-            const policiaisByMatricula = new Map(
-                policiais.map((p) => [normalizeMatriculaDigits(p?.matricula), p]).filter(([matricula]) => Boolean(matricula))
-            );
-
-            const membrosPoliciais = await Promise.all(
-                teamData.members.map(async (member) => {
-                    const matriculaDigits = normalizeMatriculaDigits(member?.matricula);
-                    return resolvePolicialByMatricula(matriculaDigits, policiaisByMatricula);
-                })
-            );
-
-            const membrosResolvidos = membrosPoliciais.filter(Boolean);
-
-            if (membrosResolvidos.length !== teamData.members.length) {
-                const faltantes = teamData.members
-                    .filter((member, index) => !membrosPoliciais[index])
-                    .map((member) => displayMatricula(member?.matricula || ''))
-                    .join(', ');
-
-                showNotification(`Não foi possível localizar todos os policiais pelas matrículas informadas: ${faltantes}.`, 'error');
-                return;
-            }
-
-            const chefePolicialId = membrosResolvidos[0]?.id;
-            const membrosIds = membrosResolvidos.map((p) => p.id);
-
-            if (!chefePolicialId || membrosIds.length === 0) {
-                showNotification('Falha ao vincular equipe ao perfil policial. Tente novamente.', 'error');
-                return;
-            }
+                return acc;
+            }, {});
             
             const team = {
                 vaga: vaga.id,
-                chefe: chefePolicialId,
-                membros: membrosIds,
+                chefe_matricula: membrosMatriculas[0],
+                membros_matriculas: membrosMatriculas,
+                membros_nomes: membrosNomes,
                 status: teamStatus,
                 telefone_contato: teamData.telefone,
                 observacoes: conflictDetails
@@ -252,7 +215,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
                 vaga: vaga.id,
                 status: teamStatus,
                 members: teamData.members,
-                membros_detalhes: membrosResolvidos,
+                membros_detalhes: createdTeam?.membros_detalhes || [],
             };
 
             setMonthlyTeams((prev) => {

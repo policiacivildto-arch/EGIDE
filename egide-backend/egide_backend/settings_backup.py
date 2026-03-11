@@ -1,24 +1,40 @@
-﻿import os
+import os
 from pathlib import Path
+from urllib.parse import urlparse
+
 from decouple import config
 import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-key-change-in-production')
-
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-# ALLOWED_HOSTS configurado para desenvolvimento e produção
 ALLOWED_HOSTS = config(
-    'ALLOWED_HOSTS', 
-    default='localhost,127.0.0.1,10.18.200.78',
+    'ALLOWED_HOSTS',
+    default='localhost,127.0.0.1,.railway.app,.up.railway.app,.onrender.com',
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
 
-# Se estiver em produção no Render
+railway_public_domain = config('RAILWAY_PUBLIC_DOMAIN', default='').strip()
+if railway_public_domain:
+    ALLOWED_HOSTS.append(railway_public_domain)
+
+frontend_url = config('FRONTEND_URL', default='').strip()
+backend_public_url = config('BACKEND_PUBLIC_URL', default='').strip()
+
+for public_url in [frontend_url, backend_public_url]:
+    if not public_url:
+        continue
+    parsed = urlparse(public_url)
+    if parsed.hostname:
+        ALLOWED_HOSTS.append(parsed.hostname)
+
 if not DEBUG:
     ALLOWED_HOSTS.append('.onrender.com')
+    ALLOWED_HOSTS.append('.railway.app')
+
+ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -35,7 +51,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Para servir arquivos estáticos
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -64,34 +80,27 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'egide_backend.wsgi.application'
-Banco de Dados: SQLite (dev) ou PostgreSQL/Supabase (prod)
+
+# Banco de Dados: SQLite (dev) ou PostgreSQL/Supabase (prod)
 DATABASE_URL = config('DATABASE_URL', default=None)
 
 if DATABASE_URL:
-    # Produção: Usar Supabase ou outro PostgreSQL (via DATABASE_URL)
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
     }
 else:
-    # Desenvolvimento: SQLite local
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
         }
-        }
-}
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')] if os.path.exists(os.path.join(BASE_DIR, 'static')) else []
-
-# Configuração do WhiteNoise para servir arquivos estáticos em produção
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
 ]
 
 LANGUAGE_CODE = 'pt-br'
@@ -101,13 +110,27 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')] if os.path.exists(os.path.join(BASE_DIR, 'static')) else []
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Django REST Framework
-REST_FRAMEWORK = {_DEV = [
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.AllowAny',
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+}
+
+CORS_ALLOWED_ORIGINS_DEV = [
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:8000',
@@ -118,32 +141,26 @@ REST_FRAMEWORK = {_DEV = [
     'http://127.0.0.1:8080',
 ]
 
-# Em produção, adicione suas URLs de frontend (Vercel, Netlify, etc.)
 CORS_ALLOWED_ORIGINS_PROD = config(
     'CORS_ALLOWED_ORIGINS',
-    default='',
+    default='https://egide-production-59f6.up.railway.app',
     cast=lambda v: [s.strip() for s in v.split(',')] if v else []
 )
 
-CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD   'PAGE_SIZE': 20,
-    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
-}
+CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD
 
-# CORS Configuration
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:8000',
-    'http://localhost:8080',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    'http://127.0.0.1:8000',
-    'http://127.0.0.1:8080',
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https://.*\.up\.railway\.app$',
+    r'^https://.*\.railway\.app$',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
-# JWT Configuration
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.up.railway.app',
+    'https://*.railway.app',
+] + [origin for origin in CORS_ALLOWED_ORIGINS_PROD if origin.startswith('https://')]
+
 from datetime import timedelta
 
 SIMPLE_JWT = {
@@ -153,7 +170,6 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
 }
 
-# Logging
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

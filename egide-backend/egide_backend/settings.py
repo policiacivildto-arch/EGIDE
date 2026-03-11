@@ -155,9 +155,21 @@ CORS_ALLOWED_ORIGINS_DEV = [
 # Em produção, adicione suas URLs de frontend (Vercel, Netlify, etc.)
 CORS_ALLOWED_ORIGINS_PROD = config(
     'CORS_ALLOWED_ORIGINS',
-    default='',
+    default='https://egide-production-59f6.up.railway.app',
     cast=lambda v: [s.strip() for s in v.split(',')] if v else []
 )
+
+# Garante esquema explicito (https://) para origens de producao.
+normalized_cors_origins = []
+for origin in CORS_ALLOWED_ORIGINS_PROD:
+    if not origin:
+        continue
+    if origin.startswith('http://') or origin.startswith('https://'):
+        normalized_cors_origins.append(origin)
+    else:
+        normalized_cors_origins.append(f'https://{origin}')
+
+CORS_ALLOWED_ORIGINS_PROD = normalized_cors_origins
 
 if frontend_url:
     CORS_ALLOWED_ORIGINS_PROD.append(frontend_url)

@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { apiClient } from '../../config/api';
 import { getWeekInfo } from '../../utils/helpers';
 import { LoadingSpinner, Modal } from '../../components/ui/Shared';
-import { PlusCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { GenerateVagasForm } from '../admin/components/GenerateVagasForm';
 import { ReportsDashboardView } from '../admin/components/ReportsDashboardView';
 import { RankingView } from '../admin/components/RankingView';
@@ -40,8 +40,8 @@ export default function DashboardDepartamento({ userData, showNotification }) {
         ranking: 'Ranking',
         schedule: 'Escalas', 
         convoys: 'Criação da Operação', 
-        paymentReport: 'Relatório de Pagamento',
-        operationCost: 'Custo da Operação',
+        paymentReport: 'Frequência',
+        operationCost: 'Relatório de Pagamento',
         operationReports: 'Relatórios de Operação', 
         alerts: 'Alertas', 
         holidays: 'Feriados' 
@@ -305,7 +305,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
                 {/* Controles de Navegação da Semana */}
                 <div className="flex justify-center items-center space-x-4 mb-6 bg-gray-800 p-2 rounded-lg">
                     <button onClick={goToPreviousWeek} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Semana Anterior">
-                        <ChevronDown className="-rotate-90" />
+                        <ChevronLeft />
                     </button>
                     <div className="text-center">
                         <span className="font-semibold text-lg text-white">
@@ -314,7 +314,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
                         <span className="text-xs block text-gray-400"> (Semana {currentWeek.weekId.split('-W')[1]})</span>
                     </div>
                     <button onClick={goToNextWeek} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Próxima Semana">
-                        <ChevronUp className="rotate-90" />
+                        <ChevronRight />
                     </button>
                 </div>
 

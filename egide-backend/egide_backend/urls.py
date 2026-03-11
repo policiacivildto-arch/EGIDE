@@ -13,7 +13,14 @@ from api.views import (
     # Sistema de Eventos
     EventoOperacaoViewSet, DepartamentoEventoViewSet, EscalaPolicialViewSet
 )
-from api.views_auth import login_view, logout_view, me_view, register_view
+from api.views_auth import (
+    login_view,
+    logout_view,
+    me_view,
+    register_view,
+    password_reset_view,
+    password_reset_confirm_view,
+)
 
 def api_root(request):
     """View raiz da API com informações sobre endpoints disponíveis"""
@@ -84,4 +91,6 @@ urlpatterns = [
     path('api/auth/logout/', logout_view, name='logout'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/me/', me_view, name='me'),
+    path('api/auth/password-reset/', password_reset_view, name='password_reset'),
+    path('api/auth/password-reset-confirm/', password_reset_confirm_view, name='password_reset_confirm'),
 ]

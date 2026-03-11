@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.db import transaction
 from .models import (
     Departamento, Delegacia, Policial, Viatura, Vaga,
     Equipe, Operacao, Comboio,
@@ -87,16 +88,144 @@ class EquipeSerializer(serializers.ModelSerializer):
     vaga_info = VagaSerializer(source='vaga', read_only=True)
     viatura_placa = serializers.CharField(source='viatura.placa', read_only=True)
     membros = serializers.PrimaryKeyRelatedField(queryset=Policial.objects.all(), many=True, required=False)
+    membros_matriculas = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        write_only=True,
+        allow_empty=False,
+    )
+    membros_nomes = serializers.DictField(
+        child=serializers.CharField(),
+        required=False,
+        write_only=True,
+    )
+    chefe_matricula = serializers.CharField(required=False, write_only=True)
     membros_detalhes = PolicialSerializer(source='membros', many=True, read_only=True)
     membros_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Equipe
-        fields = ['id', 'vaga', 'vaga_info', 'chefe', 'chefe_nome', 'membros', 'membros_detalhes', 'membros_count', 'viatura', 'viatura_placa', 'status', 'telefone_contato', 'observacoes', 'data_criacao', 'data_aprovacao', 'aprovado_por']
+        fields = ['id', 'vaga', 'vaga_info', 'chefe', 'chefe_nome', 'membros', 'membros_matriculas', 'membros_nomes', 'chefe_matricula', 'membros_detalhes', 'membros_count', 'viatura', 'viatura_placa', 'status', 'telefone_contato', 'observacoes', 'data_criacao', 'data_aprovacao', 'aprovado_por']
         read_only_fields = ['data_criacao', 'data_aprovacao']
 
     def get_membros_count(self, obj):
         return obj.membros.count()
+
+    def _normalize_matricula(self, value):
+        return ''.join(ch for ch in str(value or '') if ch.isdigit())
+
+    def _is_pre_registered_user(self, user):
+        if not user:
+            return False
+        return user.username.startswith('precad_') and user.email.endswith('@precad.egide.local')
+
+    def _build_unique_placeholder_identity(self, matricula):
+        base = f'precad_{matricula}'
+        username = base
+        index = 1
+        while User.objects.filter(username=username).exists():
+            username = f'{base}_{index}'
+            index += 1
+
+        email = f'{username}@precad.egide.local'
+        return username, email
+
+    def _resolve_or_create_policial(self, matricula, nome, delegacia):
+        policial = Policial.objects.select_related('usuario').filter(matricula=matricula).first()
+        if policial:
+            if nome and self._is_pre_registered_user(policial.usuario) and policial.nome.startswith('Policial '):
+                policial.nome = nome
+                policial.save(update_fields=['nome'])
+            return policial
+
+        username, email = self._build_unique_placeholder_identity(matricula)
+        user = User.objects.create(
+            username=username,
+            email=email,
+            first_name=nome or f'Policial {matricula}',
+            is_active=False,
+        )
+        user.set_unusable_password()
+        user.save(update_fields=['password'])
+
+        return Policial.objects.create(
+            usuario=user,
+            matricula=matricula,
+            nome=nome or f'Policial {matricula}',
+            classe='Praça',
+            cargo='Policial Civil',
+            delegacia=delegacia,
+            telefone='',
+            email=email,
+            ativo=True,
+        )
+
+    def _resolve_membros_by_matricula(self, membros_matriculas, membros_nomes, delegacia):
+        resolved = []
+        for raw in membros_matriculas:
+            matricula = self._normalize_matricula(raw)
+            if len(matricula) != 8:
+                raise serializers.ValidationError({
+                    'membros_matriculas': f'Matrícula inválida: {raw}. Use 8 dígitos.'
+                })
+            nome = (membros_nomes.get(matricula) or membros_nomes.get(raw) or '').strip()
+            resolved.append(self._resolve_or_create_policial(matricula, nome, delegacia))
+        return resolved
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        membros_ids = attrs.get('membros')
+        membros_matriculas = attrs.get('membros_matriculas')
+        if not membros_ids and not membros_matriculas:
+            raise serializers.ValidationError({
+                'membros': 'Informe membros por ID ou membros_matriculas para criar a equipe.'
+            })
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        membros = validated_data.pop('membros', None)
+        membros_matriculas = validated_data.pop('membros_matriculas', None)
+        membros_nomes = validated_data.pop('membros_nomes', {}) or {}
+        chefe_matricula = self._normalize_matricula(validated_data.pop('chefe_matricula', ''))
+
+        if membros_matriculas:
+            delegacia = validated_data.get('vaga').delegacia if validated_data.get('vaga') else None
+            membros = self._resolve_membros_by_matricula(membros_matriculas, membros_nomes, delegacia)
+
+        if not validated_data.get('chefe'):
+            if chefe_matricula:
+                validated_data['chefe'] = next((m for m in membros or [] if m.matricula == chefe_matricula), None)
+            if not validated_data.get('chefe') and membros:
+                validated_data['chefe'] = membros[0]
+
+        instance = super().create(validated_data)
+        if membros is not None:
+            instance.membros.set(membros)
+        return instance
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        membros = validated_data.pop('membros', None)
+        membros_matriculas = validated_data.pop('membros_matriculas', None)
+        membros_nomes = validated_data.pop('membros_nomes', {}) or {}
+        chefe_matricula = self._normalize_matricula(validated_data.pop('chefe_matricula', ''))
+
+        if membros_matriculas:
+            vaga = validated_data.get('vaga', instance.vaga)
+            delegacia = vaga.delegacia if vaga else None
+            membros = self._resolve_membros_by_matricula(membros_matriculas, membros_nomes, delegacia)
+
+        if not validated_data.get('chefe') and chefe_matricula and membros:
+            validated_data['chefe'] = next((m for m in membros if m.matricula == chefe_matricula), None)
+
+        updated = super().update(instance, validated_data)
+        if membros is not None:
+            updated.membros.set(membros)
+            if not updated.chefe and membros:
+                updated.chefe = membros[0]
+                updated.save(update_fields=['chefe'])
+        return updated
 
 
 class OperacaoSerializer(serializers.ModelSerializer):

@@ -54,7 +54,7 @@ export const SignUpScreen = ({ showNotification, setAuthScreen }) => {
         setIsLoading(true);
         try {
             const userData = {
-                username: formData.email.trim().split('@')[0],
+                username: formData.email.trim().toLowerCase(),
                 password: formData.password,
                 email: formData.email.trim(),
                 nome: normalizeName(formData.nome),

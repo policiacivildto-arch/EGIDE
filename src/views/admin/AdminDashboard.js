@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiClient } from '../../config/api';
 import { getWeekInfo, getCycleInfo } from '../../utils/helpers';
 import { LoadingSpinner, Modal } from '../../components/ui/Shared';
-import { PlusCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { GenerateVagasForm } from './components/GenerateVagasForm';
 import { ReportsDashboardView } from './components/ReportsDashboardView';
 import { RankingView } from './components/RankingView';
@@ -32,8 +32,8 @@ export default function AdminDashboard({ userData, showNotification }) {
         ranking: 'Ranking',
         schedule: 'Escalas',
         convoys: 'Criacao da Operacao',
-        paymentReport: 'Relatorio de Pagamento',
-        operationCost: 'Custo da Operacao',
+        paymentReport: 'Frequência',
+        operationCost: 'Relatório de Pagamento',
         operationReports: 'Relatorios de Operacao',
         alerts: 'Alertas',
         holidays: 'Feriados'
@@ -213,7 +213,7 @@ export default function AdminDashboard({ userData, showNotification }) {
 
                 <div className="flex justify-center items-center space-x-4 mb-6 bg-gray-800 p-2 rounded-lg">
                     <button onClick={goToPreviousWeek} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Semana Anterior">
-                        <ChevronDown className="-rotate-90" />
+                        <ChevronLeft />
                     </button>
                     <div className="text-center">
                         <span className="font-semibold text-lg text-white">
@@ -222,7 +222,7 @@ export default function AdminDashboard({ userData, showNotification }) {
                         <span className="text-xs block text-gray-400"> (Semana {currentWeek.weekId.split('-W')[1]})</span>
                     </div>
                     <button onClick={goToNextWeek} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Proxima Semana">
-                        <ChevronUp className="rotate-90" />
+                        <ChevronRight />
                     </button>
                 </div>
 
