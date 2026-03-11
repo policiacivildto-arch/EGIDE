@@ -152,6 +152,29 @@ def register_view(request):
         else:
             delegacia = _resolve_delegacia(delegacias_qs, delegacia_name)
 
+    if not delegacia and departamento_value:
+        # Caso comum no frontend: delegacia vem como sigla do departamento (ex.: DTO).
+        dept_input = str(departamento_value).strip()
+        departamento_obj = Departamento.objects.filter(
+            Q(sigla__iexact=dept_input) |
+            Q(nome__iexact=dept_input) |
+            Q(nome__icontains=dept_input)
+        ).first()
+
+        if not departamento_obj and isinstance(delegacia_value, str):
+            delegacia_as_dept = str(delegacia_value).strip()
+            departamento_obj = Departamento.objects.filter(
+                Q(sigla__iexact=delegacia_as_dept) |
+                Q(nome__iexact=delegacia_as_dept) |
+                Q(nome__icontains=delegacia_as_dept)
+            ).first()
+
+        if departamento_obj:
+            delegacia = Delegacia.objects.filter(
+                departamento=departamento_obj,
+                ativo=True,
+            ).order_by('nome').first()
+
     if not delegacia:
         return Response({'error': 'Delegacia não encontrada para o cadastro'}, status=status.HTTP_400_BAD_REQUEST)
 
