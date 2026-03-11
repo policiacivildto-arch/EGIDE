@@ -148,9 +148,24 @@ CORS_ALLOWED_ORIGINS_PROD = config(
     cast=lambda v: [s.strip() for s in v.split(',')] if v else []
 )
 
+FRONTEND_URL = config('FRONTEND_URL', default='').strip()
+if FRONTEND_URL:
+    CORS_ALLOWED_ORIGINS_PROD.append(FRONTEND_URL)
+
 CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD
 
+# Permite frontends Railway sem precisar listar manualmente cada novo subdomínio.
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https://.*\.up\.railway\.app$',
+    r'^https://.*\.railway\.app$',
+]
+
 CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.up.railway.app',
+    'https://*.railway.app',
+] + [origin for origin in CORS_ALLOWED_ORIGINS_PROD if origin.startswith('https://')]
 
 # JWT Configuration
 from datetime import timedelta
