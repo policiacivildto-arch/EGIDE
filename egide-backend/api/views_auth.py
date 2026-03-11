@@ -113,11 +113,10 @@ def register_view(request):
             else:
                 # Fallback para bases ainda sem departamento cadastrado por sigla.
                 delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
-                if not delegacia:
-                    return Response(
-                        {'error': f"Departamento/código '{departamento_name}' não existe"},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+
+            # Se não encontrou com filtro de departamento, tenta por delegacia pura.
+            if not delegacia:
+                delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
         else:
             delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
 
