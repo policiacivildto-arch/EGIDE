@@ -104,17 +104,20 @@ def register_view(request):
                 Q(nome__icontains=departamento_name)
             ).first()
 
-            if not departamento_obj:
-                return Response(
-                    {'error': f"Departamento/código '{departamento_name}' não existe"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            delegacia = delegacias_qs.filter(
-                nome__iexact=delegacia_name
-            ).filter(
-                Q(departamento=departamento_obj)
-            ).first()
+            if departamento_obj:
+                delegacia = delegacias_qs.filter(
+                    nome__iexact=delegacia_name
+                ).filter(
+                    Q(departamento=departamento_obj)
+                ).first()
+            else:
+                # Fallback para bases ainda sem departamento cadastrado por sigla.
+                delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
+                if not delegacia:
+                    return Response(
+                        {'error': f"Departamento/código '{departamento_name}' não existe"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
         else:
             delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
 
