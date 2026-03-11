@@ -91,7 +91,7 @@ export default function AdminDashboard({ userData, showNotification }) {
         loadWeekData();
     }, [currentWeek, showNotification]);
 
-    const generateWeeklyVagas = async (vagasConfig) => {
+    const generateWeeklyVagas = async (vagasConfig, delegaciaId) => {
         setIsVagasModalOpen(false);
         showNotification('Gerando vagas, por favor aguarde...', 'info');
         try {
@@ -109,7 +109,8 @@ export default function AdminDashboard({ userData, showNotification }) {
                         week_id: weekId,
                         cycle_id: cycleId,
                         turno: 'day',
-                        status: 'Disponivel'
+                        status: 'Disponivel',
+                        delegacia: delegaciaId
                     });
                 }
                 for (let i = 0; i < nightVagas; i++) {
@@ -118,7 +119,8 @@ export default function AdminDashboard({ userData, showNotification }) {
                         week_id: weekId,
                         cycle_id: cycleId,
                         turno: 'night',
-                        status: 'Disponivel'
+                        status: 'Disponivel',
+                        delegacia: delegaciaId
                     });
                 }
             });
@@ -161,6 +163,7 @@ export default function AdminDashboard({ userData, showNotification }) {
                         holidays={holidays}
                         onSubmit={generateWeeklyVagas}
                         onCancel={() => setIsVagasModalOpen(false)}
+                        defaultDelegaciaId={userData?.delegacia_id}
                     />
                 </Modal>
             )}
