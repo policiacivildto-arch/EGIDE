@@ -11,8 +11,13 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Q
+from django.utils.text import slugify
 from api.models_security import LogAuditoria, PerfilDepartamento
-from api.models import Delegacia, Policial
+from api.models import Delegacia, Policial, Departamento
+
+
+def _normalize_text(value):
+    return slugify(str(value or '')).replace('-', ' ').strip().upper()
 
 
 @api_view(['POST'])
@@ -84,10 +89,31 @@ def register_view(request):
         delegacia_name = str(delegacia_value).strip()
         departamento_name = str(departamento_value).strip() if departamento_value else ''
         if departamento_name:
+            normalized_department = _normalize_text(departamento_name)
+            department_aliases = {
+                'ESSENCIAL': 'DPE',
+                'DEPARTAMENTO ESSENCIAL': 'DPE',
+                'ESPECIAL': 'DPE',
+                'DEPARTAMENTO ESPECIAL': 'DPE',
+            }
+            candidate_sigla = department_aliases.get(normalized_department, departamento_name)
+
+            departamento_obj = Departamento.objects.filter(
+                Q(sigla__iexact=candidate_sigla) |
+                Q(nome__iexact=departamento_name) |
+                Q(nome__icontains=departamento_name)
+            ).first()
+
+            if not departamento_obj:
+                return Response(
+                    {'error': f"Departamento/código '{departamento_name}' não existe"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             delegacia = delegacias_qs.filter(
                 nome__iexact=delegacia_name
             ).filter(
-                Q(departamento__sigla__iexact=departamento_name) | Q(departamento__nome__iexact=departamento_name)
+                Q(departamento=departamento_obj)
             ).first()
         else:
             delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
