@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { apiClient } from '../../../config/api';
 import { getCycleInfo, displayMatricula } from '../../../utils/helpers';
 
@@ -19,13 +19,7 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
 
   const getTeamsForVaga = (vagaId) => teams.filter((t) => Number(resolveTeamVagaId(t)) === Number(vagaId));
 
-  const getRemainingSlots = (vaga) => {
-    const capacity = getVagaCapacity(vaga);
-    const used = getTeamsForVaga(vaga?.id).length;
-    return Math.max(0, capacity - used);
-  };
-
-  const parseDate = (value) => {
+  const parseDate = useCallback((value) => {
     if (!value) return null;
     if (typeof value === 'string') {
       const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
@@ -36,9 +30,9 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
     }
     if (value?.seconds) return new Date(value.seconds * 1000);
     return null;
-  };
+  }, []);
 
-  const resolveVagaDate = (vaga) => parseDate(vaga?.date || vaga?.data);
+  const resolveVagaDate = useCallback((vaga) => parseDate(vaga?.date || vaga?.data), [parseDate]);
 
   const resolveVagaShift = (vaga) => vaga?.shiftType || vaga?.turno;
 
@@ -219,7 +213,7 @@ const handleAdminRegister = async (vaga, teamData) => {
             acc[dayKey].push(vaga); 
             return acc; 
         }, {});
-    }, [vagas]);
+  }, [vagas, resolveVagaDate]);
 
     const sortedDays = useMemo(() => Object.keys(vagasByDay).sort((a, b) => new Date(a) - new Date(b)), [vagasByDay]);
 

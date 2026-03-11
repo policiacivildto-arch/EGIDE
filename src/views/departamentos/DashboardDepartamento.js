@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { apiClient } from '../../config/api';
 import { getWeekInfo } from '../../utils/helpers';
@@ -35,7 +35,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
     // Departamento do usuário logado
     const userDepartamento = userData?.departamento || '';
 
-    const viewNames = { 
+    const viewNames = useMemo(() => ({ 
         dashboard: 'Dashboard', 
         ranking: 'Ranking',
         schedule: 'Escalas', 
@@ -45,7 +45,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
         operationReports: 'Relatórios de Operação', 
         alerts: 'Alertas', 
         holidays: 'Feriados' 
-    };
+    }), []);
 
     const setViewAndSyncUrl = (nextView) => {
         if (nextView === view) return;
@@ -66,7 +66,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
         if (targetView !== view) {
             setView(targetView);
         }
-    }, [searchParams, view]);
+    }, [searchParams, view, viewNames]);
 
     // Carregar usuários e feriados
     useEffect(() => {
