@@ -56,12 +56,16 @@ export const RankingView = ({ showNotification, departamento }) => {
         const loadRanking = async () => {
             setLoading(true);
             try {
-                const criterionRequests = CRITERIA.map(async ({ key }) => {
-                    const result = await apiClient.getRankings(key, 'geral', {}, departamento || '');
-                    return { key, rows: toArray(result) };
-                });
-
-                const settled = await Promise.allSettled(criterionRequests);
+                const settled = [];
+                for (const { key } of CRITERIA) {
+                    try {
+                        const result = await apiClient.getRankings(key, 'geral', {}, departamento || '');
+                        const value = { key, rows: toArray(result) };
+                        settled.push({ status: 'fulfilled', value });
+                    } catch (reason) {
+                        settled.push({ status: 'rejected', reason });
+                    }
+                }
                 const successful = settled
                     .filter((item) => item.status === 'fulfilled')
                     .map((item) => item.value)

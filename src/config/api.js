@@ -14,6 +14,7 @@ class DjangoApiClient {
   constructor(baseURL = API_BASE_URL) {
     this.baseURL = baseURL;
     this.token = localStorage.getItem('auth_token');
+    this.rankingEndpointAvailable = null;
   }
 
   /**
@@ -534,7 +535,23 @@ class DjangoApiClient {
    * Métodos de Rankings
    */
   async getRanking(params = {}) {
-    return this.getList('ranking', params);
+    if (this.rankingEndpointAvailable === false) {
+      return [];
+    }
+
+    try {
+      const data = await this.getList('ranking', params);
+      this.rankingEndpointAvailable = true;
+      return data;
+    } catch (error) {
+      if (error?.status === 404) {
+        // O backend atual não expõe /api/ranking/.
+        // Mantemos fallback local sem repetir erro a cada render.
+        this.rankingEndpointAvailable = false;
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getRankings(rankingType, filterType, dateRange, departamento) {
