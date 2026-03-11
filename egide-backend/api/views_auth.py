@@ -20,6 +20,43 @@ def _normalize_text(value):
     return slugify(str(value or '')).replace('-', ' ').strip().upper()
 
 
+def _reduced_tokens(value):
+    stop_words = {
+        'DELEGACIA', 'POLICIA', 'POLICIAL', 'CIVIL', 'DE', 'DA', 'DO', 'DAS', 'DOS'
+    }
+    tokens = [t for t in _normalize_text(value).split() if t and t not in stop_words]
+    return set(tokens)
+
+
+def _resolve_delegacia(delegacias_qs, delegacia_name, departamento_obj=None):
+    qs = delegacias_qs
+    if departamento_obj is not None:
+        qs = qs.filter(departamento=departamento_obj)
+
+    # 1) Correspondência exata (mais segura).
+    delegacia = qs.filter(nome__iexact=delegacia_name).first()
+    if delegacia:
+        return delegacia
+
+    # 2) Correspondência parcial direta pelo banco.
+    delegacia = qs.filter(nome__icontains=delegacia_name).first()
+    if delegacia:
+        return delegacia
+
+    # 3) Correspondência flexível em memória (ignora prefixos comuns).
+    norm_input = _normalize_text(delegacia_name)
+    reduced_input = _reduced_tokens(delegacia_name)
+    for item in qs:
+        norm_item = _normalize_text(item.nome)
+        if norm_input in norm_item or norm_item in norm_input:
+            return item
+        reduced_item = _reduced_tokens(item.nome)
+        if reduced_input and len(reduced_input.intersection(reduced_item)) >= 2:
+            return item
+
+    return None
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_view(request):
@@ -82,7 +119,7 @@ def register_view(request):
     else:
         classe_model = 'Oficial' if cargo_model == 'Delegado' else 'Praça'
 
-    delegacias_qs = Delegacia.objects.select_related('departamento')
+    delegacias_qs = Delegacia.objects.select_related('departamento').filter(ativo=True)
     if isinstance(delegacia_value, int) or (isinstance(delegacia_value, str) and str(delegacia_value).isdigit()):
         delegacia = delegacias_qs.filter(id=int(delegacia_value)).first()
     else:
@@ -105,20 +142,15 @@ def register_view(request):
             ).first()
 
             if departamento_obj:
-                delegacia = delegacias_qs.filter(
-                    nome__iexact=delegacia_name
-                ).filter(
-                    Q(departamento=departamento_obj)
-                ).first()
+                delegacia = _resolve_delegacia(delegacias_qs, delegacia_name, departamento_obj)
             else:
-                # Fallback para bases ainda sem departamento cadastrado por sigla.
-                delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
+                delegacia = _resolve_delegacia(delegacias_qs, delegacia_name)
 
-            # Se não encontrou com filtro de departamento, tenta por delegacia pura.
+            # Se não encontrou com filtro de departamento, tenta por delegacia sem filtro.
             if not delegacia:
-                delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
+                delegacia = _resolve_delegacia(delegacias_qs, delegacia_name)
         else:
-            delegacia = delegacias_qs.filter(nome__iexact=delegacia_name).first()
+            delegacia = _resolve_delegacia(delegacias_qs, delegacia_name)
 
     if not delegacia:
         return Response({'error': 'Delegacia não encontrada para o cadastro'}, status=status.HTTP_400_BAD_REQUEST)
