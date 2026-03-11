@@ -41,14 +41,33 @@ export default function AdminDashboard({ userData, showNotification }) {
 
     // Carrega dados iniciais (usuarios e feriados)
     useEffect(() => {
+        const fetchAllPoliciais = async () => {
+            const all = [];
+            let page = 1;
+
+            while (true) {
+                const res = await apiClient.getPoliciais({ page, page_size: 200 });
+                const pageItems = Array.isArray(res) ? res : res?.results || [];
+                all.push(...pageItems);
+
+                if (Array.isArray(res) || !res?.next) break;
+                page += 1;
+            }
+
+            return all;
+        };
+
         const loadInitialData = async () => {
             try {
                 const [usersRes, holidaysRes] = await Promise.all([
-                    apiClient.getPoliciais(),
+                    fetchAllPoliciais(),
                     apiClient.getHolidays()
                 ]);
 
-                const users = Array.isArray(usersRes) ? usersRes : usersRes?.results || [];
+                const users = (Array.isArray(usersRes) ? usersRes : usersRes?.results || []).map((u) => ({
+                    ...u,
+                    nome: u?.nome || u?.usuario?.first_name || u?.usuario?.username || 'Sem nome',
+                }));
                 const hols = Array.isArray(holidaysRes) ? holidaysRes : holidaysRes?.results || [];
 
                 setAllUsers(users);
