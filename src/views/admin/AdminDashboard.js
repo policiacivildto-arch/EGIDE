@@ -98,26 +98,43 @@ export default function AdminDashboard({ userData, showNotification }) {
             const weekId = currentWeek.weekId;
             const vagasToCreate = [];
 
+            // O backend exige delegacia (FK) e unicidade por data+turno+delegacia.
+            let delegaciaId = Number(userData?.delegacia_id) || null;
+            if (!delegaciaId) {
+                const delegaciasRes = await apiClient.getDelegacias();
+                const delegacias = Array.isArray(delegaciasRes) ? delegaciasRes : delegaciasRes?.results || [];
+                const dto = delegacias.find((d) => d?.nome?.toUpperCase().includes('DTO'));
+                delegaciaId = dto?.id || delegacias[0]?.id || null;
+            }
+
+            if (!delegaciaId) {
+                throw new Error('Nenhuma delegacia encontrada para gerar vagas.');
+            }
+
             currentWeek.weekDays.forEach((day, index) => {
                 const { day: dayVagas, night: nightVagas } = vagasConfig[index];
                 const cycleId = getCycleInfo(day).cycleId;
                 const dateStr = day.toISOString().split('T')[0];
 
-                for (let i = 0; i < dayVagas; i++) {
+                if (Number(dayVagas) > 0) {
                     vagasToCreate.push({
                         data: dateStr,
                         week_id: weekId,
                         cycle_id: cycleId,
+                        delegacia: delegaciaId,
                         turno: 'day',
+                        posicoes_disponiveis: Number(dayVagas),
                         status: 'Disponivel'
                     });
                 }
-                for (let i = 0; i < nightVagas; i++) {
+                if (Number(nightVagas) > 0) {
                     vagasToCreate.push({
                         data: dateStr,
                         week_id: weekId,
                         cycle_id: cycleId,
+                        delegacia: delegaciaId,
                         turno: 'night',
+                        posicoes_disponiveis: Number(nightVagas),
                         status: 'Disponivel'
                     });
                 }

@@ -63,6 +63,23 @@ class VagaSerializer(serializers.ModelSerializer):
         model = Vaga
         fields = ['id', 'data', 'turno', 'delegacia', 'delegacia_nome', 'posicoes_disponiveis', 'descricao', 'status', 'criado_em', 'atualizado_em']
         read_only_fields = ['criado_em', 'atualizado_em']
+        extra_kwargs = {
+            'delegacia': {'required': False, 'allow_null': True},
+        }
+
+    def create(self, validated_data):
+        # Hotfix de compatibilidade: se o frontend não enviar delegacia,
+        # tenta usar primeiro uma delegacia com nome contendo DTO; caso não exista,
+        # usa a primeira delegacia ativa disponível.
+        if not validated_data.get('delegacia'):
+            delegacia = Delegacia.objects.filter(ativo=True, nome__icontains='DTO').first()
+            if not delegacia:
+                delegacia = Delegacia.objects.filter(ativo=True).order_by('id').first()
+            if not delegacia:
+                raise serializers.ValidationError({'delegacia': 'Nenhuma delegacia ativa encontrada.'})
+            validated_data['delegacia'] = delegacia
+
+        return super().create(validated_data)
 
 
 class EquipeSerializer(serializers.ModelSerializer):
