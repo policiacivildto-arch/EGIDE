@@ -481,11 +481,50 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
         });
     };
 
-    const convoysUnicos = getUniqueConvoys(convoys);
+    const getMergedConvoys = (items) => {
+        const mergedMap = new Map();
+
+        getUniqueConvoys(items).forEach((convoy) => {
+            const meta = getConvoyMeta(convoy);
+            const mergeKey = [
+                getDateString(convoy?.date || convoy?.data),
+                convoy?.ais || '',
+                convoy?.descricao || '',
+                convoy?.dpc_nome || convoy?.dpc || '',
+                convoy?.oip_nome || convoy?.oip || '',
+                meta?.localBriefing || convoy?.localBriefing || '',
+            ].join('|');
+
+            const baseTeamIds = Array.isArray(convoy?.teamIds)
+                ? convoy.teamIds
+                : Array.isArray(meta?.teamIds)
+                    ? meta.teamIds
+                    : [];
+
+            if (!mergedMap.has(mergeKey)) {
+                mergedMap.set(mergeKey, {
+                    ...convoy,
+                    teamIds: [...baseTeamIds],
+                });
+                return;
+            }
+
+            const existing = mergedMap.get(mergeKey);
+            const unionTeamIds = [...new Set([...(existing.teamIds || []), ...baseTeamIds])];
+            mergedMap.set(mergeKey, {
+                ...existing,
+                teamIds: unionTeamIds,
+            });
+        });
+
+        return Array.from(mergedMap.values());
+    };
+
+    const convoysUnicos = getMergedConvoys(convoys);
 
     const gerarPDF = (dataOperacaoStr) => {
         // ALTERAÇÃO 1: Filtra a lista de comboios ANTES de qualquer outra coisa.
-        const convoysDoDia = getUniqueConvoys(convoysUnicos.filter(c => isSameDay(c.date || c.data, dataOperacaoStr)));
+        const convoysDoDia = getMergedConvoys(convoysUnicos.filter(c => isSameDay(c.date || c.data, dataOperacaoStr)));
         
         // ALTERAÇÃO 2: A validação agora usa a lista FILTRADA.
         if (convoysDoDia.length === 0) {
