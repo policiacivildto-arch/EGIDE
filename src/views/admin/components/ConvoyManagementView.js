@@ -329,6 +329,7 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
         await apiClient.createConvoy({
             numeroComboio: newConvoyNumber,
             weekId,
+            data: operationDateStr,
             date: operationDateStr,
             teamIds: selectedTeams,
             ...assignmentData,
