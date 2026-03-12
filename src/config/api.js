@@ -14,7 +14,9 @@ class DjangoApiClient {
   constructor(baseURL = API_BASE_URL) {
     this.baseURL = baseURL;
     this.token = localStorage.getItem('auth_token');
-    this.rankingEndpointAvailable = null;
+    // O backend atual não expõe /api/ranking/.
+    // Pode ser reativado via env quando o endpoint existir.
+    this.rankingEndpointAvailable = process.env.REACT_APP_ENABLE_RANKING_ENDPOINT === 'true';
   }
 
   /**
@@ -559,8 +561,11 @@ class DjangoApiClient {
     const params = {
       ranking_type: rankingType,
       filter_type: filterType,
-      departamento: departamento || '',
     };
+
+    if (departamento) {
+      params.departamento = departamento;
+    }
 
     if (filterType === 'mes' && dateRange.month) {
       params.month = dateRange.month;

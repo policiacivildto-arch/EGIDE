@@ -35,6 +35,14 @@ export default function DashboardDepartamento({ userData, showNotification }) {
     // Departamento do usuário logado
     const userDepartamento = userData?.departamento || '';
 
+    const toIsoLocalDate = (date) => {
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const viewNames = useMemo(() => ({ 
         dashboard: 'Dashboard', 
         ranking: 'Ranking',
@@ -120,8 +128,8 @@ export default function DashboardDepartamento({ userData, showNotification }) {
         const loadWeekData = async () => {
             setLoading(true);
             try {
-                const weekStart = currentWeek.weekDays[0].toISOString().split('T')[0];
-                const weekEnd = currentWeek.weekDays[6].toISOString().split('T')[0];
+                const weekStart = toIsoLocalDate(currentWeek.weekDays[0]);
+                const weekEnd = toIsoLocalDate(currentWeek.weekDays[6]);
 
                 const [vagasResponse, teamsResponse, convoysResponse] = await Promise.all([
                     apiClient.getVagas({
@@ -152,7 +160,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
                     if (!convoyDate) return false;
                     const isoDate = typeof convoyDate === 'string'
                         ? convoyDate.split('T')[0]
-                        : new Date(convoyDate.seconds * 1000).toISOString().split('T')[0];
+                        : toIsoLocalDate(new Date(convoyDate.seconds * 1000));
                     return isoDate >= weekStart && isoDate <= weekEnd;
                 });
 
@@ -197,8 +205,8 @@ export default function DashboardDepartamento({ userData, showNotification }) {
             }
 
             const delegaciaId = delegacias[0].id;
-            const weekStart = currentWeek.weekDays[0].toISOString().split('T')[0];
-            const weekEnd = currentWeek.weekDays[6].toISOString().split('T')[0];
+            const weekStart = toIsoLocalDate(currentWeek.weekDays[0]);
+            const weekEnd = toIsoLocalDate(currentWeek.weekDays[6]);
 
             const existentesResponse = await apiClient.getVagas({
                 delegacia: delegaciaId,
@@ -215,7 +223,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
             const upserts = [];
             currentWeek.weekDays.forEach((day, index) => {
                 const { day: dayVagas, night: nightVagas } = vagasConfig[index];
-                const dataStr = day.toISOString().split('T')[0];
+                const dataStr = toIsoLocalDate(day);
                 const departmentSuffix = userDepartamento ? ` (${userDepartamento})` : '';
                 const descricaoDiurna = `Vaga Diurna - Semana ${weekId}${departmentSuffix}`;
                 const descricaoNoturna = `Vaga Noturna - Semana ${weekId}${departmentSuffix}`;

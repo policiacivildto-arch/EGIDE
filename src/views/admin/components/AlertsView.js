@@ -17,9 +17,36 @@ export const AlertsView = ({ showNotification, setView, setCurrentWeek, departam
         setSavedAlerts([]);
     }, []);
 
+    const parseDateSafely = (rawDate) => {
+        if (!rawDate) return null;
+
+        if (rawDate instanceof Date) {
+            return Number.isNaN(rawDate.getTime()) ? null : rawDate;
+        }
+
+        if (typeof rawDate === 'string') {
+            const isoDateMatch = /^(\d{4}-\d{2}-\d{2})/.exec(rawDate);
+            if (isoDateMatch) {
+                return new Date(`${isoDateMatch[1]}T12:00:00`);
+            }
+
+            const parsed = new Date(rawDate);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        }
+
+        if (rawDate?.seconds) {
+            const parsed = new Date(rawDate.seconds * 1000);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        }
+
+        return null;
+    };
+
     const handleGoToSchedule = (date) => {
         if (!date || !setView || !setCurrentWeek) return;
-        setCurrentWeek(getWeekInfo(date));
+        const parsed = parseDateSafely(date);
+        if (!parsed) return;
+        setCurrentWeek(getWeekInfo(parsed));
         setView('schedule');
     };
 
@@ -54,11 +81,7 @@ export const AlertsView = ({ showNotification, setView, setCurrentWeek, departam
                 const leaderName = team?.chefe_nome;
                 const leaderMatricula = team?.chefe_matricula || team?.chefe?.matricula || null;
                 const vagaDate = team?.vaga_info?.data || team?.vagaDate;
-                const parsedDate = typeof vagaDate === 'string'
-                    ? new Date(vagaDate)
-                    : vagaDate?.seconds
-                        ? new Date(vagaDate.seconds * 1000)
-                        : null;
+                const parsedDate = parseDateSafely(vagaDate);
 
                 if (!leaderName || !leaderMatricula || !parsedDate || Number.isNaN(parsedDate.getTime())) return;
 

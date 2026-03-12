@@ -60,7 +60,7 @@ import { LogIn } from 'lucide-react';
                 </button>
             </form>
             <div className="text-center mt-4 text-sm">
-                <button onClick={() => setAuthScreen('forgotPassword')} className="text-blue-400 hover:underline">Esqueci a senha</button>
+                <button onClick={() => setAuthScreen('forgotPassword')} className="text-blue-400 hover:underline">Esqueci minha senha</button>
                 <span className="text-gray-500 mx-2">|</span>
                 <button onClick={() => setAuthScreen('signup')} className="text-blue-400 hover:underline">Criar nova conta</button>
             </div>
