@@ -469,9 +469,23 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
         return convoyDateStr === dateString;
     };
 
+    const getUniqueConvoys = (items) => {
+        const seen = new Set();
+        return (Array.isArray(items) ? items : []).filter((convoy) => {
+            const key = convoy?.id
+                ? `id:${convoy.id}`
+                : `sig:${getDateString(convoy?.date || convoy?.data)}|${convoy?.ais || ''}|${convoy?.descricao || ''}|${convoy?.dpc || ''}|${convoy?.oip || ''}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    };
+
+    const convoysUnicos = getUniqueConvoys(convoys);
+
     const gerarPDF = (dataOperacaoStr) => {
         // ALTERAÇÃO 1: Filtra a lista de comboios ANTES de qualquer outra coisa.
-        const convoysDoDia = convoys.filter(c => isSameDay(c.date || c.data, dataOperacaoStr));
+        const convoysDoDia = getUniqueConvoys(convoysUnicos.filter(c => isSameDay(c.date || c.data, dataOperacaoStr)));
         
         // ALTERAÇÃO 2: A validação agora usa a lista FILTRADA.
         if (convoysDoDia.length === 0) {
@@ -624,12 +638,12 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
                 <div className="flex justify-between items-center mb-3">
                     <h4 className="text-xl font-semibold">Comboios Formados</h4>
                     <div className='flex items-end space-x-4'>
-                        {convoys.length > 0 && <button onClick={() => gerarPDF(dataOperacao)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2"><Download size={18} /><span>Baixar Escala</span></button>}
+                        {convoysUnicos.length > 0 && <button onClick={() => gerarPDF(dataOperacao)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2"><Download size={18} /><span>Baixar Escala</span></button>}
                     </div>
                 </div>
-                <div className="space-y-4">{convoys.map(convoy => (<div key={convoy.id} className="bg-gray-800 p-4 rounded-lg"><p className="font-bold text-lg text-blue-400">Comboio - {resolveConvoyDateLabel(convoy)}</p>
+                <div className="space-y-4">{convoysUnicos.map(convoy => (<div key={convoy.id} className="bg-gray-800 p-4 rounded-lg"><p className="font-bold text-lg text-blue-400">Comboio - {resolveConvoyDateLabel(convoy)}</p>
                 {/* MUDANÇA 6: Exibição na lista também ajustada */}
-                <p><span className="font-semibold">Área:</span> AIS {convoy.ais} - {Array.isArray(convoy.bairros) ? convoy.bairros.join(', ') : convoy.bairros}</p><p><span className="font-semibold">Missão:</span> {convoy.descricao || 'N/A'}</p><p><span className="font-semibold">Supervisão:</span> DPC {convoy.dpc_nome || convoy.dpc} | OIP {convoy.oip_nome || convoy.oip}</p><p><span className="font-semibold">Briefing:</span> {getConvoyMeta(convoy).localBriefing || convoy.localBriefing || 'N/A'}</p><p className="font-semibold mt-2">Equipes:</p><ul className="list-disc list-inside ml-4">{(Array.isArray(convoy.teamIds) ? convoy.teamIds : (getConvoyMeta(convoy).teamIds || []) ).map(tid => { const team = teams.find(t => t.id === tid); return <li key={tid}>{team ? `Chefe ${resolveTeamLeaderName(team)} (Viatura: ${resolveTeamVehicle(team)})` : `Equipe #${tid}`}</li> })}</ul></div>))}{convoys.length === 0 && <p className="text-gray-400">Nenhum comboio formado.</p>}</div>
+                <p><span className="font-semibold">Área:</span> AIS {convoy.ais} - {Array.isArray(convoy.bairros) ? convoy.bairros.join(', ') : convoy.bairros}</p><p><span className="font-semibold">Missão:</span> {convoy.descricao || 'N/A'}</p><p><span className="font-semibold">Supervisão:</span> DPC {convoy.dpc_nome || convoy.dpc} | OIP {convoy.oip_nome || convoy.oip}</p><p><span className="font-semibold">Briefing:</span> {getConvoyMeta(convoy).localBriefing || convoy.localBriefing || 'N/A'}</p><p className="font-semibold mt-2">Equipes:</p><ul className="list-disc list-inside ml-4">{(Array.isArray(convoy.teamIds) ? convoy.teamIds : (getConvoyMeta(convoy).teamIds || []) ).map(tid => { const team = teams.find(t => t.id === tid); return <li key={tid}>{team ? `Chefe ${resolveTeamLeaderName(team)} (Viatura: ${resolveTeamVehicle(team)})` : `Equipe #${tid}`}</li> })}</ul></div>))}{convoysUnicos.length === 0 && <p className="text-gray-400">Nenhum comboio formado.</p>}</div>
             </div>
         </div>
     );
