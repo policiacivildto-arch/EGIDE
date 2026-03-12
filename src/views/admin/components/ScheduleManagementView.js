@@ -78,10 +78,43 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
 
     const toggleRow = (id) => setExpandedRows(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
-    const handleConfirmTeam = async (teamId) => {
+    const buildTeamUpdatePayload = (team, nextStatus) => {
+      const payload = { status: nextStatus };
+
+      const membrosIds = Array.isArray(team?.membros)
+        ? team.membros.filter(Boolean)
+        : [];
+      const membrosDetalhesIds = Array.isArray(team?.membros_detalhes)
+        ? team.membros_detalhes.map((m) => m?.id).filter(Boolean)
+        : [];
+      const membrosMatriculas = Array.isArray(team?.members)
+        ? team.members.map((m) => m?.matricula).filter(Boolean)
+        : Array.isArray(team?.membros_detalhes)
+          ? team.membros_detalhes.map((m) => m?.matricula).filter(Boolean)
+          : [];
+
+      const finalMembrosIds = membrosIds.length > 0 ? membrosIds : membrosDetalhesIds;
+      if (finalMembrosIds.length > 0) {
+        payload.membros = finalMembrosIds;
+      } else if (membrosMatriculas.length > 0) {
+        payload.membros_matriculas = membrosMatriculas;
+      }
+
+      if (team?.chefe) {
+        payload.chefe = team.chefe;
+      } else if (team?.chefe_info?.id) {
+        payload.chefe = team.chefe_info.id;
+      } else if (team?.chefe_matricula) {
+        payload.chefe_matricula = team.chefe_matricula;
+      }
+
+      return payload;
+    };
+
+    const handleConfirmTeam = async (team) => {
         if (!window.confirm("Tem certeza que deseja confirmar esta equipe?")) return;
         try {
-      await apiClient.updateTeam(teamId, { status: 'Aprovada' });
+      await apiClient.updateTeam(team.id, buildTeamUpdatePayload(team, 'Aprovada'));
             showNotification("Equipe confirmada com sucesso!", "success");
         } catch (error) {
             console.error("Erro ao confirmar equipe:", error);
@@ -120,10 +153,10 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
             throw error;
         }
     };
-const handleConfirmConflict = async (teamId) => {
+const handleConfirmConflict = async (team) => {
      if (!window.confirm("Confirmar esta equipe mesmo com o conflito de escala dupla identificado?")) return;
      try {
-   await apiClient.updateTeam(teamId, { status: 'Aprovada' });
+   await apiClient.updateTeam(team.id, buildTeamUpdatePayload(team, 'Aprovada'));
          showNotification("Conflito ignorado e equipe confirmada!", "success");
      } catch (error) {
          console.error("Erro ao confirmar conflito:", error);
@@ -381,7 +414,7 @@ const handleAdminRegister = async (vaga, teamData) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleConfirmConflict(team.id);
+                          handleConfirmConflict(team);
                         }}
                         className="text-green-400 hover:text-green-200"
                         title="Confirmar (Ignorar Conflito)"
@@ -414,7 +447,7 @@ const handleAdminRegister = async (vaga, teamData) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleConfirmTeam(team.id);
+                          handleConfirmTeam(team);
                         }}
                         className="text-green-400 hover:text-green-200"
                         title="Confirmar Equipe"
