@@ -8,6 +8,8 @@ import autoTable from 'jspdf-autotable';
 import { Download } from 'lucide-react';
 import { AIS_OPTIONS, AIS_BAIRROS, BRIEFING_LOCATIONS } from '../../../constants/data'; 
 
+const CONVOY_META_STORAGE_KEY = 'egide_convoy_meta';
+
 const formatLocalDate = (dateValue) => {
     if (!(dateValue instanceof Date) || Number.isNaN(dateValue.getTime())) return '';
     const year = dateValue.getFullYear();
@@ -65,7 +67,7 @@ const drawTeamTable = (pdf, tableBody, startY) => {
     return pdf.lastAutoTable.finalY + 10;
 };
 
-const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle, resolveTeamMembers }) => {
+const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta }) => {
     let cursorY = startY;
     const safeText = (value) => {
         if (Array.isArray(value)) return value.map((item) => String(item ?? '')).join(', ');
@@ -89,17 +91,19 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
         cursorY += 5;
     };
 
-    addInfoLine('ÁREA:', `AIS ${convoy.ais} - ${Array.isArray(convoy.bairros) ? convoy.bairros.join(', ') : convoy.bairros}`);
-    addInfoLine('MISSÃO:', convoy.mission);
-    addInfoLine('SUPERVISÃO:', `DPC ${convoy.dpc} | OIP ${convoy.oip}`);
-    addInfoLine('BRIEFING:', convoy.localBriefing);
+    const meta = getConvoyMeta(convoy);
+    const bairrosTexto = Array.isArray(convoy.bairros) ? convoy.bairros.join(', ') : convoy.bairros;
+    addInfoLine('ÁREA:', `AIS ${convoy.ais || 'N/A'} - ${bairrosTexto || 'N/A'}`);
+    addInfoLine('MISSÃO:', convoy.descricao || 'N/A');
+    addInfoLine('SUPERVISÃO:', `DPC ${convoy.dpc_nome || convoy.dpc || 'N/A'} | OIP ${convoy.oip_nome || convoy.oip || 'N/A'}`);
+    addInfoLine('BRIEFING:', meta.localBriefing || convoy.localBriefing || 'N/A');
     cursorY += 4;
 
     pdf.setFont('helvetica', 'bold');
     pdf.text('EQUIPES:', 14, cursorY);
     cursorY += 5;
 
-    const teamIds = Array.isArray(convoy.teamIds) ? convoy.teamIds : [];
+    const teamIds = Array.isArray(convoy.teamIds) ? convoy.teamIds : (meta.teamIds || []);
     for (const teamId of teamIds) {
         const team = teams.find((t) => t.id === teamId);
         if (!team) continue;
@@ -120,7 +124,7 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
     return cursorY;
 };
 
-const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotification, resolveTeamVehicle, resolveTeamMembers }) => {
+const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotification, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta }) => {
     try {
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pageWidth = pdf.internal.pageSize.getWidth();
@@ -155,6 +159,7 @@ const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotificat
                 teams,
                 resolveTeamVehicle,
                 resolveTeamMembers,
+                getConvoyMeta,
             });
         }
 
@@ -175,6 +180,14 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
 
     // MUDANÇA 1: O estado 'bairro' foi trocado para 'bairros' e agora é um array.
     const [assignmentData, setAssignmentData] = useState({ ais: '', bairros: [], mission: '' });
+    const [convoyMetaMap, setConvoyMetaMap] = useState(() => {
+        try {
+            const raw = localStorage.getItem(CONVOY_META_STORAGE_KEY);
+            return raw ? JSON.parse(raw) : {};
+        } catch {
+            return {};
+        }
+    });
         const [showBairroOptions, setShowBairroOptions] = useState(false); // Estado para controlar o dropdown de bairros
     const bairroDropdownRef = React.useRef(null);
 
@@ -279,6 +292,23 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
         return getDateString(entryDate);
     };
 
+    const saveConvoyMeta = (comboioId, payload) => {
+        if (!comboioId) return;
+        setConvoyMetaMap((prev) => {
+            const next = {
+                ...prev,
+                [String(comboioId)]: {
+                    ...(prev[String(comboioId)] || {}),
+                    ...payload,
+                },
+            };
+            localStorage.setItem(CONVOY_META_STORAGE_KEY, JSON.stringify(next));
+            return next;
+        });
+    };
+
+    const getConvoyMeta = (convoy) => convoyMetaMap[String(convoy?.id)] || {};
+
     const unassignedTeams = teams
         .filter(t => !convoys.some(c => Array.isArray(c?.teamIds) && c.teamIds.includes(t.id)))
         .filter((team) => getTeamEntryDateString(team) === dataOperacao);
@@ -367,7 +397,7 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
 
         const bairrosTexto = assignmentData.bairros.join(', ');
         
-        await apiClient.createConvoy({
+        const createdConvoy = await apiClient.createConvoy({
             data: operationDateStr,
             descricao: finalDescricao,
             dpc: dpcId,
@@ -375,6 +405,11 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
             status: 'Planejado',
             ais: assignmentData.ais,
             bairros: bairrosTexto
+        });
+
+        saveConvoyMeta(createdConvoy?.id, {
+            teamIds: selectedTeams,
+            localBriefing: finalLocalBriefing,
         });
         
         showNotification(`Comboio ${newConvoyNumber} criado com sucesso!`, "success");
@@ -409,6 +444,7 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
             showNotification,
             resolveTeamVehicle,
             resolveTeamMembers,
+            getConvoyMeta,
         });
     };
     
@@ -549,7 +585,7 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
                 </div>
                 <div className="space-y-4">{convoys.map(convoy => (<div key={convoy.id} className="bg-gray-800 p-4 rounded-lg"><p className="font-bold text-lg text-blue-400">Comboio - {resolveConvoyDateLabel(convoy)}</p>
                 {/* MUDANÇA 6: Exibição na lista também ajustada */}
-                <p><span className="font-semibold">Área:</span> AIS {convoy.ais} - {Array.isArray(convoy.bairros) ? convoy.bairros.join(', ') : convoy.bairro}</p><p><span className="font-semibold">Supervisão:</span> DPC {convoy.dpc} | OIP {convoy.oip}</p><p><span className="font-semibold">Briefing:</span> {convoy.localBriefing}</p><p className="font-semibold mt-2">Equipes:</p><ul className="list-disc list-inside ml-4">{(Array.isArray(convoy.teamIds) ? convoy.teamIds : []).map(tid => { const team = teams.find(t => t.id === tid); return <li key={tid}>{team ? `Chefe ${resolveTeamLeaderName(team)} (Viatura: ${resolveTeamVehicle(team)})` : 'Equipe não encontrada'}</li> })}</ul></div>))}{convoys.length === 0 && <p className="text-gray-400">Nenhum comboio formado.</p>}</div>
+                <p><span className="font-semibold">Área:</span> AIS {convoy.ais} - {Array.isArray(convoy.bairros) ? convoy.bairros.join(', ') : convoy.bairros}</p><p><span className="font-semibold">Missão:</span> {convoy.descricao || 'N/A'}</p><p><span className="font-semibold">Supervisão:</span> DPC {convoy.dpc_nome || convoy.dpc} | OIP {convoy.oip_nome || convoy.oip}</p><p><span className="font-semibold">Briefing:</span> {getConvoyMeta(convoy).localBriefing || convoy.localBriefing || 'N/A'}</p><p className="font-semibold mt-2">Equipes:</p><ul className="list-disc list-inside ml-4">{(Array.isArray(convoy.teamIds) ? convoy.teamIds : (getConvoyMeta(convoy).teamIds || []) ).map(tid => { const team = teams.find(t => t.id === tid); return <li key={tid}>{team ? `Chefe ${resolveTeamLeaderName(team)} (Viatura: ${resolveTeamVehicle(team)})` : `Equipe #${tid}`}</li> })}</ul></div>))}{convoys.length === 0 && <p className="text-gray-400">Nenhum comboio formado.</p>}</div>
             </div>
         </div>
     );
