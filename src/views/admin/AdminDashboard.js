@@ -26,6 +26,14 @@ export default function AdminDashboard({ userData, showNotification }) {
     const [isVagasModalOpen, setIsVagasModalOpen] = useState(false);
     const [holidays, setHolidays] = useState([]);
 
+    const toIsoLocalDate = (date) => {
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const viewNames = {
         dashboard: 'Dashboard',
         ranking: 'Ranking',
@@ -85,17 +93,48 @@ export default function AdminDashboard({ userData, showNotification }) {
         const loadWeekData = async () => {
             setLoading(true);
             try {
+                const weekStart = toIsoLocalDate(currentWeek.weekDays[0]);
+                const weekEnd = toIsoLocalDate(currentWeek.weekDays[6]);
+
                 const [vagasRes, teamsRes, convoysRes] = await Promise.all([
-                    apiClient.getVagas({ week_id: currentWeek.weekId }),
-                    apiClient.getTeams({ week_id: currentWeek.weekId }),
-                    apiClient.getConvoys({ week_id: currentWeek.weekId })
+                    apiClient.getVagas({ data__gte: weekStart, data__lte: weekEnd }),
+                    apiClient.getTeams({ 'vaga__data__gte': weekStart, 'vaga__data__lte': weekEnd }),
+                    apiClient.getConvoys()
                 ]);
 
                 const vagasData = Array.isArray(vagasRes) ? vagasRes : vagasRes?.results || [];
-                const teamsData = Array.isArray(teamsRes) ? teamsRes : teamsRes?.results || [];
-                const convoysData = Array.isArray(convoysRes) ? convoysRes : convoysRes?.results || [];
+                const teamsRaw = Array.isArray(teamsRes) ? teamsRes : teamsRes?.results || [];
+                const convoysAll = Array.isArray(convoysRes) ? convoysRes : convoysRes?.results || [];
 
-                setVagas(vagasData);
+                const vagasFiltered = vagasData.filter((vaga) => {
+                    const vagaDate = vaga?.data || vaga?.date;
+                    if (!vagaDate) return false;
+                    const isoDate = String(vagaDate).split('T')[0];
+                    return isoDate >= weekStart && isoDate <= weekEnd;
+                });
+
+                const vagaIds = new Set(vagasFiltered.map((vaga) => Number(vaga?.id)).filter(Number.isFinite));
+
+                const teamsData = teamsRaw.filter((team) => {
+                    const teamVagaId = Number(team?.vaga || team?.vagaId || team?.vaga_info?.id);
+                    if (Number.isFinite(teamVagaId) && vagaIds.has(teamVagaId)) return true;
+
+                    const teamDate = team?.vaga_info?.data || team?.vagaDate;
+                    if (!teamDate) return false;
+                    const isoDate = String(teamDate).split('T')[0];
+                    return isoDate >= weekStart && isoDate <= weekEnd;
+                });
+
+                const convoysData = convoysAll.filter((item) => {
+                    const convoyDate = item?.data || item?.date;
+                    if (!convoyDate) return false;
+                    const isoDate = typeof convoyDate === 'string'
+                        ? convoyDate.split('T')[0]
+                        : toIsoLocalDate(new Date(convoyDate.seconds * 1000));
+                    return isoDate >= weekStart && isoDate <= weekEnd;
+                });
+
+                setVagas(vagasFiltered);
                 setTeams(teamsData);
                 setConvoys(convoysData);
             } catch (error) {
@@ -132,7 +171,7 @@ export default function AdminDashboard({ userData, showNotification }) {
             currentWeek.weekDays.forEach((day, index) => {
                 const { day: dayVagas, night: nightVagas } = vagasConfig[index];
                 const cycleId = getCycleInfo(day).cycleId;
-                const dateStr = day.toISOString().split('T')[0];
+                const dateStr = toIsoLocalDate(day);
 
                 if (Number(dayVagas) > 0) {
                     vagasToCreate.push({
@@ -166,9 +205,17 @@ export default function AdminDashboard({ userData, showNotification }) {
             showNotification('Vagas da semana geradas com sucesso!', 'success');
 
             // Recarregar vagas
-            const vagasRes = await apiClient.getVagas({ week_id: weekId });
+            const weekStart = toIsoLocalDate(currentWeek.weekDays[0]);
+            const weekEnd = toIsoLocalDate(currentWeek.weekDays[6]);
+            const vagasRes = await apiClient.getVagas({ data__gte: weekStart, data__lte: weekEnd });
             const vagasData = Array.isArray(vagasRes) ? vagasRes : vagasRes?.results || [];
-            setVagas(vagasData);
+            const vagasFiltered = vagasData.filter((vaga) => {
+                const vagaDate = vaga?.data || vaga?.date;
+                if (!vagaDate) return false;
+                const isoDate = String(vagaDate).split('T')[0];
+                return isoDate >= weekStart && isoDate <= weekEnd;
+            });
+            setVagas(vagasFiltered);
         } catch (error) {
             console.error('Erro ao gerar vagas:', error);
             showNotification('Falha ao gerar vagas.', 'error');
