@@ -325,12 +325,14 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
         const finalDpc = normalizeName(operationData.dpc);
         const finalOip = normalizeName(operationData.oip);
         const finalLocalBriefing = operationData.localBriefing === 'OUTRO' ? normalizeName(operationData.localBriefingOutro) : operationData.localBriefing;
+        const finalDescricao = normalizeName(assignmentData.mission || `COMBOIO ${newConvoyNumber}`);
         
         await apiClient.createConvoy({
             numeroComboio: newConvoyNumber,
             weekId,
             data: operationDateStr,
             date: operationDateStr,
+            descricao: finalDescricao,
             teamIds: selectedTeams,
             ...assignmentData,
             oip: finalOip,
