@@ -277,195 +277,214 @@ const handleAdminRegister = async (vaga, teamData) => {
         return turnA - turnB;
       }).map(vaga => {
         const teamsForVaga = getTeamsForVaga(vaga.id);
-        const team = teamsForVaga[0];
         const capacity = getVagaCapacity(vaga);
         const used = teamsForVaga.length;
         const hasSlots = used < capacity;
-        const isConflict = team?.status === 'Pendente (Conflito)';
-        const isExpanded = expandedRows.includes(vaga.id);
+        const renderTeamStatus = (candidateTeam) => {
+          if (!candidateTeam) {
+            return (
+              <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-green-900 text-green-300">
+                Disponível ({used}/{capacity})
+              </span>
+            );
+          }
 
-        return (
-          <React.Fragment key={vaga.id}>
-            <tr
-              className={`align-middle ${
-                team ? 'cursor-pointer hover:bg-gray-700/40' : ''
-              } ${isConflict ? 'bg-yellow-900/40 hover:bg-yellow-800/50' : ''}`}
-              onClick={() => team && toggleRow(vaga.id)}
-            >
-              <td className="px-3 py-2 text-center w-10">
-                {team && (isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
-              </td>
+          if (candidateTeam.status === 'Pendente (Conflito)') {
+            return (
+              <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-900 text-yellow-300">
+                <AlertTriangle size={12} className="mr-1" /> Pendente (Conflito)
+              </span>
+            );
+          }
 
-              <td className="px-4 py-2 text-center w-28">
-                {resolveVagaShift(vaga) === 'day' ? '08h-20h' : '19h-01h'}
-              </td>
+          if (candidateTeam.status === 'Em Análise') {
+            return (
+              <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-orange-900 text-orange-300">
+                Em Análise
+              </span>
+            );
+          }
 
-              <td className="px-4 py-2 text-center w-44">
-                {hasSlots ? (
-                  <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-green-900 text-green-300">
-                    Disponível ({used}/{capacity})
-                  </span>
-                ) : isConflict ? (
-                  <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-900 text-yellow-300">
-                    <AlertTriangle size={12} className="mr-1" /> Pendente (Conflito)
-                  </span>
-                ) : team?.status === 'Em Análise' ? (
-                  <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-orange-900 text-orange-300">
-                    Em Análise
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-900 text-blue-300">
-                    Confirmada
-                  </span>
-                )}
-              </td>
+          return (
+            <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-900 text-blue-300">
+              Confirmada
+            </span>
+          );
+        };
 
-              <td
-                className="px-4 py-2 text-left w-64 whitespace-nowrap overflow-hidden text-ellipsis"
-                title={team ? resolveTeamLeadName(team) : ''}
-              >
-                {team ? resolveTeamLeadName(team) : '---'}
-              </td>
-
-              <td className="px-4 py-2 text-center w-36 space-x-2">
-                {hasSlots && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setModalContent({ vaga });
-                    }}
-                    className="text-green-400 hover:text-green-200"
-                    title="Adicionar Equipe"
-                  >
-                    <PlusCircle size={18} />
-                  </button>
-                )}
-                {isConflict && (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingTeam(team);
-                      }}
-                      className="text-blue-400 hover:text-blue-200"
-                      title="Editar Equipe"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfirmConflict(team.id);
-                      }}
-                      className="text-green-400 hover:text-green-200"
-                      title="Confirmar (Ignorar Conflito)"
-                    >
-                      <CheckSquare size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRejectTeam(team);
-                      }}
-                      className="text-red-400 hover:text-red-200"
-                      title="Rejeitar Inscrição"
-                    >
-                      <XSquare size={18} />
-                    </button>
-                  </>
-                )}
-                {team?.status === 'Em Análise' && (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingTeam(team);
-                      }}
-                      className="text-blue-400 hover:text-blue-200"
-                      title="Editar Equipe"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfirmTeam(team.id);
-                      }}
-                      className="text-green-400 hover:text-green-200"
-                      title="Confirmar Equipe"
-                    >
-                      <CheckSquare size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRejectTeam(team);
-                      }}
-                      className="text-red-400 hover:text-red-200"
-                      title="Recusar Equipe"
-                    >
-                      <XSquare size={18} />
-                    </button>
-                  </>
-                )}
-                {team && !isConflict && team.status !== 'Em Análise' && (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingTeam(team);
-                      }}
-                      className="text-blue-400 hover:text-blue-200"
-                      title="Editar Equipe"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteTeam(team);
-                      }}
-                      className="text-red-400 hover:text-red-200"
-                      title="Excluir Equipe"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </>
-                )}
+        if (teamsForVaga.length === 0) {
+          return (
+            <tr key={vaga.id} className="align-middle">
+              <td className="px-3 py-2 text-center w-10"></td>
+              <td className="px-4 py-2 text-center w-28">{resolveVagaShift(vaga) === 'day' ? '08h-20h' : '19h-01h'}</td>
+              <td className="px-4 py-2 text-center w-44">{renderTeamStatus(null)}</td>
+              <td className="px-4 py-2 text-left w-64">---</td>
+              <td className="px-4 py-2 text-center w-36">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModalContent({ vaga });
+                  }}
+                  className="text-green-400 hover:text-green-200"
+                  title="Adicionar Equipe"
+                >
+                  <PlusCircle size={18} />
+                </button>
               </td>
             </tr>
+          );
+        }
 
-            {team && isExpanded && (
-              <tr className={`bg-gray-900/50 ${isConflict ? 'bg-yellow-900/30' : ''}`}>
-                <td colSpan="5" className="p-3">
-                  <div className="p-3 bg-gray-800 rounded-md text-xs">
-                    {isConflict && team.conflictDetails && (
-                      <div className="mb-2 p-2 bg-yellow-800/50 rounded border border-yellow-600 text-yellow-300">
-                        <AlertTriangle size={14} className="inline mr-1" />
-                        Conflito detectado: Policial{' '}
-                        <strong>{team.conflictDetails.officerName}</strong> (Mat.{' '}
-                        {displayMatricula(team.conflictDetails.officerMatricula)}) já possui outra
-                        escala nesta semana.
-                      </div>
-                    )}
-                    <h5 className="font-bold mb-2 text-white">COMPONENTES DA EQUIPE:</h5>
-                    <ul className="list-disc list-inside space-y-1">
-                      {resolveTeamMembers(team).map((m, index) => (
-                        <li key={m.uid || m.matricula || index}>
-                          {m.nome} {m.matricula ? `(${displayMatricula(m.matricula)})` : ''} {m.delegacia ? `- ${m.delegacia}` : ''}
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="mt-2 pt-2 border-t border-gray-700">
-                      <strong>Telefone do Chefe:</strong>{' '}
-                      {resolveTeamLeadPhone(team)}
-                    </p>
-                  </div>
+        return teamsForVaga.map((team) => {
+          const isConflict = team?.status === 'Pendente (Conflito)';
+          const rowKey = `${vaga.id}-${team.id}`;
+          const isExpanded = expandedRows.includes(rowKey);
+
+          return (
+            <React.Fragment key={rowKey}>
+              <tr
+                className={`align-middle cursor-pointer hover:bg-gray-700/40 ${isConflict ? 'bg-yellow-900/40 hover:bg-yellow-800/50' : ''}`}
+                onClick={() => toggleRow(rowKey)}
+              >
+                <td className="px-3 py-2 text-center w-10">{isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</td>
+                <td className="px-4 py-2 text-center w-28">{resolveVagaShift(vaga) === 'day' ? '08h-20h' : '19h-01h'}</td>
+                <td className="px-4 py-2 text-center w-44">{renderTeamStatus(team)}</td>
+                <td className="px-4 py-2 text-left w-64 whitespace-nowrap overflow-hidden text-ellipsis" title={resolveTeamLeadName(team)}>
+                  {resolveTeamLeadName(team)}
+                </td>
+                <td className="px-4 py-2 text-center w-36 space-x-2">
+                  {hasSlots && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setModalContent({ vaga });
+                      }}
+                      className="text-green-400 hover:text-green-200"
+                      title="Adicionar Equipe"
+                    >
+                      <PlusCircle size={18} />
+                    </button>
+                  )}
+
+                  {isConflict ? (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTeam(team);
+                        }}
+                        className="text-blue-400 hover:text-blue-200"
+                        title="Editar Equipe"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConfirmConflict(team.id);
+                        }}
+                        className="text-green-400 hover:text-green-200"
+                        title="Confirmar (Ignorar Conflito)"
+                      >
+                        <CheckSquare size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRejectTeam(team);
+                        }}
+                        className="text-red-400 hover:text-red-200"
+                        title="Rejeitar Inscrição"
+                      >
+                        <XSquare size={18} />
+                      </button>
+                    </>
+                  ) : team?.status === 'Em Análise' ? (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTeam(team);
+                        }}
+                        className="text-blue-400 hover:text-blue-200"
+                        title="Editar Equipe"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConfirmTeam(team.id);
+                        }}
+                        className="text-green-400 hover:text-green-200"
+                        title="Confirmar Equipe"
+                      >
+                        <CheckSquare size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRejectTeam(team);
+                        }}
+                        className="text-red-400 hover:text-red-200"
+                        title="Recusar Equipe"
+                      >
+                        <XSquare size={18} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTeam(team);
+                        }}
+                        className="text-blue-400 hover:text-blue-200"
+                        title="Editar Equipe"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTeam(team);
+                        }}
+                        className="text-red-400 hover:text-red-200"
+                        title="Excluir Equipe"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
-            )}
-          </React.Fragment>
-        );
+
+              {isExpanded && (
+                <tr className={`bg-gray-900/50 ${isConflict ? 'bg-yellow-900/30' : ''}`}>
+                  <td colSpan="5" className="p-3">
+                    <div className="p-3 bg-gray-800 rounded-md text-xs">
+                      {isConflict && team.conflictDetails && (
+                        <div className="mb-2 p-2 bg-yellow-800/50 rounded border border-yellow-600 text-yellow-300">
+                          <AlertTriangle size={14} className="inline mr-1" />
+                          Conflito detectado: Policial <strong>{team.conflictDetails.officerName}</strong> (Mat. {displayMatricula(team.conflictDetails.officerMatricula)}) já possui outra escala nesta semana.
+                        </div>
+                      )}
+                      <h5 className="font-bold mb-2 text-white">COMPONENTES DA EQUIPE:</h5>
+                      <ul className="list-disc list-inside space-y-1">
+                        {resolveTeamMembers(team).map((m, index) => (
+                          <li key={m.uid || m.matricula || index}>
+                            {m.nome} {m.matricula ? `(${displayMatricula(m.matricula)})` : ''} {m.delegacia ? `- ${m.delegacia}` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 pt-2 border-t border-gray-700"><strong>Telefone do Chefe:</strong> {resolveTeamLeadPhone(team)}</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
+          );
+        });
       })}
     </tbody>
   </table>
