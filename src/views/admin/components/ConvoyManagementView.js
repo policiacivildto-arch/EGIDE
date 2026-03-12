@@ -67,6 +67,11 @@ const drawTeamTable = (pdf, tableBody, startY) => {
 
 const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle, resolveTeamMembers }) => {
     let cursorY = startY;
+    const safeText = (value) => {
+        if (Array.isArray(value)) return value.map((item) => String(item ?? '')).join(', ');
+        if (value === null || value === undefined) return '';
+        return String(value);
+    };
 
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'bold');
@@ -78,9 +83,9 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
 
     const addInfoLine = (label, value) => {
         pdf.setFont('helvetica', 'bold');
-        pdf.text(label, 14, cursorY);
+        pdf.text(safeText(label), 14, cursorY);
         pdf.setFont('helvetica', 'normal');
-        pdf.text(value, 42, cursorY);
+        pdf.text(safeText(value), 42, cursorY);
         cursorY += 5;
     };
 
@@ -101,7 +106,11 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
 
         pdf.setFontSize(9);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`Equipe: ${team.teamName || team.delegaciaPrincipal || 'Sem identificação'} | Viatura: ${resolveTeamVehicle(team)}`, 14, cursorY);
+        pdf.text(
+            safeText(`Equipe: ${team.teamName || team.delegaciaPrincipal || `Equipe #${team?.id || 'N/A'}`} | Viatura: ${resolveTeamVehicle(team) || 'N/A'}`),
+            14,
+            cursorY
+        );
         cursorY += 5;
 
         const tableBody = buildTeamTableBody(team, resolveTeamMembers);
