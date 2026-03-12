@@ -32,19 +32,29 @@ const parseDateSafe = (rawDate) => {
 };
 
 const buildTeamTableBody = (team, resolveTeamMembers) => {
-    return resolveTeamMembers(team).map((member) => {
-        const isChefe = String(member?.matricula || '') === String(team?.registeringOfficer?.matricula || '');
+    const members = resolveTeamMembers(team);
+
+    if (!Array.isArray(members) || members.length === 0) {
+        return [[
+            team?.chefe_nome || 'Sem nome',
+            team?.chefe_matricula ? displayMatricula(team.chefe_matricula) : 'N/A',
+            team?.telefone_contato || 'N/A',
+        ]];
+    }
+
+    return members.map((member) => {
+        const phone = member?.telefone || member?.telefone_contato || team?.telefone_contato || 'N/A';
         return [
-            isChefe ? 'CHEFE' : 'COMPONENTE',
             member?.nome || 'Sem nome',
-            displayMatricula(member?.matricula || ''),
+            member?.matricula ? displayMatricula(member.matricula) : 'N/A',
+            phone,
         ];
     });
 };
 
 const drawTeamTable = (pdf, tableBody, startY) => {
     autoTable(pdf, {
-        head: [['FUNÇÃO', 'NOME', 'MATRÍCULA']],
+        head: [['NOME', 'MATRÍCULA', 'TELEFONE']],
         body: tableBody,
         startY,
         theme: 'grid',
