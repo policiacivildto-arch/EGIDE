@@ -96,7 +96,7 @@ const drawTeamTable = (pdf, tableBody, startY) => {
     return pdf.lastAutoTable.finalY + 10;
 };
 
-const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta }) => {
+const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta, briefingFallback }) => {
     let cursorY = startY;
     const safeText = (value) => {
         if (Array.isArray(value)) return value.map((item) => String(item ?? '')).join(', ');
@@ -125,7 +125,7 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
     addInfoLine('ÁREA:', `AIS ${convoy.ais || 'N/A'} - ${bairrosTexto || 'N/A'}`);
     addInfoLine('MISSÃO:', convoy.descricao || 'N/A');
     addInfoLine('SUPERVISÃO:', `DPC ${convoy.dpc_nome || convoy.dpc || 'N/A'} | OIP ${convoy.oip_nome || convoy.oip || 'N/A'}`);
-    addInfoLine('BRIEFING:', meta.localBriefing || convoy.localBriefing || 'N/A');
+    addInfoLine('BRIEFING:', meta.localBriefing || convoy.localBriefing || briefingFallback || 'N/A');
     cursorY += 4;
 
     pdf.setFont('helvetica', 'bold');
@@ -148,14 +148,18 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
 
     teamIds = [...new Set(teamIds.map((id) => Number(id)).filter(Number.isFinite))];
 
-    for (const teamId of teamIds) {
+    for (let teamIndex = 0; teamIndex < teamIds.length; teamIndex += 1) {
+        const teamId = teamIds[teamIndex];
         const team = teams.find((t) => Number(t.id) === Number(teamId));
         if (!team) continue;
+
+        const teamSeq = teamIndex + 1;
+        const teamVehicle = resolveTeamVehicle(team) || 'N/A';
 
         pdf.setFontSize(9);
         pdf.setFont('helvetica', 'bold');
         pdf.text(
-            safeText(`Equipe: ${team.teamName || team.delegaciaPrincipal || `Equipe #${team?.id || 'N/A'}`} | Viatura: ${resolveTeamVehicle(team) || 'N/A'}`),
+            safeText(`Equipe ${teamSeq} | VTR ${teamSeq}${teamVehicle !== 'N/A' ? ` - ${teamVehicle}` : ''}`),
             14,
             cursorY
         );
@@ -168,7 +172,7 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
     return cursorY;
 };
 
-const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotification, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta }) => {
+const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotification, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta, briefingFallback }) => {
     try {
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pageWidth = pdf.internal.pageSize.getWidth();
@@ -204,6 +208,7 @@ const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotificat
                 resolveTeamVehicle,
                 resolveTeamMembers,
                 getConvoyMeta,
+                briefingFallback,
             });
         }
 
@@ -534,6 +539,10 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
             return;
         }
 
+        const briefingFallback = operationData.localBriefing === 'OUTRO'
+            ? normalizeName(operationData.localBriefingOutro)
+            : operationData.localBriefing;
+
         generateEscalaPDF({
             dataOperacaoStr,
             convoysDoDia,
@@ -542,6 +551,7 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
             resolveTeamVehicle,
             resolveTeamMembers,
             getConvoyMeta,
+            briefingFallback,
         });
     };
     
