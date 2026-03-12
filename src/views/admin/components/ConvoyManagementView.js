@@ -172,21 +172,50 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
     return cursorY;
 };
 
-const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotification, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta, briefingFallback }) => {
+const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotification, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta, briefingFallback, departamento }) => {
     try {
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
         let startY = 15;
+
+        const data = new Date(dataOperacaoStr + 'T12:00:00');
+        const dataFormatada = data.toLocaleDateString('pt-BR', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+
+        // Capa no estilo do template de plano operacional
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(16);
+        pdf.text('DEPARTAMENTO TECNICO OPERACIONAL', pageWidth / 2, 42, { align: 'center' });
+        pdf.setFontSize(14);
+        pdf.text('SECAO DE OPERACOES', pageWidth / 2, 52, { align: 'center' });
+
+        pdf.setFontSize(18);
+        pdf.text('PLANO OPERACIONAL', pageWidth / 2, 90, { align: 'center' });
+        pdf.setFontSize(15);
+        pdf.text('OPERACAO EGIDE', pageWidth / 2, 102, { align: 'center' });
+        pdf.setFontSize(12);
+        pdf.text(`MODELO: _TEMPLATE PLANO - OPERACAO +1 DEPARTAMENTO`, pageWidth / 2, 116, { align: 'center' });
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(12);
+        pdf.text(`Departamento: ${departamento || 'N/A'}`, pageWidth / 2, 142, { align: 'center' });
+        pdf.text(`Data da Escala: ${dataFormatada}`, pageWidth / 2, 152, { align: 'center' });
+        pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth / 2, 162, { align: 'center' });
+
+        pdf.setFontSize(10);
+        pdf.text('Documento de Escala Operacional', pageWidth / 2, pageHeight - 18, { align: 'center' });
+
+        // Nova página com a escala em tabela
+        pdf.addPage();
+        startY = 15;
 
         pdf.setFontSize(14);
         pdf.setFont('helvetica', 'bold');
         pdf.text('ESCALA OPERACIONAL DIÁRIA', pageWidth / 2, startY, { align: 'center' });
         startY += 7;
 
-        const data = new Date(dataOperacaoStr + 'T12:00:00');
-        const dataFormatada = data.toLocaleDateString('pt-BR', {
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-        });
         pdf.setFontSize(10);
         pdf.setFont('helvetica', 'normal');
         pdf.text(dataFormatada, pageWidth / 2, startY, { align: 'center' });
@@ -552,6 +581,7 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
             resolveTeamMembers,
             getConvoyMeta,
             briefingFallback,
+            departamento,
         });
     };
     
