@@ -7,6 +7,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Download } from 'lucide-react';
 import { AIS_OPTIONS, AIS_BAIRROS, BRIEFING_LOCATIONS } from '../../../constants/data'; 
+import brasaoPcce from '../../../assets/brasao-pcce.png';
 
 const CONVOY_META_STORAGE_KEY = 'egide_convoy_meta';
 
@@ -172,12 +173,31 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
     return cursorY;
 };
 
-const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotification, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta, briefingFallback, departamento }) => {
+const generateEscalaPDF = async ({ dataOperacaoStr, convoysDoDia, teams, showNotification, resolveTeamVehicle, resolveTeamMembers, getConvoyMeta, briefingFallback, departamento }) => {
     try {
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
         let startY = 15;
+
+        const addCoverImage = async () => {
+            try {
+                const imageElement = new Image();
+                imageElement.crossOrigin = 'anonymous';
+                imageElement.src = brasaoPcce;
+                await new Promise((resolve, reject) => {
+                    imageElement.onload = resolve;
+                    imageElement.onerror = reject;
+                });
+                const imageWidth = 28;
+                const imageHeight = 28;
+                const imageX = (pageWidth - imageWidth) / 2;
+                const imageY = 58;
+                pdf.addImage(imageElement, 'PNG', imageX, imageY, imageWidth, imageHeight);
+            } catch (error) {
+                console.warn('Nao foi possivel carregar o brasao na capa do PDF:', error);
+            }
+        };
 
         const data = new Date(dataOperacaoStr + 'T12:00:00');
         const dataFormatada = data.toLocaleDateString('pt-BR', {
@@ -188,21 +208,22 @@ const generateEscalaPDF = ({ dataOperacaoStr, convoysDoDia, teams, showNotificat
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(16);
         pdf.text('DEPARTAMENTO TECNICO OPERACIONAL', pageWidth / 2, 42, { align: 'center' });
-        pdf.setFontSize(14);
+        pdf.setFontSize(13);
         pdf.text('SECAO DE OPERACOES', pageWidth / 2, 52, { align: 'center' });
 
+        await addCoverImage();
+
         pdf.setFontSize(18);
-        pdf.text('PLANO OPERACIONAL', pageWidth / 2, 90, { align: 'center' });
+        pdf.text('PLANO OPERACIONAL', pageWidth / 2, 98, { align: 'center' });
         pdf.setFontSize(15);
-        pdf.text('OPERACAO EGIDE', pageWidth / 2, 102, { align: 'center' });
-        pdf.setFontSize(12);
-        pdf.text(`MODELO: _TEMPLATE PLANO - OPERACAO +1 DEPARTAMENTO`, pageWidth / 2, 116, { align: 'center' });
+        pdf.text('OPERACAO EGIDE', pageWidth / 2, 110, { align: 'center' });
+        pdf.setFontSize(11);
+        pdf.text('MODELO: _TEMPLATE PLANO - OPERACAO +1 DEPARTAMENTO', pageWidth / 2, 124, { align: 'center' });
 
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(12);
-        pdf.text(`Departamento: ${departamento || 'N/A'}`, pageWidth / 2, 142, { align: 'center' });
-        pdf.text(`Data da Escala: ${dataFormatada}`, pageWidth / 2, 152, { align: 'center' });
-        pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth / 2, 162, { align: 'center' });
+        pdf.text(`Data da Escala: ${dataFormatada}`, pageWidth / 2, 146, { align: 'center' });
+        pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth / 2, 156, { align: 'center' });
 
         pdf.setFontSize(10);
         pdf.text('Documento de Escala Operacional', pageWidth / 2, pageHeight - 18, { align: 'center' });
