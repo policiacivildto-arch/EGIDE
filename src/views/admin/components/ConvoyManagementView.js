@@ -189,6 +189,12 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
         return team?.registeringOfficer?.nome || team?.chefe_nome || team?.membros_detalhes?.[0]?.nome || 'Sem chefe';
     };
 
+    const resolveTeamDisplayName = (team) => {
+        const rawName = team?.teamName || team?.delegaciaPrincipal;
+        if (rawName && String(rawName).trim()) return rawName;
+        return `Equipe #${team?.id || 'N/A'}`;
+    };
+
     const resolveTeamVehicle = (team) => {
         return team?.vehicle || team?.viatura_placa || 'N/A';
     };
@@ -432,15 +438,14 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
                                 <div className="flex items-center space-x-3">
                                     <input id={`team-select-${team.id}`} type="checkbox" checked={selectedTeams.includes(team.id)} onChange={() => handleSelectTeam(team.id)} className="form-checkbox h-5 w-5 text-blue-600 bg-gray-800 border-gray-600" />
                                     <div>
-                                        
-                                                     <p className="font-bold">{team.teamName || team.delegaciaPrincipal || 'Equipe sem identificação'}</p>
-                           <p className="text-sm">
-                                                         Chefe: {resolveTeamLeaderName(team)} | Viatura: {resolveTeamVehicle(team)}</p>
-                               <p className="text-xs text-gray-400">
-    Disponível em: {resolveTeamDateLabel(team)}
-</p>
-                                </div>
-                                    <label htmlFor={`team-select-${team.id}`} className="sr-only">Selecionar equipe {team.teamName || team.delegaciaPrincipal || team.id}</label>
+                                        <p className="font-bold">{resolveTeamDisplayName(team)}</p>
+                                        <p className="text-xs text-blue-300">ID da equipe: {team.id}</p>
+                                        <p className="text-sm">Chefe: {resolveTeamLeaderName(team)} | Viatura: {resolveTeamVehicle(team)}</p>
+                                        <p className="text-xs text-gray-400">Disponível em: {resolveTeamDateLabel(team)}</p>
+								</div>
+                                    <label htmlFor={`team-select-${team.id}`} className="text-xs font-semibold text-blue-300 hover:text-blue-200 cursor-pointer whitespace-nowrap">
+                                        Selecionar equipe #{team.id}
+                                    </label>
                                 </div>
                             </div>
                         ))}
