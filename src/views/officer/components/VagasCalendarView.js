@@ -13,13 +13,32 @@ import { Download, ChevronDown, ChevronUp } from 'lucide-react';
 const getVagaDateObject = (vaga) => {
     const rawDate = vaga?.data || vaga?.date;
     if (!rawDate) return null;
-    if (typeof rawDate === 'string') return new Date(rawDate);
+    if (typeof rawDate === 'string') {
+        const isoDateMatch = /^(\d{4}-\d{2}-\d{2})/.exec(rawDate);
+        if (isoDateMatch) return new Date(`${isoDateMatch[1]}T12:00:00`);
+        return new Date(rawDate);
+    }
     if (rawDate?.seconds) return new Date(rawDate.seconds * 1000);
     return null;
 };
 
-const getVagaDayKey = (vaga) => {
+const getVagaShiftType = (vaga) => String(vaga?.turno || vaga?.shiftType || '').toLowerCase();
+
+const getVagaOperationalDateObject = (vaga) => {
     const parsedDate = getVagaDateObject(vaga);
+    if (!parsedDate || Number.isNaN(parsedDate.getTime())) return null;
+
+    if (getVagaShiftType(vaga) === 'night') {
+        const adjustedDate = new Date(parsedDate);
+        adjustedDate.setDate(adjustedDate.getDate() - 1);
+        return adjustedDate;
+    }
+
+    return parsedDate;
+};
+
+const getVagaDayKey = (vaga) => {
+    const parsedDate = getVagaOperationalDateObject(vaga);
     if (!parsedDate || Number.isNaN(parsedDate.getTime())) return null;
     return format(parsedDate, 'yyyy-MM-dd');
 };
@@ -373,7 +392,7 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
     return (
         <form onSubmit={handleSubmit}>
             <h2 className="text-2xl font-bold mb-4 text-gray-800">Registrar Equipe para Serviço</h2>
-            <p className="mb-6 text-gray-600">Dia: <span className="font-semibold">{(getVagaDateObject(vaga) || new Date()).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span></p>
+            <p className="mb-6 text-gray-600">Dia: <span className="font-semibold">{(getVagaOperationalDateObject(vaga) || new Date()).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span></p>
             {team.map((member, index) => (
                 <div key={index} className="mb-6 p-4 border border-gray-300 rounded-lg bg-white">
                     <h3 className="font-bold text-lg mb-2 text-gray-700">Componente {index + 1} {index === 0 ? "(Chefe da Equipe)" : ""}</h3>

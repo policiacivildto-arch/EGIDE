@@ -68,7 +68,11 @@ export const AdminEditTeamModal = ({ teamToEdit, allUsers, onSave, onCancel, sho
                 Data: <span className="font-semibold">{(() => {
                     const rawDate = teamToEdit?.vagaDate || teamToEdit?.vaga_info?.data;
                     if (!rawDate) return 'N/A';
-                    if (typeof rawDate === 'string') return new Date(rawDate).toLocaleDateString('pt-BR');
+                    if (typeof rawDate === 'string') {
+                        const isoDateMatch = /^(\d{4}-\d{2}-\d{2})/.exec(rawDate);
+                        if (isoDateMatch) return new Date(`${isoDateMatch[1]}T12:00:00`).toLocaleDateString('pt-BR');
+                        return new Date(rawDate).toLocaleDateString('pt-BR');
+                    }
                     if (rawDate?.seconds) return new Date(rawDate.seconds * 1000).toLocaleDateString('pt-BR');
                     return 'N/A';
                 })()}</span> | 

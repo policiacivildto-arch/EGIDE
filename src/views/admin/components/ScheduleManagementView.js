@@ -36,6 +36,19 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
 
   const resolveVagaShift = (vaga) => vaga?.shiftType || vaga?.turno;
 
+  const resolveOperationalDate = useCallback((vaga) => {
+    const parsedDate = resolveVagaDate(vaga);
+    if (!parsedDate || Number.isNaN(parsedDate.getTime())) return null;
+
+    if (resolveVagaShift(vaga) === 'night') {
+      const adjusted = new Date(parsedDate);
+      adjusted.setDate(adjusted.getDate() - 1);
+      return adjusted;
+    }
+
+    return parsedDate;
+  }, [resolveVagaDate]);
+
   const resolveTeamVagaId = (team) => team?.vagaId || team?.vaga || team?.vaga_info?.id;
 
   const resolveTeamLeadName = (team) => team?.registeringOfficer?.nome || team?.chefe_nome || '---';
@@ -206,14 +219,14 @@ const handleAdminRegister = async (vaga, teamData) => {
 };
     const vagasByDay = useMemo(() => {
         return vagas.reduce((acc, vaga) => { 
-            const parsedDate = resolveVagaDate(vaga);
+            const parsedDate = resolveOperationalDate(vaga);
             if (!parsedDate || Number.isNaN(parsedDate.getTime())) return acc;
             const dayKey = parsedDate.toDateString(); 
             if (!acc[dayKey]) acc[dayKey] = []; 
             acc[dayKey].push(vaga); 
             return acc; 
         }, {});
-  }, [vagas, resolveVagaDate]);
+  }, [vagas, resolveOperationalDate]);
 
     const sortedDays = useMemo(() => Object.keys(vagasByDay).sort((a, b) => new Date(a) - new Date(b)), [vagasByDay]);
 

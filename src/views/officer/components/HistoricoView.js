@@ -13,7 +13,11 @@ export const HistoricoView = ({ user, showNotification }) => {
 
     const parseDate = (rawDate) => {
         if (!rawDate) return null;
-        if (typeof rawDate === 'string') return new Date(rawDate);
+        if (typeof rawDate === 'string') {
+            const isoDateMatch = /^(\d{4}-\d{2}-\d{2})/.exec(rawDate);
+            if (isoDateMatch) return new Date(`${isoDateMatch[1]}T12:00:00`);
+            return new Date(rawDate);
+        }
         if (rawDate?.seconds) return new Date(rawDate.seconds * 1000);
         return null;
     };
