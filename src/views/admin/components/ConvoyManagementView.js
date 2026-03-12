@@ -320,9 +320,24 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
 
     try {
             const operationDateStr = dataOperacao;
+
+        const resolvePolicialIdByName = async (nome) => {
+            const trimmed = String(nome || '').trim();
+            if (!trimmed) return null;
+
+            const response = await apiClient.getPoliciais({ search: trimmed });
+            const policiais = Array.isArray(response) ? response : (response?.results || []);
+
+            if (policiais.length === 0) return null;
+
+            const normalizedTarget = normalizeName(trimmed);
+            const exact = policiais.find((p) => normalizeName(p?.nome || '') === normalizedTarget);
+            const fallback = exact || policiais[0];
+            return fallback?.id || null;
+        };
         
         // Consulta quantos comboios já existem para esta data
-        const existingConvoys = await apiClient.getConvoys({ date: operationDateStr });
+        const existingConvoys = await apiClient.getConvoys({ data: operationDateStr });
         const existingConvoysCount = Array.isArray(existingConvoys) ? existingConvoys.length : 0;
         
         // O número do novo comboio é o total existente + 1
@@ -332,20 +347,25 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
         const finalOip = normalizeName(operationData.oip);
         const finalLocalBriefing = operationData.localBriefing === 'OUTRO' ? normalizeName(operationData.localBriefingOutro) : operationData.localBriefing;
         const finalDescricao = normalizeName(assignmentData.mission || `COMBOIO ${newConvoyNumber}`);
+
+        const dpcId = await resolvePolicialIdByName(finalDpc);
+        const oipId = await resolvePolicialIdByName(finalOip);
+
+        if (!dpcId || !oipId) {
+            showNotification('DPC/OIP devem corresponder a policiais cadastrados (nome existente).', 'error');
+            return;
+        }
+
+        const bairrosTexto = assignmentData.bairros.join(', ');
         
         await apiClient.createConvoy({
-            numeroComboio: newConvoyNumber,
-            weekId,
             data: operationDateStr,
-            date: operationDateStr,
             descricao: finalDescricao,
-            teamIds: selectedTeams,
-            ...assignmentData,
-            oip: finalOip,
-            dpc: finalDpc,
-            localBriefing: finalLocalBriefing,
-            status: 'Formado',
-            departamento: departamento || 'N/A'
+            dpc: dpcId,
+            oip: oipId,
+            status: 'Planejado',
+            ais: assignmentData.ais,
+            bairros: bairrosTexto
         });
         
         showNotification(`Comboio ${newConvoyNumber} criado com sucesso!`, "success");
@@ -363,7 +383,7 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
 
     const gerarPDF = (dataOperacaoStr) => {
         // ALTERAÇÃO 1: Filtra a lista de comboios ANTES de qualquer outra coisa.
-        const convoysDoDia = convoys.filter(c => isSameDay(c.date, dataOperacaoStr));
+        const convoysDoDia = convoys.filter(c => isSameDay(c.date || c.data, dataOperacaoStr));
         
         // ALTERAÇÃO 2: A validação agora usa a lista FILTRADA.
         if (convoysDoDia.length === 0) {
