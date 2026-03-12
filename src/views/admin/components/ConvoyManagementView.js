@@ -197,17 +197,32 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
         return team?.vaga_info?.data || team?.vagaDate || team?.dataEntrada || team?.data_entrada || team?.entryDate || team?.entrada;
     };
 
-    const resolveTeamDateLabel = (team) => {
+    const getTeamOperationDateObject = (team) => {
         const rawDate = getTeamOperationRawDate(team);
-        if (!rawDate) return 'Data não informada';
+        if (!rawDate) return null;
+
+        const parsedDate = parseDateSafe(rawDate);
+        if (!parsedDate || Number.isNaN(parsedDate.getTime())) return null;
+
+        const shiftType = String(team?.vaga_info?.turno || team?.vagaShiftType || '').toLowerCase();
+        if (shiftType === 'night') {
+            const operationalDate = new Date(parsedDate);
+            operationalDate.setDate(operationalDate.getDate() - 1);
+            return operationalDate;
+        }
+
+        return parsedDate;
+    };
+
+    const resolveTeamDateLabel = (team) => {
+        const parsedDate = getTeamOperationDateObject(team);
+        if (!parsedDate) return 'Data não informada';
         try {
-            const parsedDate = parseDateSafe(rawDate);
-            if (parsedDate && !Number.isNaN(parsedDate.getTime())) return parsedDate.toLocaleDateString('pt-BR');
+            return parsedDate.toLocaleDateString('pt-BR');
         } catch (error) {
             console.warn('Data de entrada inválida:', error);
             return 'Data não informada';
         }
-        return 'Data não informada';
     };
 
     const resolveTeamMembers = (team) => {
@@ -245,8 +260,8 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
     };
 
     const getTeamEntryDateString = (team) => {
-        const entryRawDate = getTeamOperationRawDate(team);
-        return getDateString(entryRawDate);
+        const entryDate = getTeamOperationDateObject(team);
+        return getDateString(entryDate);
     };
 
     const unassignedTeams = teams
