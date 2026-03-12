@@ -31,6 +31,25 @@ const parseDateSafe = (rawDate) => {
     return new Date(rawDate);
 };
 
+const getDateStringYmd = (rawDate) => {
+    const parsed = parseDateSafe(rawDate);
+    if (!parsed || Number.isNaN(parsed.getTime())) return '';
+    return formatLocalDate(parsed);
+};
+
+const getTeamOperationDateStringForPdf = (team) => {
+    const rawDate = team?.vaga_info?.data || team?.vagaDate || team?.dataEntrada || team?.data_entrada || team?.entryDate || team?.entrada;
+    const parsed = parseDateSafe(rawDate);
+    if (!parsed || Number.isNaN(parsed.getTime())) return '';
+
+    const shiftType = String(team?.vaga_info?.turno || team?.vagaShiftType || '').toLowerCase();
+    if (shiftType === 'night') {
+        parsed.setDate(parsed.getDate() - 1);
+    }
+
+    return formatLocalDate(parsed);
+};
+
 const buildTeamTableBody = (team, resolveTeamMembers) => {
     const members = resolveTeamMembers(team);
 
@@ -113,9 +132,24 @@ const drawConvoyBlock = ({ pdf, convoy, index, startY, teams, resolveTeamVehicle
     pdf.text('EQUIPES:', 14, cursorY);
     cursorY += 5;
 
-    const teamIds = Array.isArray(convoy.teamIds) ? convoy.teamIds : (meta.teamIds || []);
+    const explicitTeamIds = Array.isArray(convoy.teamIds) ? convoy.teamIds : [];
+    const metaTeamIds = Array.isArray(meta.teamIds) ? meta.teamIds : [];
+    let teamIds = explicitTeamIds.length > 0 ? explicitTeamIds : metaTeamIds;
+
+    if (teamIds.length === 0) {
+        const convoyDateStr = getDateStringYmd(convoy?.date || convoy?.data);
+        if (convoyDateStr) {
+            teamIds = teams
+                .filter((team) => getTeamOperationDateStringForPdf(team) === convoyDateStr)
+                .map((team) => team.id)
+                .filter(Boolean);
+        }
+    }
+
+    teamIds = [...new Set(teamIds.map((id) => Number(id)).filter(Number.isFinite))];
+
     for (const teamId of teamIds) {
-        const team = teams.find((t) => t.id === teamId);
+        const team = teams.find((t) => Number(t.id) === Number(teamId));
         if (!team) continue;
 
         pdf.setFontSize(9);
