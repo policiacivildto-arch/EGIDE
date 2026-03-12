@@ -217,9 +217,6 @@ const generateEscalaPDF = async ({ dataOperacaoStr, convoysDoDia, teams, showNot
         pdf.text('PLANO OPERACIONAL', pageWidth / 2, 98, { align: 'center' });
         pdf.setFontSize(15);
         pdf.text('OPERACAO EGIDE', pageWidth / 2, 110, { align: 'center' });
-        pdf.setFontSize(11);
-        pdf.text('MODELO: _TEMPLATE PLANO - OPERACAO +1 DEPARTAMENTO', pageWidth / 2, 124, { align: 'center' });
-
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(12);
         pdf.text(`Data da Escala: ${dataFormatada}`, pageWidth / 2, 146, { align: 'center' });
