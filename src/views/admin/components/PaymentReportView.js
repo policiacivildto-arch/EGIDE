@@ -7,6 +7,9 @@ import {
     displayMatricula 
 } from '../../../utils/helpers'
 import { LoadingSpinner } from '../../../components/ui/Shared';
+
+const ATTENDANCE_STORAGE_KEY = 'payment_report_attendance_v1';
+
 export const PaymentReportView = ({ allUsers = [], showNotification, departamento }) => {
     const today = new Date().toISOString().split('T')[0];
     const [startDate, setStartDate] = useState(today);
@@ -15,9 +18,59 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     const [convoysForPeriod, setConvoysForPeriod] = useState([]);
     const [loading, setLoading] = useState(false);
     const [expandedTeams, setExpandedTeams] = useState({});
-    const [attendanceStatus, setAttendanceStatus] = useState({});
-    const [substitutions, setSubstitutions] = useState({});
+    const [attendanceStatus, setAttendanceStatus] = useState(() => {
+        try {
+            const saved = localStorage.getItem(ATTENDANCE_STORAGE_KEY);
+            if (!saved) return {};
+            const parsed = JSON.parse(saved);
+            return parsed?.attendanceStatus || {};
+        } catch {
+            return {};
+        }
+    });
+    const [substitutions, setSubstitutions] = useState(() => {
+        try {
+            const saved = localStorage.getItem(ATTENDANCE_STORAGE_KEY);
+            if (!saved) return {};
+            const parsed = JSON.parse(saved);
+            return parsed?.substitutions || {};
+        } catch {
+            return {};
+        }
+    });
     const [substituteSelectorOpen, setSubstituteSelectorOpen] = useState({});
+
+    useEffect(() => {
+        localStorage.setItem(ATTENDANCE_STORAGE_KEY, JSON.stringify({ attendanceStatus, substitutions }));
+    }, [attendanceStatus, substitutions]);
+
+    const persistTeamAttendance = async (teamRow, nextAttendanceStatus, nextSubstitutions) => {
+        const teamKeys = Object.keys(nextAttendanceStatus).filter((key) => key.startsWith(`${teamRow.id}-`));
+        const attendancePayload = teamKeys.map((key) => ({
+            key,
+            status: nextAttendanceStatus[key],
+            substitution: nextSubstitutions[key] || null,
+        }));
+
+        const observacoesAtuais = String(teamRow?.rawService?.observacoes || '');
+        const semBlocoAnterior = observacoesAtuais.replace(/\n?ATTENDANCE::\{[\s\S]*\}$/m, '').trim();
+        const attendanceText = `ATTENDANCE::${JSON.stringify({
+            updatedAt: new Date().toISOString(),
+            teamId: teamRow.id,
+            date: teamRow.dateKey,
+            attendance: attendancePayload,
+        })}`;
+
+        const observacoes = semBlocoAnterior
+            ? `${semBlocoAnterior}\n${attendanceText}`
+            : attendanceText;
+
+        try {
+            await apiClient.updateTeam(teamRow.id, { observacoes });
+        } catch (error) {
+            console.error('Falha ao persistir presença no backend:', error);
+        }
+    };
 
     const fetchServices = useCallback(async () => {
         if (!startDate || !endDate) {
@@ -120,6 +173,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                     startTime,
                     endTime,
                     members,
+                    rawService: service,
                 };
             })
             .filter(Boolean)
@@ -132,17 +186,20 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
 
     const getMemberStatusKey = (teamId, member) => `${teamId}-${member?.id || member?.uid || member?.matricula || member?.nome}`;
 
-    const setMemberStatus = (teamRow, member, status) => {
+    const setMemberStatus = async (teamRow, member, status) => {
         const key = getMemberStatusKey(teamRow.id, member);
-        setAttendanceStatus((prev) => ({ ...prev, [key]: status }));
+        const nextAttendanceStatus = { ...attendanceStatus, [key]: status };
+        setAttendanceStatus(nextAttendanceStatus);
         if (status !== 'substituto') {
-            setSubstitutions((prev) => {
-                const updated = { ...prev };
-                delete updated[key];
-                return updated;
-            });
+            const nextSubstitutions = { ...substitutions };
+            delete nextSubstitutions[key];
+            setSubstitutions(nextSubstitutions);
             setSubstituteSelectorOpen((prev) => ({ ...prev, [key]: false }));
+            await persistTeamAttendance(teamRow, nextAttendanceStatus, nextSubstitutions);
+            return;
         }
+
+        await persistTeamAttendance(teamRow, nextAttendanceStatus, substitutions);
     };
 
     const handleOpenSubstituteSelector = (teamRow, member) => {
@@ -151,23 +208,44 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         setSubstituteSelectorOpen((prev) => ({ ...prev, [key]: true }));
     };
 
-    const handleSelectSubstitute = (teamRow, member, substituteId) => {
+    const handleSelectSubstitute = async (teamRow, member, substituteId) => {
         const key = getMemberStatusKey(teamRow.id, member);
         const selected = allUsers.find((u) => String(u.id) === String(substituteId));
         if (!selected) return;
 
-        setSubstitutions((prev) => ({
-            ...prev,
+        const nextSubstitutions = {
+            ...substitutions,
             [key]: {
                 id: selected.id,
                 nome: selected.nome,
                 matricula: selected.matricula,
             },
-        }));
+        };
 
-        setAttendanceStatus((prev) => ({ ...prev, [key]: 'substituto' }));
+        const nextAttendanceStatus = { ...attendanceStatus, [key]: 'substituto' };
+
+        setSubstitutions(nextSubstitutions);
+        setAttendanceStatus(nextAttendanceStatus);
         setSubstituteSelectorOpen((prev) => ({ ...prev, [key]: false }));
         showNotification(`Substituição registrada: ${selected.nome}`, 'success');
+        await persistTeamAttendance(teamRow, nextAttendanceStatus, nextSubstitutions);
+    };
+
+    const handleForceTeamPresent = async (teamRow) => {
+        if (!Array.isArray(teamRow?.members) || teamRow.members.length === 0) {
+            showNotification('Nenhum integrante encontrado para esta equipe.', 'error');
+            return;
+        }
+
+        const nextAttendanceStatus = { ...attendanceStatus };
+        teamRow.members.forEach((member) => {
+            const key = getMemberStatusKey(teamRow.id, member);
+            nextAttendanceStatus[key] = 'presente';
+        });
+
+        setAttendanceStatus(nextAttendanceStatus);
+        showNotification('Presença confirmada para toda a equipe.', 'success');
+        await persistTeamAttendance(teamRow, nextAttendanceStatus, substitutions);
     };
 
     const getAttendanceWindow = (teamRow) => {
@@ -245,8 +323,16 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                         {isExpanded && (
                                             <tr className="bg-gray-900/40 border-b border-gray-700">
                                                 <td colSpan="6" className="px-4 py-3">
-                                                    <div className="text-xs text-gray-400 mb-2">
-                                                        Janela para registrar presença/falta: {windowLabel} {canMarkActions ? '(permitido)' : '(fora do horário)'}
+                                                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
+                                                        <div className="text-xs text-gray-400">
+                                                            Janela para registrar presença/falta: {windowLabel} {canMarkActions ? '(permitido)' : '(fora do horário - confirmação forçada habilitada)'}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleForceTeamPresent(teamRow)}
+                                                            className="px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                                                        >
+                                                            Confirmar Presença da Equipe
+                                                        </button>
                                                     </div>
                                                     <div className="space-y-2">
                                                         {teamRow.members.length === 0 ? (
@@ -278,16 +364,14 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                                                             </span>
                                                                             <button
                                                                                 onClick={() => setMemberStatus(teamRow, member, 'presente')}
-                                                                                disabled={!canMarkActions}
-                                                                                title={!canMarkActions ? 'Fora da janela permitida para presença' : 'Confirmar presença'}
+                                                                                title={canMarkActions ? 'Confirmar presença' : 'Confirmação forçada fora da janela de horário'}
                                                                                 className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-500 text-white text-xs"
                                                                             >
                                                                                 Presença
                                                                             </button>
                                                                             <button
                                                                                 onClick={() => setMemberStatus(teamRow, member, 'falta')}
-                                                                                disabled={!canMarkActions}
-                                                                                title={!canMarkActions ? 'Fora da janela permitida para falta' : 'Marcar falta'}
+                                                                                title={canMarkActions ? 'Marcar falta' : 'Marcação forçada fora da janela de horário'}
                                                                                 className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 disabled:bg-gray-500 text-white text-xs"
                                                                             >
                                                                                 Falta
