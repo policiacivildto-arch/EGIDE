@@ -737,6 +737,18 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
         ais: operation.departamento_solicitante_sigla || operation.departamento_solicitante_nome || 'N/A',
         bairros: [],
         status: operation.status,
+        source: 'operacao-policial',
+    });
+
+    const mapLegacyOperationToCard = (operation) => ({
+        id: `legacy-${operation.id}`,
+        legacyOperationId: operation.id,
+        numeroComboio: `Escala ${operation.id}`,
+        date: operation.data_inicio,
+        ais: operation.ais || 'N/A',
+        bairros: operation.bairros ? String(operation.bairros).split(',').map((item) => item.trim()).filter(Boolean) : [],
+        status: operation.status || 'Registrada',
+        source: 'operacao-legada',
     });
 
     const toOperationReport = (operation, resultados, userData) => {
@@ -860,7 +872,26 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
 
                 const idsOperacoes = [...new Set(operacoesDataBase.map((operacao) => Number(operacao.id)).filter((id) => !Number.isNaN(id)))];
 
-                if (idsOperacoes.length === 0) {
+                // Fallback legado: operações antigas vinculadas por equipe (módulo SGO clássico)
+                let operacoesLegadas = [];
+                if (policialAtual) {
+                    const equipesLegadas = toList(await apiClient.getTeams());
+                    const minhasEquipesLegadas = equipesLegadas.filter((equipe) => {
+                        const chefeId = Number(equipe?.chefe);
+                        const membros = Array.isArray(equipe?.membros) ? equipe.membros.map((id) => Number(id)) : [];
+                        return chefeId === Number(policialAtual.id) || membros.includes(Number(policialAtual.id));
+                    });
+
+                    const legacyTeamIds = [...new Set(minhasEquipesLegadas.map((equipe) => Number(equipe.id)).filter((id) => !Number.isNaN(id)))];
+                    if (legacyTeamIds.length > 0) {
+                        const operacoesAntigas = toList(await apiClient.getOperacoes());
+                        operacoesLegadas = operacoesAntigas
+                            .filter((operacao) => legacyTeamIds.includes(Number(operacao?.equipe)))
+                            .map(mapLegacyOperationToCard);
+                    }
+                }
+
+                if (idsOperacoes.length === 0 && operacoesLegadas.length === 0) {
                     if (shouldUseMockProfile) {
                         const mockConvoy = createMockConvoyForProfile();
                         const mockConvoyToFill = createMockConvoyToFillForProfile();
@@ -893,6 +924,7 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
 
                 const minhasOperacoes = operacoesDataBase
                     .map(mapOperationToCard)
+                    .concat(operacoesLegadas)
                     .sort((a, b) => {
                         const dateA = typeof a.date === 'string' ? new Date(a.date) : new Date(a.date.seconds * 1000);
                         const dateB = typeof b.date === 'string' ? new Date(b.date) : new Date(b.date.seconds * 1000);
@@ -947,6 +979,11 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
 
     const handleSubmitReport = async (reportData) => {
         try {
+            if (String(reportData?.convoyId || '').startsWith('legacy-')) {
+                showNotification('Esta operação está no módulo legado e ainda não suporta relatório detalhado neste formulário.', 'error');
+                return;
+            }
+
             const operationId = Number(reportData?.convoyId);
             const equipe = teamByOperation.get(operationId);
             const equipeId = equipe?.id || null;
@@ -1078,6 +1115,10 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                                 </div>
                                 {hasReport ? (
                                     <button onClick={() => handleViewReport(convoy)} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-2 rounded-lg">Ver Relatório</button>
+                                ) : convoy.source === 'operacao-legada' ? (
+                                    <button disabled className="bg-gray-700 text-gray-300 font-bold py-2 px-3 rounded-lg cursor-not-allowed" title="Operação legada: relatório indisponível neste formulário">
+                                        Relatório indisponível
+                                    </button>
                                 ) : (
                                     <button onClick={() => handleOpenForm(convoy)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Preencher Relatório</button>
                                 )}
