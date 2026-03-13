@@ -381,28 +381,42 @@ class OperacaoPolicialViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def minhas_operacoes(self, request):
         """Retorna operações do usuário por departamento e participação em equipe"""
-        try:
-            policial = Policial.objects.get(usuario=request.user)
-            departamento = policial.delegacia.departamento
+        policial = Policial.objects.filter(usuario=request.user).first()
 
+        # Fallback para contas antigas/desvinculadas do User -> Policial.
+        if not policial:
+            user_email = (request.user.email or '').strip()
+            user_name = (request.user.first_name or request.user.username or '').strip()
+            policial = Policial.objects.filter(
+                Q(email__iexact=user_email) |
+                Q(nome__iexact=user_name) |
+                Q(nome__icontains=user_name)
+            ).first()
+
+        if not policial:
+            return Response([], status=status.HTTP_200_OK)
+
+        departamento = policial.delegacia.departamento if policial.delegacia else None
+
+        if departamento:
             operacoes_departamento = self.queryset.filter(
                 departamento_solicitante=departamento
             ) | self.queryset.filter(
                 departamentos_apoio=departamento
             )
+        else:
+            operacoes_departamento = self.queryset.none()
 
-            # Inclui operações em que o policial foi escalado diretamente na equipe.
-            operacoes_equipe = self.queryset.filter(
-                Q(equipes_operacao__chefe=policial) |
-                Q(equipes_operacao__membros=policial)
-            )
+        # Inclui operações em que o policial foi escalado diretamente na equipe.
+        operacoes_equipe = self.queryset.filter(
+            Q(equipes_operacao__chefe=policial) |
+            Q(equipes_operacao__membros=policial)
+        )
 
-            operacoes = (operacoes_departamento | operacoes_equipe).distinct()
-            
-            serializer = self.get_serializer(operacoes, many=True)
-            return Response(serializer.data)
-        except Policial.DoesNotExist:
-            return Response({'error': 'Usuário não é um policial'}, status=status.HTTP_403_FORBIDDEN)
+        operacoes = (operacoes_departamento | operacoes_equipe).distinct()
+
+        serializer = self.get_serializer(operacoes, many=True)
+        return Response(serializer.data)
 
 
 class AlvoViewSet(viewsets.ModelViewSet):
