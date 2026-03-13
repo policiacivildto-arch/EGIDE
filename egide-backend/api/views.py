@@ -380,18 +380,26 @@ class OperacaoPolicialViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def minhas_operacoes(self, request):
-        """Retorna operações do departamento do usuário"""
+        """Retorna operações do usuário por departamento e participação em equipe"""
         try:
             policial = Policial.objects.get(usuario=request.user)
             departamento = policial.delegacia.departamento
-            
-            operacoes = self.queryset.filter(
+
+            operacoes_departamento = self.queryset.filter(
                 departamento_solicitante=departamento
             ) | self.queryset.filter(
                 departamentos_apoio=departamento
             )
+
+            # Inclui operações em que o policial foi escalado diretamente na equipe.
+            operacoes_equipe = self.queryset.filter(
+                Q(equipes_operacao__chefe=policial) |
+                Q(equipes_operacao__membros=policial)
+            )
+
+            operacoes = (operacoes_departamento | operacoes_equipe).distinct()
             
-            serializer = self.get_serializer(operacoes.distinct(), many=True)
+            serializer = self.get_serializer(operacoes, many=True)
             return Response(serializer.data)
         except Policial.DoesNotExist:
             return Response({'error': 'Usuário não é um policial'}, status=status.HTTP_403_FORBIDDEN)
