@@ -721,13 +721,100 @@ const ViewReport = ({ report, onClose }) => (
 export const MinhasOperacoesView = ({ user, showNotification }) => {
     const [myConvoys, setMyConvoys] = useState([]);
     const [reports, setReports] = useState(new Map());
+    const [teamByOperation, setTeamByOperation] = useState(new Map());
     const [loading, setLoading] = useState(true);
     const [modalContent, setModalContent] = useState(null);
 
     const shouldUseMockProfile = String(user?.email || '').toLowerCase() === MOCK_PROFILE_EMAIL;
 
+    const toList = (payload) => (Array.isArray(payload) ? payload : (payload?.results || []));
+
+    const mapOperationToCard = (operation) => ({
+        id: operation.id,
+        numeroComboio: operation.nome || `OP-${operation.id}`,
+        date: operation.data_hora_inicio,
+        ais: operation.departamento_solicitante_sigla || operation.departamento_solicitante_nome || 'N/A',
+        bairros: [],
+        status: operation.status,
+    });
+
+    const toOperationReport = (operation, resultados, userData) => {
+        const report = {
+            id: `resultado-op-${operation.id}`,
+            convoyId: operation.id,
+            submittedAt: new Date().toISOString(),
+            cycleId: getCycleId(),
+            departamento: userData?.departamento || userData?.departamento_nome || operation.departamento_solicitante_sigla || 'N/A',
+            delegacia: userData?.delegacia || userData?.delegacia_nome || 'N/A',
+            procedimentoEscolta: '',
+            homicidiosAIS: null,
+            abordagens: { pessoas: 0, veiculos: 0, motocicletas: 0, bicicletas: 0 },
+            mandadosPrisaoDiligenciados: 0,
+            prisoes: [],
+            conducoesAveriguacao: 0,
+            escoltas: [],
+            procedimentos: { boc: [], tco: [], apf: [], bocTotal: 0, tcoTotal: 0, apfTotal: 0 },
+            apreensoes: {
+                celulares: 0,
+                valores: 0,
+                veiculos: 0,
+                motocicletas: 0,
+                armas: [],
+                municoes: [],
+                drogas: [],
+                outros: ''
+            },
+            ais: operation.departamento_solicitante_sigla || '',
+            bairros: [],
+            submittedBy: {
+                nome: userData?.nome || '',
+                matricula: userData?.matricula || '',
+                email: userData?.email || ''
+            }
+        };
+
+        resultados.forEach((resultado) => {
+            const quantidade = Number(resultado?.quantidade) || 0;
+            const tipo = String(resultado?.tipo || '').toLowerCase();
+            const descricao = String(resultado?.descricao || '').trim();
+
+            if (tipo === 'prisão' || tipo === 'prisao') {
+                report.prisoes.push({ tipo: descricao || 'Prisão', quantidade: quantidade || 1 });
+                return;
+            }
+            if (tipo === 'mandado cumprido') {
+                report.mandadosPrisaoDiligenciados += quantidade;
+                return;
+            }
+            if (tipo === 'arma apreendida') {
+                report.apreensoes.armas.push({ tipo: descricao || 'Arma', quantidade: quantidade || 1 });
+                return;
+            }
+            if (tipo === 'droga apreendida') {
+                report.apreensoes.drogas.push({ tipo: descricao || 'Droga', quantidade: quantidade || 1 });
+                return;
+            }
+            if (tipo === 'veículo recuperado' || tipo === 'veiculo recuperado') {
+                report.apreensoes.veiculos += quantidade;
+                return;
+            }
+            if (tipo === 'apreensão' || tipo === 'apreensao') {
+                report.apreensoes.outros = report.apreensoes.outros
+                    ? `${report.apreensoes.outros}; ${descricao}`
+                    : descricao;
+                return;
+            }
+
+            report.apreensoes.outros = report.apreensoes.outros
+                ? `${report.apreensoes.outros}; ${descricao || 'Resultado operacional registrado.'}`
+                : (descricao || 'Resultado operacional registrado.');
+        });
+
+        return report;
+    };
+
     useEffect(() => {
-        if (!user || !user.matricula) {
+        if (!user) {
             setLoading(false);
             return;
         }
@@ -736,11 +823,32 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
             setLoading(true);
 
             try {
-                // Busca teams onde o usuário é membro
-                const teamsData = await apiClient.getTeams({ member_matricula: user.matricula });
-                const myTeamIds = (Array.isArray(teamsData) ? teamsData : []).map(team => team.id);
+                const policiiaisBusca = await apiClient.getPoliciais({ search: user?.matricula || user?.email || user?.username || '' });
+                const policiais = toList(policiiaisBusca);
+                const policialAtual = policiais.find((item) =>
+                    item?.matricula === user?.matricula ||
+                    item?.email === user?.email ||
+                    item?.usuario?.id === user?.id
+                );
 
-                if (myTeamIds.length === 0) {
+                if (!policialAtual) {
+                    setMyConvoys([]);
+                    setReports(new Map());
+                    setTeamByOperation(new Map());
+                    setLoading(false);
+                    return;
+                }
+
+                const equipesData = toList(await apiClient.getEquipesOperacao());
+                const minhasEquipes = equipesData.filter((equipe) => {
+                    const chefeId = Number(equipe?.chefe);
+                    const membros = Array.isArray(equipe?.membros) ? equipe.membros.map((id) => Number(id)) : [];
+                    return chefeId === Number(policialAtual.id) || membros.includes(Number(policialAtual.id));
+                });
+
+                const idsOperacoes = [...new Set(minhasEquipes.map((equipe) => Number(equipe.operacao)).filter((id) => !Number.isNaN(id)))];
+
+                if (idsOperacoes.length === 0) {
                     if (shouldUseMockProfile) {
                         const mockConvoy = createMockConvoyForProfile();
                         const mockConvoyToFill = createMockConvoyToFillForProfile();
@@ -752,15 +860,24 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                     return;
                 }
 
-                // Busca convoys onde o usuário participa
-                const convoysData = await apiClient.getConvoys({ team_ids: myTeamIds.join(',') });
-                const convoyData = (Array.isArray(convoysData) ? convoysData : [])
+                const teamsMap = new Map();
+                minhasEquipes.forEach((equipe) => {
+                    if (!teamsMap.has(Number(equipe.operacao))) {
+                        teamsMap.set(Number(equipe.operacao), equipe);
+                    }
+                });
+                setTeamByOperation(teamsMap);
+
+                const operacoesData = toList(await apiClient.getOperacoesPoliciais());
+                const minhasOperacoes = operacoesData
+                    .filter((operacao) => idsOperacoes.includes(Number(operacao.id)))
+                    .map(mapOperationToCard)
                     .sort((a, b) => {
                         const dateA = typeof a.date === 'string' ? new Date(a.date) : new Date(a.date.seconds * 1000);
                         const dateB = typeof b.date === 'string' ? new Date(b.date) : new Date(b.date.seconds * 1000);
                         return dateB - dateA;
                     });
-                if (convoyData.length === 0 && shouldUseMockProfile) {
+                if (minhasOperacoes.length === 0 && shouldUseMockProfile) {
                     const mockConvoy = createMockConvoyForProfile();
                     const mockConvoyToFill = createMockConvoyToFillForProfile();
                     const mockReport = createMockReportForProfile(user);
@@ -769,18 +886,30 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                     setLoading(false);
                     return;
                 }
-                setMyConvoys(convoyData);
+                setMyConvoys(minhasOperacoes);
 
-                // Busca relatórios dos convoys
-                const convoyIds = convoyData.map(c => c.id);
-                if (convoyIds.length > 0) {
-                    const reportsData = await apiClient.getConvoyReports({ convoy_ids: convoyIds.join(',') });
-                    const reportsMap = new Map();
-                    (Array.isArray(reportsData) ? reportsData : []).forEach(report => {
-                        reportsMap.set(report.convoyId, report);
-                    });
-                    setReports(reportsMap);
-                }
+                const resultadosData = toList(await apiClient.getResultadosOperacao());
+                const resultadosDoPolicial = resultadosData.filter((resultado) =>
+                    idsOperacoes.includes(Number(resultado?.operacao)) && Number(resultado?.registrado_por) === Number(user?.id)
+                );
+
+                const resultadosPorOperacao = new Map();
+                resultadosDoPolicial.forEach((resultado) => {
+                    const operacaoId = Number(resultado?.operacao);
+                    if (!resultadosPorOperacao.has(operacaoId)) {
+                        resultadosPorOperacao.set(operacaoId, []);
+                    }
+                    resultadosPorOperacao.get(operacaoId).push(resultado);
+                });
+
+                const reportsMap = new Map();
+                minhasOperacoes.forEach((operacao) => {
+                    const resultados = resultadosPorOperacao.get(Number(operacao.id)) || [];
+                    if (resultados.length > 0) {
+                        reportsMap.set(Number(operacao.id), toOperationReport(operacao, resultados, user));
+                    }
+                });
+                setReports(reportsMap);
             } catch (error) {
                 console.error('Erro ao carregar dados das operações:', error);
             } finally {
@@ -797,9 +926,95 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
 
     const handleSubmitReport = async (reportData) => {
         try {
-            const createdReport = await apiClient.createConvoyReport(reportData);
+            const operationId = Number(reportData?.convoyId);
+            const equipe = teamByOperation.get(operationId);
+            const equipeId = equipe?.id || null;
+            const payloads = [];
+
+            const totalPrisoes = Array.isArray(reportData?.prisoes)
+                ? reportData.prisoes.reduce((acc, item) => acc + (Number(item?.quantidade) || 0), 0)
+                : 0;
+            if (totalPrisoes > 0) {
+                payloads.push({
+                    operacao: operationId,
+                    tipo: 'Prisão',
+                    descricao: `Total de prisões registradas: ${totalPrisoes}`,
+                    quantidade: totalPrisoes,
+                    equipe: equipeId,
+                });
+            }
+
+            if ((Number(reportData?.mandadosPrisaoDiligenciados) || 0) > 0) {
+                payloads.push({
+                    operacao: operationId,
+                    tipo: 'Mandado Cumprido',
+                    descricao: 'Mandados de prisão diligenciados',
+                    quantidade: Number(reportData.mandadosPrisaoDiligenciados) || 0,
+                    equipe: equipeId,
+                });
+            }
+
+            const totalArmas = Array.isArray(reportData?.apreensoes?.armas)
+                ? reportData.apreensoes.armas.reduce((acc, item) => acc + (Number(item?.quantidade) || 0), 0)
+                : 0;
+            if (totalArmas > 0) {
+                payloads.push({
+                    operacao: operationId,
+                    tipo: 'Arma Apreendida',
+                    descricao: 'Armas de fogo apreendidas',
+                    quantidade: totalArmas,
+                    equipe: equipeId,
+                });
+            }
+
+            const totalDrogas = Array.isArray(reportData?.apreensoes?.drogas)
+                ? reportData.apreensoes.drogas.reduce((acc, item) => acc + (Number(item?.quantidade) || 0), 0)
+                : 0;
+            if (totalDrogas > 0) {
+                payloads.push({
+                    operacao: operationId,
+                    tipo: 'Droga Apreendida',
+                    descricao: 'Drogas apreendidas',
+                    quantidade: totalDrogas,
+                    equipe: equipeId,
+                });
+            }
+
+            if ((Number(reportData?.apreensoes?.veiculos) || 0) > 0) {
+                payloads.push({
+                    operacao: operationId,
+                    tipo: 'Veículo Recuperado',
+                    descricao: 'Veículos recuperados/apreendidos',
+                    quantidade: Number(reportData.apreensoes.veiculos) || 0,
+                    equipe: equipeId,
+                });
+            }
+
+            const totalApreensoesGerais =
+                (Number(reportData?.apreensoes?.celulares) || 0) +
+                (Number(reportData?.apreensoes?.motocicletas) || 0);
+            if (totalApreensoesGerais > 0 || reportData?.apreensoes?.outros) {
+                payloads.push({
+                    operacao: operationId,
+                    tipo: 'Apreensão',
+                    descricao: `Celulares: ${Number(reportData?.apreensoes?.celulares) || 0}; Motocicletas: ${Number(reportData?.apreensoes?.motocicletas) || 0}; Outros: ${reportData?.apreensoes?.outros || 'N/A'}`,
+                    quantidade: totalApreensoesGerais || 1,
+                    equipe: equipeId,
+                });
+            }
+
+            const resumoAbordagens = `Abordagens - Pessoas: ${Number(reportData?.abordagens?.pessoas) || 0}; Veículos: ${Number(reportData?.abordagens?.veiculos) || 0}; Motocicletas: ${Number(reportData?.abordagens?.motocicletas) || 0}; Bicicletas: ${Number(reportData?.abordagens?.bicicletas) || 0}; Conduções: ${Number(reportData?.conducoesAveriguacao) || 0}; Homicídios AIS: ${reportData?.homicidiosAIS === true ? 'Sim' : reportData?.homicidiosAIS === false ? 'Não' : 'N/A'}`;
+            payloads.push({
+                operacao: operationId,
+                tipo: 'Outro',
+                descricao: resumoAbordagens,
+                quantidade: 1,
+                equipe: equipeId,
+            });
+
+            await Promise.all(payloads.map((payload) => apiClient.createResultadoOperacao(payload)));
             showNotification('Relatório enviado com sucesso!', 'success');
-            setReports(prev => new Map(prev).set(reportData.convoyId, createdReport));
+            setReports(prev => new Map(prev).set(operationId, reportData));
             handleCloseModal();
         } catch (error) {
             console.error('Erro ao enviar relatório:', error);

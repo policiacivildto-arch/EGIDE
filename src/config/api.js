@@ -294,6 +294,25 @@ class DjangoApiClient {
   }
 
   /**
+   * Métodos do Sistema de Operações Policiais
+   */
+  async getOperacoesPoliciais(params = {}) {
+    return this.getList('operacoes-policiais', params);
+  }
+
+  async getEquipesOperacao(params = {}) {
+    return this.getList('equipes-operacao', params);
+  }
+
+  async getResultadosOperacao(params = {}) {
+    return this.getList('resultados-operacao', params);
+  }
+
+  async createResultadoOperacao(data) {
+    return this.create('resultados-operacao', data);
+  }
+
+  /**
    * Métodos de Departamentos
    */
   async getDepartamentos(params = {}) {
