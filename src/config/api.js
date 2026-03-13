@@ -300,6 +300,10 @@ class DjangoApiClient {
     return this.getList('operacoes-policiais', params);
   }
 
+  async getMinhasOperacoesPoliciais() {
+    return this.request('GET', '/operacoes-policiais/minhas_operacoes/');
+  }
+
   async getEquipesOperacao(params = {}) {
     return this.getList('equipes-operacao', params);
   }

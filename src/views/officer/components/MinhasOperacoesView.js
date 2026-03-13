@@ -728,6 +728,7 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
     const shouldUseMockProfile = String(user?.email || '').toLowerCase() === MOCK_PROFILE_EMAIL;
 
     const toList = (payload) => (Array.isArray(payload) ? payload : (payload?.results || []));
+    const normalizeMatricula = (value) => String(value || '').replace(/\D/g, '');
 
     const mapOperationToCard = (operation) => ({
         id: operation.id,
@@ -823,30 +824,41 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
             setLoading(true);
 
             try {
-                const policiiaisBusca = await apiClient.getPoliciais({ search: user?.matricula || user?.email || user?.username || '' });
-                const policiais = toList(policiiaisBusca);
-                const policialAtual = policiais.find((item) =>
-                    item?.matricula === user?.matricula ||
-                    item?.email === user?.email ||
-                    item?.usuario?.id === user?.id
-                );
+                const queryPolicial = user?.email || user?.username || user?.matricula || '';
+                const policiaisBusca = await apiClient.getPoliciais({ search: queryPolicial });
+                const policiais = toList(policiaisBusca);
+                const userMatricula = normalizeMatricula(user?.matricula);
+                const policialAtual = policiais.find((item) => {
+                    const itemMatricula = normalizeMatricula(item?.matricula);
+                    return (
+                        (userMatricula && itemMatricula && (itemMatricula === userMatricula || itemMatricula.endsWith(userMatricula) || userMatricula.endsWith(itemMatricula))) ||
+                        (item?.email && user?.email && String(item.email).toLowerCase() === String(user.email).toLowerCase()) ||
+                        Number(item?.usuario?.id) === Number(user?.id)
+                    );
+                });
 
-                if (!policialAtual) {
-                    setMyConvoys([]);
-                    setReports(new Map());
-                    setTeamByOperation(new Map());
-                    setLoading(false);
-                    return;
+                let operacoesDataBase = [];
+                try {
+                    operacoesDataBase = toList(await apiClient.getMinhasOperacoesPoliciais());
+                } catch (error) {
+                    operacoesDataBase = [];
                 }
 
                 const equipesData = toList(await apiClient.getEquipesOperacao());
-                const minhasEquipes = equipesData.filter((equipe) => {
+                const minhasEquipes = !policialAtual ? [] : equipesData.filter((equipe) => {
                     const chefeId = Number(equipe?.chefe);
                     const membros = Array.isArray(equipe?.membros) ? equipe.membros.map((id) => Number(id)) : [];
                     return chefeId === Number(policialAtual.id) || membros.includes(Number(policialAtual.id));
                 });
 
-                const idsOperacoes = [...new Set(minhasEquipes.map((equipe) => Number(equipe.operacao)).filter((id) => !Number.isNaN(id)))];
+                const idsOperacoesByEquipe = [...new Set(minhasEquipes.map((equipe) => Number(equipe.operacao)).filter((id) => !Number.isNaN(id)))];
+
+                if (operacoesDataBase.length === 0 && idsOperacoesByEquipe.length > 0) {
+                    const operacoesTodas = toList(await apiClient.getOperacoesPoliciais());
+                    operacoesDataBase = operacoesTodas.filter((operacao) => idsOperacoesByEquipe.includes(Number(operacao.id)));
+                }
+
+                const idsOperacoes = [...new Set(operacoesDataBase.map((operacao) => Number(operacao.id)).filter((id) => !Number.isNaN(id)))];
 
                 if (idsOperacoes.length === 0) {
                     if (shouldUseMockProfile) {
@@ -861,16 +873,25 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                 }
 
                 const teamsMap = new Map();
-                minhasEquipes.forEach((equipe) => {
-                    if (!teamsMap.has(Number(equipe.operacao))) {
-                        teamsMap.set(Number(equipe.operacao), equipe);
+                idsOperacoes.forEach((operacaoId) => {
+                    const equipesDaOperacao = equipesData.filter((equipe) => Number(equipe?.operacao) === Number(operacaoId));
+                    const equipePreferencial = policialAtual
+                        ? equipesDaOperacao.find((equipe) => {
+                            const chefeId = Number(equipe?.chefe);
+                            const membros = Array.isArray(equipe?.membros) ? equipe.membros.map((id) => Number(id)) : [];
+                            return chefeId === Number(policialAtual.id) || membros.includes(Number(policialAtual.id));
+                        })
+                        : null;
+
+                    if (equipePreferencial) {
+                        teamsMap.set(Number(operacaoId), equipePreferencial);
+                    } else if (equipesDaOperacao.length > 0) {
+                        teamsMap.set(Number(operacaoId), equipesDaOperacao[0]);
                     }
                 });
                 setTeamByOperation(teamsMap);
 
-                const operacoesData = toList(await apiClient.getOperacoesPoliciais());
-                const minhasOperacoes = operacoesData
-                    .filter((operacao) => idsOperacoes.includes(Number(operacao.id)))
+                const minhasOperacoes = operacoesDataBase
                     .map(mapOperationToCard)
                     .sort((a, b) => {
                         const dateA = typeof a.date === 'string' ? new Date(a.date) : new Date(a.date.seconds * 1000);
