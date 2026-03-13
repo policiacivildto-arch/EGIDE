@@ -311,12 +311,20 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                             <td className="px-4 py-2">{teamRow.area}</td>
                                             <td className="px-4 py-2">{teamRow.phone}</td>
                                             <td className="px-4 py-2">
-                                                <button
-                                                    onClick={() => toggleTeamExpand(teamRow.id)}
-                                                    className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
-                                                >
-                                                    {isExpanded ? 'Ocultar' : 'Ver equipe'}
-                                                </button>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        onClick={() => toggleTeamExpand(teamRow.id)}
+                                                        className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+                                                    >
+                                                        {isExpanded ? 'Ocultar' : 'Ver equipe'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleForceTeamPresent(teamRow)}
+                                                        className="px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                                                    >
+                                                        Confirmar equipe
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
 
