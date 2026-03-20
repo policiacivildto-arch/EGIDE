@@ -255,7 +255,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             const vagasDoDia = vagasByDay[dayKey] || [];
 
             const myTeamOnThisDay = vagasDoDia
-                .map((vaga) => monthlyTeams.find((t) => Number(t?.vaga) === Number(vaga?.id)))
+                .flatMap((vaga) => teamsByVaga[Number(vaga?.id)] || [])
                 .find((team) => teamHasOfficer(team, user));
 
             const availableSlots = vagasDoDia.reduce((sum, vaga) => {
