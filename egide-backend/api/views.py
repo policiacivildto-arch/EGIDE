@@ -143,6 +143,18 @@ class EquipeViewSet(viewsets.ModelViewSet):
     ordering_fields = ['data_criacao', 'status']
     ordering = ['-data_criacao']
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        member_matricula = ''.join(ch for ch in str(self.request.query_params.get('member_matricula') or '') if ch.isdigit())
+
+        if member_matricula:
+            queryset = queryset.filter(
+                Q(membros__matricula=member_matricula) |
+                Q(chefe__matricula=member_matricula)
+            ).distinct()
+
+        return queryset
+
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def aprovar(self, request, pk=None):
         """Aprova uma equipe"""

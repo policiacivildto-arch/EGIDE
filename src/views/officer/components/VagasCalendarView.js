@@ -66,6 +66,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
     const [activeDate, setActiveDate] = useState(new Date());
     const [monthlyVagas, setMonthlyVagas] = useState([]);
     const [monthlyTeams, setMonthlyTeams] = useState([]);
+    const [myMonthlyTeams, setMyMonthlyTeams] = useState([]);
     const [mySchedule, setMySchedule] = useState({});
     const [loading, setLoading] = useState(true);
     const [modalContent, setModalContent] = useState(null);
@@ -82,7 +83,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             const end = endOfMonth(activeDate);
 
             try {
-                const [vagasData, teamsData] = await Promise.all([
+                const [vagasData, teamsData, myTeamsData] = await Promise.all([
                     apiClient.getVagas({
                         data__gte: format(start, 'yyyy-MM-dd'),
                         data__lte: format(end, 'yyyy-MM-dd')
@@ -90,14 +91,21 @@ export const VagasCalendarView = ({ user, showNotification }) => {
                     apiClient.getTeams({
                         vaga__data__gte: format(start, 'yyyy-MM-dd'),
                         vaga__data__lte: format(end, 'yyyy-MM-dd')
+                    }),
+                    apiClient.getTeams({
+                        vaga__data__gte: format(start, 'yyyy-MM-dd'),
+                        vaga__data__lte: format(end, 'yyyy-MM-dd'),
+                        member_matricula: user?.matricula || ''
                     })
                 ]);
 
                 const vagasArray = Array.isArray(vagasData) ? vagasData : (vagasData?.results || []);
                 const teamsArray = Array.isArray(teamsData) ? teamsData : (teamsData?.results || []);
+                const myTeamsArray = Array.isArray(myTeamsData) ? myTeamsData : (myTeamsData?.results || []);
 
                 setMonthlyVagas(vagasArray);
                 setMonthlyTeams(teamsArray);
+                setMyMonthlyTeams(myTeamsArray);
             } catch (error) {
                 console.error('Erro ao carregar dados do mês:', error);
             } finally {
@@ -131,6 +139,16 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             return acc;
         }, {});
     }, [monthlyTeams]);
+
+    const myTeamsByVaga = useMemo(() => {
+        return myMonthlyTeams.reduce((acc, team) => {
+            const vagaId = Number(team?.vaga || team?.vagaId || team?.vaga_info?.id);
+            if (!vagaId) return acc;
+            if (!acc[vagaId]) acc[vagaId] = [];
+            acc[vagaId].push(team);
+            return acc;
+        }, {});
+    }, [myMonthlyTeams]);
 
     const hasRemainingSlots = (vaga) => {
         const capacity = getVagaCapacity(vaga);
@@ -255,7 +273,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             const vagasDoDia = vagasByDay[dayKey] || [];
 
             const myTeamOnThisDay = vagasDoDia
-                .flatMap((vaga) => teamsByVaga[Number(vaga?.id)] || [])
+                .flatMap((vaga) => myTeamsByVaga[Number(vaga?.id)] || [])
                 .find((team) => teamHasOfficer(team, user));
 
             const availableSlots = vagasDoDia.reduce((sum, vaga) => {
