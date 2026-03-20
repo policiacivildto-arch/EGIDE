@@ -27,13 +27,6 @@ const getVagaShiftType = (vaga) => String(vaga?.turno || vaga?.shiftType || '').
 const getVagaOperationalDateObject = (vaga) => {
     const parsedDate = getVagaDateObject(vaga);
     if (!parsedDate || Number.isNaN(parsedDate.getTime())) return null;
-
-    if (getVagaShiftType(vaga) === 'night') {
-        const adjustedDate = new Date(parsedDate);
-        adjustedDate.setDate(adjustedDate.getDate() - 1);
-        return adjustedDate;
-    }
-
     return parsedDate;
 };
 

@@ -60,6 +60,85 @@ const getCycleId = (date = new Date()) => {
     return `${year}-${String(month).padStart(2, '0')}`;
 };
 
+const buildLegacyTeamCardId = (teamId) => `legacy-team-${teamId}`;
+
+const toLegacyOperationDateTime = (rawDate) => {
+    if (!rawDate) return new Date().toISOString();
+
+    if (typeof rawDate === 'string') {
+        const isoDateMatch = /^(\d{4}-\d{2}-\d{2})/.exec(rawDate);
+        if (isoDateMatch) {
+            return `${isoDateMatch[1]}T12:00:00`;
+        }
+
+        const parsedDate = new Date(rawDate);
+        if (!Number.isNaN(parsedDate.getTime())) {
+            return parsedDate.toISOString();
+        }
+    }
+
+    if (rawDate?.seconds) {
+        return new Date(rawDate.seconds * 1000).toISOString();
+    }
+
+    return new Date().toISOString();
+};
+
+const toLegacyStoredReport = (storedValue, fallbackData = {}) => {
+    if (!storedValue) return null;
+
+    try {
+        const parsed = JSON.parse(storedValue);
+        if (parsed && typeof parsed === 'object') {
+            return {
+                ...parsed,
+                id: parsed.id || `legacy-report-${fallbackData.legacyOperationId || fallbackData.legacyTeamId || 'sem-id'}`,
+                convoyId: fallbackData.cardId || parsed.convoyId,
+                departamento: parsed.departamento || fallbackData.departamento || 'N/A',
+                delegacia: parsed.delegacia || fallbackData.delegacia || 'N/A',
+                ais: parsed.ais || fallbackData.ais || '',
+                bairros: Array.isArray(parsed.bairros) ? parsed.bairros : (fallbackData.bairros || []),
+            };
+        }
+    } catch {
+        return {
+            id: `legacy-report-${fallbackData.legacyOperationId || fallbackData.legacyTeamId || 'sem-id'}`,
+            convoyId: fallbackData.cardId,
+            submittedAt: new Date().toISOString(),
+            cycleId: getCycleId(),
+            departamento: fallbackData.departamento || 'N/A',
+            delegacia: fallbackData.delegacia || 'N/A',
+            procedimentoEscolta: '',
+            homicidiosAIS: null,
+            abordagens: { pessoas: 0, veiculos: 0, motocicletas: 0, bicicletas: 0 },
+            mandadosPrisaoDiligenciados: 0,
+            prisoes: [],
+            conducoesAveriguacao: 0,
+            escoltas: [],
+            procedimentos: { boc: [], tco: [], apf: [], bocTotal: 0, tcoTotal: 0, apfTotal: 0 },
+            apreensoes: {
+                celulares: 0,
+                valores: 0,
+                veiculos: 0,
+                motocicletas: 0,
+                armas: [],
+                municoes: [],
+                drogas: [],
+                outros: String(storedValue || ''),
+            },
+            ais: fallbackData.ais || '',
+            bairros: fallbackData.bairros || [],
+            submittedBy: {
+                nome: fallbackData.nome || '',
+                matricula: fallbackData.matricula || '',
+                email: fallbackData.email || '',
+            }
+        };
+    }
+
+    return null;
+};
+
 const OperationReportForm = ({ convoy, user, onSubmit, onCancel }) => {
     const [form, setForm] = useState({
         procedimentoEscolta: '',
@@ -120,6 +199,10 @@ const OperationReportForm = ({ convoy, user, onSubmit, onCancel }) => {
         e.preventDefault();
         const reportData = {
             convoyId: convoy.id,
+            source: convoy.source,
+            legacyTeamId: convoy.legacyTeamId || null,
+            legacyOperationId: convoy.legacyOperationId || null,
+            operationDate: convoy.rawDate || convoy.date,
             submittedAt: new Date(),
             cycleId: getCycleId(),
             departamento: user?.departamento || user?.departamento_nome || '',
@@ -741,14 +824,31 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
     });
 
     const mapLegacyOperationToCard = (operation) => ({
-        id: `legacy-${operation.id}`,
+        id: buildLegacyTeamCardId(operation.equipe || operation.id),
         legacyOperationId: operation.id,
+        legacyTeamId: operation.equipe || null,
         numeroComboio: `Escala ${operation.id}`,
         date: operation.data_inicio,
+        rawDate: operation.data_inicio,
         ais: operation.ais || 'N/A',
         bairros: operation.bairros ? String(operation.bairros).split(',').map((item) => item.trim()).filter(Boolean) : [],
         status: operation.status || 'Registrada',
         source: 'operacao-legada',
+        legacyStoredReport: operation.resultado || '',
+    });
+
+    const mapLegacyTeamToCard = (team) => ({
+        id: buildLegacyTeamCardId(team.id),
+        legacyTeamId: team.id,
+        legacyOperationId: null,
+        numeroComboio: `Escala ${team.vaga || team.vaga_info?.id || team.id}`,
+        date: team.vaga_info?.data || null,
+        rawDate: team.vaga_info?.data || null,
+        ais: team.vaga_info?.delegacia_nome || user?.departamento || 'N/A',
+        bairros: [],
+        status: team.status || 'Registrada',
+        source: 'equipe-legada',
+        legacyStoredReport: '',
     });
 
     const toOperationReport = (operation, resultados, userData) => {
@@ -895,9 +995,20 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                     const legacyTeamIds = [...new Set(minhasEquipesLegadas.map((equipe) => Number(equipe.id)).filter((id) => !Number.isNaN(id)))];
                     if (legacyTeamIds.length > 0) {
                         const operacoesAntigas = toList(await apiClient.getOperacoes());
-                        operacoesLegadas = operacoesAntigas
-                            .filter((operacao) => legacyTeamIds.includes(Number(operacao?.equipe)))
-                            .map(mapLegacyOperationToCard);
+                        const operacoesPorEquipe = new Map(
+                            operacoesAntigas
+                                .filter((operacao) => legacyTeamIds.includes(Number(operacao?.equipe)))
+                                .map((operacao) => [Number(operacao.equipe), operacao])
+                        );
+
+                        operacoesLegadas = minhasEquipesLegadas.map((equipe) => {
+                            const operacaoRelacionada = operacoesPorEquipe.get(Number(equipe.id));
+                            if (operacaoRelacionada) {
+                                return mapLegacyOperationToCard(operacaoRelacionada);
+                            }
+
+                            return mapLegacyTeamToCard(equipe);
+                        });
                     }
                 }
 
@@ -977,6 +1088,25 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                     if (resultados.length > 0) {
                         reportsMap.set(Number(operacao.id), toOperationReport(operacao, resultados, user));
                     }
+
+                    if ((operacao.source === 'operacao-legada' || operacao.source === 'equipe-legada') && operacao.legacyStoredReport) {
+                        const legacyReport = toLegacyStoredReport(operacao.legacyStoredReport, {
+                            cardId: operacao.id,
+                            legacyOperationId: operacao.legacyOperationId,
+                            legacyTeamId: operacao.legacyTeamId,
+                            departamento: user?.departamento || user?.departamento_nome || '',
+                            delegacia: user?.delegacia || user?.delegacia_nome || '',
+                            ais: operacao.ais,
+                            bairros: operacao.bairros,
+                            nome: user?.nome,
+                            matricula: user?.matricula,
+                            email: user?.email,
+                        });
+
+                        if (legacyReport) {
+                            reportsMap.set(operacao.id, legacyReport);
+                        }
+                    }
                 });
                 setReports(reportsMap);
             } catch (error) {
@@ -995,8 +1125,38 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
 
     const handleSubmitReport = async (reportData) => {
         try {
-            if (String(reportData?.convoyId || '').startsWith('legacy-')) {
-                showNotification('Esta operação está no módulo legado e ainda não suporta relatório detalhado neste formulário.', 'error');
+            if (reportData?.source === 'operacao-legada' || reportData?.source === 'equipe-legada') {
+                const legacyPayload = {
+                    data_inicio: toLegacyOperationDateTime(reportData?.operationDate),
+                    equipe: Number(reportData?.legacyTeamId) || null,
+                    descricao: `Relatório legado enviado por ${reportData?.submittedBy?.nome || user?.nome || 'policial'}`,
+                    status: 'Concluída',
+                    ais: reportData?.ais || '',
+                    bairros: Array.isArray(reportData?.bairros) ? reportData.bairros.join(', ') : '',
+                    resultado: JSON.stringify(reportData),
+                };
+
+                let legacyOperationId = Number(reportData?.legacyOperationId) || null;
+                if (legacyOperationId) {
+                    await apiClient.updateOperacao(legacyOperationId, legacyPayload);
+                } else {
+                    const createdOperation = await apiClient.createOperacao(legacyPayload);
+                    legacyOperationId = Number(createdOperation?.id) || null;
+                }
+
+                setReports((prev) => new Map(prev).set(reportData.convoyId, reportData));
+                setMyConvoys((prev) => prev.map((item) => (
+                    item.id === reportData.convoyId
+                        ? {
+                            ...item,
+                            source: 'operacao-legada',
+                            legacyOperationId,
+                            legacyStoredReport: JSON.stringify(reportData),
+                        }
+                        : item
+                )));
+                showNotification('Relatório legado enviado com sucesso!', 'success');
+                handleCloseModal();
                 return;
             }
 
@@ -1131,10 +1291,6 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                                 </div>
                                 {hasReport ? (
                                     <button onClick={() => handleViewReport(convoy)} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-2 rounded-lg">Ver Relatório</button>
-                                ) : convoy.source === 'operacao-legada' ? (
-                                    <button disabled className="bg-gray-700 text-gray-300 font-bold py-2 px-3 rounded-lg cursor-not-allowed" title="Operação legada: relatório indisponível neste formulário">
-                                        Relatório indisponível
-                                    </button>
                                 ) : (
                                     <button onClick={() => handleOpenForm(convoy)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Preencher Relatório</button>
                                 )}
