@@ -958,7 +958,7 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
 
                 let equipesData = [];
                 try {
-                    equipesData = toList(await apiClient.getEquipesOperacao());
+                    equipesData = toList(await apiClient.getEquipesOperacao({ member_matricula: policialAtual.matricula }));
                 } catch (error) {
                     console.warn('Endpoint equipes-operacao indisponível, seguindo com fallback legado:', error);
                     equipesData = [];
@@ -985,7 +985,7 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                 // Fallback legado: operações antigas vinculadas por equipe (módulo SGO clássico)
                 let operacoesLegadas = [];
                 if (policialAtual) {
-                    const equipesLegadas = toList(await apiClient.getTeams());
+                    const equipesLegadas = toList(await apiClient.getTeams({ member_matricula: policialAtual.matricula }));
                     const minhasEquipesLegadas = equipesLegadas.filter((equipe) => {
                         const chefeId = Number(equipe?.chefe);
                         const membros = Array.isArray(equipe?.membros) ? equipe.membros.map((id) => Number(id)) : [];
