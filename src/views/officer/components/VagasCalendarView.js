@@ -36,6 +36,20 @@ const getVagaDayKey = (vaga) => {
     return format(parsedDate, 'yyyy-MM-dd');
 };
 
+const getVagaOperationalDayKeys = (vaga) => {
+    const parsedDate = getVagaDateObject(vaga);
+    if (!parsedDate || Number.isNaN(parsedDate.getTime())) return [];
+
+    const keys = [format(parsedDate, 'yyyy-MM-dd')];
+    if (getVagaShiftType(vaga) === 'night') {
+        const previousDay = new Date(parsedDate);
+        previousDay.setDate(previousDay.getDate() - 1);
+        keys.push(format(previousDay, 'yyyy-MM-dd'));
+    }
+
+    return [...new Set(keys)];
+};
+
 const getVagaCapacity = (vaga) => Math.max(1, Number(vaga?.posicoes_disponiveis || 1));
 
 const isVagaDisponivel = (vaga) => {
@@ -159,6 +173,24 @@ export const VagasCalendarView = ({ user, showNotification }) => {
         }, {});
     }, [monthlyTeams, user]);
 
+    const myTeamsByOperationalDay = useMemo(() => {
+        const vagasById = new Map(monthlyVagas.map((vaga) => [Number(vaga?.id), vaga]));
+
+        return Object.values(myTeamsByVaga).flat().reduce((acc, team) => {
+            const vagaId = Number(team?.vaga || team?.vagaId || team?.vaga_info?.id);
+            const teamVaga = vagasById.get(vagaId) || team?.vaga_info || null;
+            const dayKeys = getVagaOperationalDayKeys(teamVaga);
+
+            dayKeys.forEach((dayKey) => {
+                if (!dayKey) return;
+                if (!acc[dayKey]) acc[dayKey] = [];
+                acc[dayKey].push(team);
+            });
+
+            return acc;
+        }, {});
+    }, [monthlyVagas, myTeamsByVaga]);
+
     const hasRemainingSlots = (vaga) => {
         const capacity = getVagaCapacity(vaga);
         const used = (teamsByVaga[Number(vaga?.id)] || []).length;
@@ -281,9 +313,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             const dayKey = format(date, 'yyyy-MM-dd');
             const vagasDoDia = vagasByDay[dayKey] || [];
 
-            const myTeamOnThisDay = vagasDoDia
-                .flatMap((vaga) => myTeamsByVaga[Number(vaga?.id)] || [])
-                .find((team) => teamHasOfficer(team, user));
+            const myTeamOnThisDay = (myTeamsByOperationalDay[dayKey] || [])[0] || null;
 
             const availableSlots = vagasDoDia.reduce((sum, vaga) => {
                 if (!isVagaDisponivel(vaga)) return sum;
