@@ -40,14 +40,13 @@ const getVagaOperationalDayKeys = (vaga) => {
     const parsedDate = getVagaDateObject(vaga);
     if (!parsedDate || Number.isNaN(parsedDate.getTime())) return [];
 
-    const keys = [format(parsedDate, 'yyyy-MM-dd')];
     if (getVagaShiftType(vaga) === 'night') {
         const previousDay = new Date(parsedDate);
         previousDay.setDate(previousDay.getDate() - 1);
-        keys.push(format(previousDay, 'yyyy-MM-dd'));
+        return [format(previousDay, 'yyyy-MM-dd')];
     }
 
-    return [...new Set(keys)];
+    return [format(parsedDate, 'yyyy-MM-dd')];
 };
 
 const getVagaCapacity = (vaga) => Math.max(1, Number(vaga?.posicoes_disponiveis || 1));
