@@ -479,6 +479,7 @@ def login_view(request):
     
     # Buscar perfil de departamento (se existir)
     perfil_data = None
+    policial_data = None
     try:
         if hasattr(user, 'perfil_departamento'):
             perfil = user.perfil_departamento
@@ -487,7 +488,24 @@ def login_view(request):
                 'departamento': perfil.departamento.nome if perfil.departamento else None,
                 'ativo': perfil.ativo
             }
-    except:
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'policial'):
+            policial = user.policial
+            policial_data = {
+                'id': policial.id,
+                'nome': policial.nome,
+                'matricula': policial.matricula,
+                'telefone': policial.telefone,
+                'delegacia': policial.delegacia.nome if policial.delegacia else None,
+                'delegacia_id': policial.delegacia_id,
+                'classe': policial.classe,
+                'cargo': policial.cargo,
+                'email': policial.email,
+            }
+    except Exception:
         pass
     
     # Registrar login bem-sucedido
@@ -510,7 +528,8 @@ def login_view(request):
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
         },
-        'perfil_departamento': perfil_data
+        'perfil_departamento': perfil_data,
+        'policial': policial_data,
     })
 
 
@@ -570,11 +589,29 @@ def me_view(request):
     
     # Buscar perfil de departamento
     perfil_data = None
+    policial_data = None
     try:
         if hasattr(user, 'perfil_departamento'):
             perfil = user.perfil_departamento
             perfil_data = PerfilDepartamentoSerializer(perfil).data
-    except:
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'policial'):
+            policial = user.policial
+            policial_data = {
+                'id': policial.id,
+                'nome': policial.nome,
+                'matricula': policial.matricula,
+                'telefone': policial.telefone,
+                'delegacia': policial.delegacia.nome if policial.delegacia else None,
+                'delegacia_id': policial.delegacia_id,
+                'classe': policial.classe,
+                'cargo': policial.cargo,
+                'email': policial.email,
+            }
+    except Exception:
         pass
     
     return Response({
@@ -590,5 +627,6 @@ def me_view(request):
             'date_joined': user.date_joined,
             'last_login': user.last_login,
         },
-        'perfil_departamento': perfil_data
+        'perfil_departamento': perfil_data,
+        'policial': policial_data,
     })

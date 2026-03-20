@@ -74,7 +74,26 @@ export default function App() {
             } else {
                 loadedUserData.role = 'officer';
 
+                if (response.policial) {
+                    Object.assign(loadedUserData, {
+                        matricula: response.policial.matricula,
+                        nome: response.policial.nome,
+                        telefone: response.policial.telefone,
+                        delegacia: response.policial.delegacia,
+                        delegacia_id: response.policial.delegacia_id,
+                        classe: response.policial.classe,
+                        cargo: response.policial.cargo,
+                        email: response.policial.email || loadedUserData.email,
+                    });
+                }
+
                 try {
+                    if (response.policial) {
+                        setUserData(loadedUserData);
+                        setUser({ email: loadedUserData.email });
+                        return;
+                    }
+
                     const policiaisResponse = await apiClient.getPoliciais({ search: loadedUserData.email || loadedUserData.username });
                     const policiais = Array.isArray(policiaisResponse)
                         ? policiaisResponse
