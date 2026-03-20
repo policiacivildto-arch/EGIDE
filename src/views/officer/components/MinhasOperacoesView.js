@@ -856,7 +856,13 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                     operacoesDataBase = [];
                 }
 
-                const equipesData = toList(await apiClient.getEquipesOperacao());
+                let equipesData = [];
+                try {
+                    equipesData = toList(await apiClient.getEquipesOperacao());
+                } catch (error) {
+                    console.warn('Endpoint equipes-operacao indisponível, seguindo com fallback legado:', error);
+                    equipesData = [];
+                }
                 const minhasEquipes = !policialAtual ? [] : equipesData.filter((equipe) => {
                     const chefeId = Number(equipe?.chefe);
                     const membros = Array.isArray(equipe?.membros) ? equipe.membros.map((id) => Number(id)) : [];
@@ -866,8 +872,12 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                 const idsOperacoesByEquipe = [...new Set(minhasEquipes.map((equipe) => Number(equipe.operacao)).filter((id) => !Number.isNaN(id)))];
 
                 if (operacoesDataBase.length === 0 && idsOperacoesByEquipe.length > 0) {
-                    const operacoesTodas = toList(await apiClient.getOperacoesPoliciais());
-                    operacoesDataBase = operacoesTodas.filter((operacao) => idsOperacoesByEquipe.includes(Number(operacao.id)));
+                    try {
+                        const operacoesTodas = toList(await apiClient.getOperacoesPoliciais());
+                        operacoesDataBase = operacoesTodas.filter((operacao) => idsOperacoesByEquipe.includes(Number(operacao.id)));
+                    } catch (error) {
+                        console.warn('Endpoint operacoes-policiais indisponível para fallback por equipe:', error);
+                    }
                 }
 
                 const idsOperacoes = [...new Set(operacoesDataBase.map((operacao) => Number(operacao.id)).filter((id) => !Number.isNaN(id)))];
@@ -941,7 +951,13 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
                 }
                 setMyConvoys(minhasOperacoes);
 
-                const resultadosData = toList(await apiClient.getResultadosOperacao());
+                let resultadosData = [];
+                try {
+                    resultadosData = toList(await apiClient.getResultadosOperacao());
+                } catch (error) {
+                    console.warn('Endpoint resultados-operacao indisponível, continuando sem relatórios persistidos:', error);
+                    resultadosData = [];
+                }
                 const resultadosDoPolicial = resultadosData.filter((resultado) =>
                     idsOperacoes.includes(Number(resultado?.operacao)) && Number(resultado?.registrado_por) === Number(user?.id)
                 );
