@@ -92,14 +92,14 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         return 'Pendente';
     };
 
-    const extractDepartamentoFromObservacoes = (observacoes) => {
+    const extractDepartamentoFromObservacoes = useCallback((observacoes) => {
         const text = String(observacoes || '');
         const re = /Departamento:\s*([^|\n]+)/i;
         const match = re.exec(text);
         return String(match?.[1] || '').trim();
-    };
+    }, []);
 
-    const resolveTeamName = (service) => {
+    const resolveTeamName = useCallback((service) => {
         const departamentoObservacao = extractDepartamentoFromObservacoes(service?.observacoes);
         return (
             departamentoObservacao ||
@@ -111,7 +111,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             service?.vaga_info?.delegacia_nome ||
             `Equipe ${service?.id}`
         );
-    };
+    }, [extractDepartamentoFromObservacoes]);
 
     useEffect(() => {
         localStorage.setItem(ATTENDANCE_STORAGE_KEY, JSON.stringify({ attendanceStatus, substitutions }));
@@ -251,7 +251,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             })
             .filter(Boolean)
             .sort((a, b) => b.dateObj - a.dateObj);
-    }, [services, convoysByDate]);
+    }, [services, convoysByDate, resolveTeamName]);
 
     const toggleTeamExpand = (teamId) => {
         setExpandedTeams((prev) => ({ ...prev, [teamId]: !prev[teamId] }));
