@@ -21,9 +21,11 @@ export const SignUpScreen = ({ showNotification, setAuthScreen }) => {
         password: '' 
     });
     const [isLoading, setIsLoading] = useState(false);
+    const [registerNotice, setRegisterNotice] = useState('');
 
     const handleChange = (field, value) => {
         const updatedData = { ...formData, [field]: value };
+        if (registerNotice) setRegisterNotice('');
         if (field === 'departamento') updatedData.delegacia = '';
 
         // --- NOVO: Reseta a classe quando o cargo é alterado ---
@@ -45,9 +47,10 @@ export const SignUpScreen = ({ showNotification, setAuthScreen }) => {
 
     const handleSignUp = async (e) => {
         e.preventDefault();
-        const telefoneDigits = formData.telefone.replace(/\D/g, '').length;
+        setRegisterNotice('');
+        const telefoneDigits = formData.telefone.replaceAll(/\D/g, '').length;
         // A validação 'some(val => val === '')' agora inclui os novos campos 'cargo' e 'classe'
-        if (Object.values(formData).some(val => val === '') || formData.password.length < 6 || (telefoneDigits !== 10 && telefoneDigits !== 11)) {
+        if (Object.values(formData).includes('') || formData.password.length < 6 || (telefoneDigits !== 10 && telefoneDigits !== 11)) {
             showNotification("Preencha todos os campos. A senha deve ter no mínimo 6 caracteres e o telefone 10 ou 11 dígitos.", "error");
             return;
         }
@@ -72,9 +75,25 @@ export const SignUpScreen = ({ showNotification, setAuthScreen }) => {
             setAuthScreen('login');
         } catch (error) {
             console.error("Erro ao criar conta:", error);
-            const message = (error?.message || '').toLowerCase();
-            if (message.includes('already') || message.includes('já existe')) {
-                showNotification("Este email já está em uso por outra conta.", "error");
+            const rawMessage = error?.message || '';
+            const message = rawMessage.toLowerCase();
+
+            if (message.includes('email já existe')) {
+                const notice = 'Este email já está cadastrado. Se a conta for sua, use a tela de login.';
+                setRegisterNotice(notice);
+                showNotification(notice, 'error');
+            } else if (message.includes('matricula já existe')) {
+                const notice = 'Esta matrícula já está cadastrada no sistema. Verifique se você já possui conta.';
+                setRegisterNotice(notice);
+                showNotification(notice, 'error');
+            } else if (message.includes('username já existe') || message.includes('usuário já existe') || message.includes('usuario já existe')) {
+                const notice = 'Este usuário já está cadastrado. Tente entrar com sua conta existente.';
+                setRegisterNotice(notice);
+                showNotification(notice, 'error');
+            } else if (message.includes('already') || message.includes('já existe')) {
+                const notice = rawMessage || 'Este usuário já está cadastrado no sistema.';
+                setRegisterNotice(notice);
+                showNotification(notice, 'error');
             } else {
                 showNotification("Ocorreu um erro ao criar a conta no Django.", "error");
             }
@@ -86,6 +105,12 @@ export const SignUpScreen = ({ showNotification, setAuthScreen }) => {
     return (
         <AuthLayout title="Criar Nova Conta">
             <form onSubmit={handleSignUp} className="space-y-4">
+                {registerNotice && (
+                    <div className="rounded-lg border border-amber-500 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                        <div className="font-semibold">Cadastro já existente</div>
+                        <div>{registerNotice}</div>
+                    </div>
+                )}
                 <input type="text" placeholder="Nome Completo" value={formData.nome} onChange={e => handleChange('nome', e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" required />
                 <input type="text" placeholder="Matrícula" value={formData.matricula} onChange={e => handleChange('matricula', e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" required />
                 <select value={formData.departamento} onChange={e => handleChange('departamento', e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" required><option value="">Selecione o Departamento</option>{Object.keys(DEPARTMENTS).map(d => <option key={d} value={d}>{d}</option>)}</select>

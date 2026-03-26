@@ -39,6 +39,79 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         }
     });
     const [substituteSelectorOpen, setSubstituteSelectorOpen] = useState({});
+    const [substituteSearchTerms, setSubstituteSearchTerms] = useState({});
+
+    const getUserName = (user) => {
+        if (!user) return '';
+        return String(
+            user?.nome ||
+            user?.usuario?.first_name ||
+            user?.usuario?.username ||
+            user?.name ||
+            user?.full_name ||
+            ''
+        ).trim();
+    };
+
+    const getUserDisplayName = (user) => {
+        const nome = getUserName(user);
+        if (nome) return nome;
+
+        const matricula = displayMatricula(user?.matricula || '');
+        if (matricula) return `Sem nome - Mat. ${matricula}`;
+
+        return `Usuário ${user?.id || ''}`.trim();
+    };
+
+    const getFilteredSubstituteUsers = (member, searchTerm) => {
+        const termo = String(searchTerm || '').trim().toLowerCase();
+
+        return allUsers.filter((u) => {
+            if (String(u?.matricula || '') === String(member?.matricula || '')) {
+                return false;
+            }
+
+            if (!termo) return true;
+
+            const nomeExibicao = getUserDisplayName(u).toLowerCase();
+            return nomeExibicao.includes(termo) || String(u?.matricula || '').includes(termo);
+        });
+    };
+
+    const getStatusBadgeClass = (status) => {
+        if (status === 'presente') return 'bg-green-700 text-green-100';
+        if (status === 'falta') return 'bg-red-700 text-red-100';
+        if (status === 'substituto') return 'bg-purple-700 text-purple-100';
+        return 'bg-gray-600 text-gray-100';
+    };
+
+    const getStatusLabel = (status) => {
+        if (status === 'presente') return 'Presente';
+        if (status === 'falta') return 'Falta';
+        if (status === 'substituto') return 'Substituto';
+        return 'Pendente';
+    };
+
+    const extractDepartamentoFromObservacoes = (observacoes) => {
+        const text = String(observacoes || '');
+        const re = /Departamento:\s*([^|\n]+)/i;
+        const match = re.exec(text);
+        return String(match?.[1] || '').trim();
+    };
+
+    const resolveTeamName = (service) => {
+        const departamentoObservacao = extractDepartamentoFromObservacoes(service?.observacoes);
+        return (
+            departamentoObservacao ||
+            service?.departamento_sigla ||
+            service?.departamento_nome ||
+            service?.departamento ||
+            service?.teamName ||
+            service?.delegaciaPrincipal ||
+            service?.vaga_info?.delegacia_nome ||
+            `Equipe ${service?.id}`
+        );
+    };
 
     useEffect(() => {
         localStorage.setItem(ATTENDANCE_STORAGE_KEY, JSON.stringify({ attendanceStatus, substitutions }));
@@ -162,7 +235,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                     id: service.id,
                     dateObj,
                     dateKey,
-                    teamName: service.teamName || service.delegaciaPrincipal || service?.vaga_info?.delegacia_nome || `Equipe ${service.id}`,
+                    teamName: resolveTeamName(service),
                     comboio: convoysOnDate.length > 0
                         ? `Formado (${convoysOnDate.length})`
                         : 'Sem comboio',
@@ -206,6 +279,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         const key = getMemberStatusKey(teamRow.id, member);
         setAttendanceStatus((prev) => ({ ...prev, [key]: 'substituto' }));
         setSubstituteSelectorOpen((prev) => ({ ...prev, [key]: true }));
+        setSubstituteSearchTerms((prev) => ({ ...prev, [key]: '' }));
     };
 
     const handleSelectSubstitute = async (teamRow, member, substituteId) => {
@@ -217,7 +291,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             ...substitutions,
             [key]: {
                 id: selected.id,
-                nome: selected.nome,
+                nome: getUserDisplayName(selected),
                 matricula: selected.matricula,
             },
         };
@@ -227,25 +301,9 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         setSubstitutions(nextSubstitutions);
         setAttendanceStatus(nextAttendanceStatus);
         setSubstituteSelectorOpen((prev) => ({ ...prev, [key]: false }));
-        showNotification(`Substituição registrada: ${selected.nome}`, 'success');
+        setSubstituteSearchTerms((prev) => { const n = { ...prev }; delete n[key]; return n; });
+        showNotification(`Substituição registrada: ${getUserDisplayName(selected)}`, 'success');
         await persistTeamAttendance(teamRow, nextAttendanceStatus, nextSubstitutions);
-    };
-
-    const handleForceTeamPresent = async (teamRow) => {
-        if (!Array.isArray(teamRow?.members) || teamRow.members.length === 0) {
-            showNotification('Nenhum integrante encontrado para esta equipe.', 'error');
-            return;
-        }
-
-        const nextAttendanceStatus = { ...attendanceStatus };
-        teamRow.members.forEach((member) => {
-            const key = getMemberStatusKey(teamRow.id, member);
-            nextAttendanceStatus[key] = 'presente';
-        });
-
-        setAttendanceStatus(nextAttendanceStatus);
-        showNotification('Presença confirmada para toda a equipe.', 'success');
-        await persistTeamAttendance(teamRow, nextAttendanceStatus, substitutions);
     };
 
     const getAttendanceWindow = (teamRow) => {
@@ -273,7 +331,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
 
     return (
         <div>
-            <h3 className="text-2xl font-bold mb-4">Frequência Operacional</h3>
+            <h3 className="text-2xl font-bold mb-4">Frequência Operacional (Atualizada v2)</h3>
             <div className="bg-gray-800 p-4 rounded-lg mb-6 flex items-end space-x-4">
                 <div><label className="block text-sm font-bold mb-1">Data de Início</label><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md" /></div>
                 <div><label className="block text-sm font-bold mb-1">Data de Fim</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md" /></div>
@@ -318,12 +376,6 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                                     >
                                                         {isExpanded ? 'Ocultar' : 'Ver equipe'}
                                                     </button>
-                                                    <button
-                                                        onClick={() => handleForceTeamPresent(teamRow)}
-                                                        className="px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
-                                                    >
-                                                        Confirmar equipe
-                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -333,14 +385,8 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                                 <td colSpan="6" className="px-4 py-3">
                                                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                                                         <div className="text-xs text-gray-400">
-                                                            Janela para registrar presença/falta: {windowLabel} {canMarkActions ? '(permitido)' : '(fora do horário - confirmação forçada habilitada)'}
+                                                            Janela para registrar presença/falta/substituição: {windowLabel} {canMarkActions ? '✅ permitido' : '🔒 fora do horário - ações bloqueadas'}
                                                         </div>
-                                                        <button
-                                                            onClick={() => handleForceTeamPresent(teamRow)}
-                                                            className="px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
-                                                        >
-                                                            Confirmar Presença da Equipe
-                                                        </button>
                                                     </div>
                                                     <div className="space-y-2">
                                                         {teamRow.members.length === 0 ? (
@@ -350,10 +396,11 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                                                 const key = getMemberStatusKey(teamRow.id, member);
                                                                 const status = attendanceStatus[key] || 'pendente';
                                                                 const substitute = substitutions[key];
+                                                                const substituteCandidates = getFilteredSubstituteUsers(member, substituteSearchTerms[key]);
                                                                 return (
                                                                     <div key={key || idx} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-gray-800 p-2 rounded">
                                                                         <div>
-                                                                            <div className="font-semibold text-white">{member?.nome || 'Sem nome'}</div>
+                                                                            <div className="font-semibold text-white">{getUserDisplayName(member)}</div>
                                                                             <div className="text-xs text-gray-400">Mat.: {displayMatricula(member?.matricula || '')}</div>
                                                                             {substitute && (
                                                                                 <div className="text-xs text-purple-300 mt-1">
@@ -362,51 +409,60 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                                                             )}
                                                                         </div>
                                                                         <div className="flex items-center gap-2">
-                                                                            <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                                                                status === 'presente' ? 'bg-green-700 text-green-100' :
-                                                                                status === 'falta' ? 'bg-red-700 text-red-100' :
-                                                                                status === 'substituto' ? 'bg-purple-700 text-purple-100' :
-                                                                                'bg-gray-600 text-gray-100'
-                                                                            }`}>
-                                                                                {status === 'presente' ? 'Presente' : status === 'falta' ? 'Falta' : status === 'substituto' ? 'Substituto' : 'Pendente'}
+                                                                            <span className={`px-2 py-1 rounded text-xs font-bold ${getStatusBadgeClass(status)}`}>
+                                                                                {getStatusLabel(status)}
                                                                             </span>
                                                                             <button
                                                                                 onClick={() => setMemberStatus(teamRow, member, 'presente')}
-                                                                                title={canMarkActions ? 'Confirmar presença' : 'Confirmação forçada fora da janela de horário'}
-                                                                                className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-500 text-white text-xs"
+                                                                                disabled={!canMarkActions}
+                                                                                title={canMarkActions ? 'Confirmar presença' : `Fora da janela permitida: ${windowLabel}`}
+                                                                                className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white text-xs"
                                                                             >
                                                                                 Presença
                                                                             </button>
                                                                             <button
                                                                                 onClick={() => setMemberStatus(teamRow, member, 'falta')}
-                                                                                title={canMarkActions ? 'Marcar falta' : 'Marcação forçada fora da janela de horário'}
-                                                                                className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 disabled:bg-gray-500 text-white text-xs"
+                                                                                disabled={!canMarkActions}
+                                                                                title={canMarkActions ? 'Registrar falta' : `Fora da janela permitida: ${windowLabel}`}
+                                                                                className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white text-xs"
                                                                             >
                                                                                 Falta
                                                                             </button>
                                                                             <button
                                                                                 onClick={() => handleOpenSubstituteSelector(teamRow, member)}
-                                                                                className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white text-xs"
+                                                                                disabled={!canMarkActions}
+                                                                                title={canMarkActions ? 'Registrar substituição' : `Fora da janela permitida: ${windowLabel}`}
+                                                                                className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white text-xs"
                                                                             >
-                                                                                Substituto
+                                                                                Substituir
                                                                             </button>
                                                                         </div>
                                                                         {substituteSelectorOpen[key] && (
-                                                                            <div className="md:col-span-2">
-                                                                                <select
-                                                                                    defaultValue=""
-                                                                                    onChange={(e) => handleSelectSubstitute(teamRow, member, e.target.value)}
-                                                                                    className="w-full md:w-96 p-2 bg-gray-700 border border-gray-600 rounded text-sm"
-                                                                                >
-                                                                                    <option value="" disabled>Selecione quem substituiu</option>
-                                                                                    {allUsers
-                                                                                        .filter((u) => String(u?.matricula || '') !== String(member?.matricula || ''))
+                                                                            <div className="md:col-span-2 mt-2">
+                                                                                <input
+                                                                                    type="text"
+                                                                                    placeholder="Digite o nome do policial substituto..."
+                                                                                    value={substituteSearchTerms[key] || ''}
+                                                                                    onChange={(e) => setSubstituteSearchTerms((prev) => ({ ...prev, [key]: e.target.value }))}
+                                                                                    className="w-full md:w-96 p-2 bg-gray-700 border border-gray-600 rounded text-sm text-white placeholder-gray-400 mb-1"
+                                                                                    autoFocus
+                                                                                />
+                                                                                <div className="w-full md:w-96 max-h-40 overflow-y-auto bg-gray-700 border border-gray-600 rounded">
+                                                                                    {substituteCandidates
                                                                                         .map((u) => (
-                                                                                            <option key={u.id} value={u.id}>
-                                                                                                {u.nome} ({displayMatricula(u.matricula)})
-                                                                                            </option>
+                                                                                            <button
+                                                                                                key={u.id}
+                                                                                                type="button"
+                                                                                                onClick={() => handleSelectSubstitute(teamRow, member, u.id)}
+                                                                                                className="w-full text-left p-2 hover:bg-gray-600 cursor-pointer text-sm text-white border-b border-gray-600 last:border-0"
+                                                                                            >
+                                                                                                {getUserDisplayName(u)} ({displayMatricula(u.matricula)})
+                                                                                            </button>
                                                                                         ))}
-                                                                                </select>
+                                                                                    {substituteCandidates.length === 0 && (
+                                                                                        <div className="p-2 text-sm text-gray-400 text-center">Nenhum policial encontrado</div>
+                                                                                    )}
+                                                                                </div>
                                                                             </div>
                                                                         )}
                                                                     </div>

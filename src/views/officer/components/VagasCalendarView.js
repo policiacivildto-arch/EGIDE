@@ -3,12 +3,19 @@ import ReactCalendar from 'react-calendar';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { apiClient } from '../../../config/api';
 import { Modal, LoadingSpinner } from '../../../components/ui/Shared';
-import { displayMatricula, formatMatricula, formatPlaca, formatTelefone, normalizeName } from '../../../utils/helpers';
+import {
+    checkLeaderWeeklyLimit,
+    checkSingleDelegaciaDepartmentWeeklyLimit,
+    checkWeeklyLimit,
+    displayMatricula,
+    formatMatricula,
+    formatPlaca,
+    formatTelefone,
+    getWeekInfo,
+    normalizeName,
+} from '../../../utils/helpers';
 import { findPolicialByMatricula } from '../../../constants/policiais';
 import { DEPARTMENTS } from '../../../constants/data';
-import { checkLeaderWeeklyLimit, checkWeeklyLimit } from '../../../utils/helpers';
-import { getCycleInfo, getWeekInfo } from '../../../utils/helpers';
-import { Download, ChevronDown, ChevronUp } from 'lucide-react';
 
 const getVagaDateObject = (vaga) => {
     const rawDate = vaga?.data || vaga?.date;
@@ -56,7 +63,7 @@ const isVagaDisponivel = (vaga) => {
     return status.includes('dispon');
 };
 
-const normalizeMatriculaDigits = (value) => String(value || '').replace(/\D/g, '');
+const normalizeMatriculaDigits = (value) => String(value || '').replaceAll(/\D/g, '');
 
 const teamHasOfficer = (team, user) => {
     const userMatricula = normalizeMatriculaDigits(user?.matricula);
@@ -79,7 +86,6 @@ export const VagasCalendarView = ({ user, showNotification }) => {
     const [activeDate, setActiveDate] = useState(new Date());
     const [monthlyVagas, setMonthlyVagas] = useState([]);
     const [monthlyTeams, setMonthlyTeams] = useState([]);
-    const [mySchedule, setMySchedule] = useState({});
     const [loading, setLoading] = useState(true);
     const [modalContent, setModalContent] = useState(null);
 
@@ -412,6 +418,52 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
         { nome: '', matricula: '', departamento: '', delegacia: '' },
     ]);
     const [vehicle, setVehicle] = useState('');
+    const [singleDelegaciaRestriction, setSingleDelegaciaRestriction] = useState({ blocked: false, loading: false, message: '' });
+
+    const vagaWeekId = useMemo(() => {
+        const parsedVagaDate = getVagaDateObject(vaga);
+        return vaga?.weekId || (parsedVagaDate ? getWeekInfo(parsedVagaDate).weekId : null);
+    }, [vaga]);
+
+    const normalizedMemberMatriculas = useMemo(() => (
+        team.map((member) => normalizeMatriculaDigits(member?.matricula))
+    ), [team]);
+
+    useEffect(() => {
+        const hasIncompleteMember = normalizedMemberMatriculas.some((matricula) => matricula.length !== 8);
+
+        if (!vagaWeekId || hasIncompleteMember) {
+            setSingleDelegaciaRestriction({ blocked: false, loading: false, message: '' });
+            return undefined;
+        }
+
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            setSingleDelegaciaRestriction((prev) => ({ ...prev, loading: true }));
+
+            try {
+                const validation = await checkSingleDelegaciaDepartmentWeeklyLimit(normalizedMemberMatriculas, vagaWeekId);
+                if (!cancelled) {
+                    setSingleDelegaciaRestriction({
+                        blocked: Boolean(validation?.blocked),
+                        loading: false,
+                        message: validation?.message || '',
+                    });
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    console.error('Erro ao validar restrição semanal de departamento com delegacia única:', error);
+                    setSingleDelegaciaRestriction({ blocked: false, loading: false, message: '' });
+                }
+            }
+        }, 250);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [normalizedMemberMatriculas, vagaWeekId]);
+
     const handleMemberChange = (index, field, value) => {
         const newTeam = [...team];
         newTeam[index][field] = value;
@@ -432,30 +484,51 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
     const handleSubmit = (e) => {
         e.preventDefault();
         const finalTeam = team.map(m => ({ ...m, matricula: formatMatricula(m.matricula) }));
-        if (finalTeam.some(m => !m.nome || m.matricula.length < 7 || !m.delegacia) || !vehicle || team[0].telefone.replace(/\D/g, '').length < 10) {
+        if (finalTeam.some(m => !m.nome || m.matricula.length < 7 || !m.delegacia) || !vehicle || team[0].telefone.replaceAll(/\D/g, '').length < 10) {
             showNotification("Preencha todos os campos da equipe, incluindo telefone válido do líder e placa da viatura.", "error");
             return;
         }
+
+        if (singleDelegaciaRestriction.blocked) {
+            showNotification(singleDelegaciaRestriction.message, 'error', 9000);
+            return;
+        }
+
         onSubmit(vaga, { members: finalTeam, vehicle, telefone: team[0].telefone });
     };
     return (
         <form onSubmit={handleSubmit}>
             <h2 className="text-2xl font-bold mb-4 text-gray-800">Registrar Equipe para Serviço</h2>
             <p className="mb-6 text-gray-600">Dia: <span className="font-semibold">{(getVagaOperationalDateObject(vaga) || new Date()).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span></p>
-            {team.map((member, index) => (
-                <div key={index} className="mb-6 p-4 border border-gray-300 rounded-lg bg-white">
+            {singleDelegaciaRestriction.loading && (
+                <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Validando restrições semanais da equipe...
+                </div>
+            )}
+            {singleDelegaciaRestriction.blocked && (
+                <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    {singleDelegaciaRestriction.message}
+                </div>
+            )}
+            {team.map((member, index) => {
+                const memberKey = member.uid || member.matricula || `member-${index}`;
+                const phoneInputId = `team-leader-phone-${index}`;
+
+                return (
+                <div key={memberKey} className="mb-6 p-4 border border-gray-300 rounded-lg bg-white">
                     <h3 className="font-bold text-lg mb-2 text-gray-700">Componente {index + 1} {index === 0 ? "(Chefe da Equipe)" : ""}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <input type="text" placeholder="NOME COMPLETO" value={member.nome} onChange={(e) => handleMemberChange(index, 'nome', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 uppercase" required />
                         <div><input type="text" placeholder="MATRÍCULA" value={member.matricula} onChange={(e) => handleMemberChange(index, 'matricula', e.target.value)} maxLength="8" className="w-full p-2 border rounded-md text-gray-800" required /><small className="text-gray-500">Formato final: {displayMatricula(member.matricula)}</small></div>
                         <select value={member.departamento} onChange={(e) => handleMemberChange(index, 'departamento', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 bg-white" required><option value="">SELECIONE O DEPARTAMENTO</option>{Object.keys(DEPARTMENTS || {}).map(dep => <option key={dep} value={dep}>{dep}</option>)}</select>
                         <select value={member.delegacia} onChange={(e) => handleMemberChange(index, 'delegacia', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 bg-white" required disabled={!member.departamento}><option value="">SELECIONE A DELEGACIA</option>{member.departamento && (DEPARTMENTS[member.departamento] || []).map(del => <option key={del} value={del}>{del}</option>)}</select>
-                        {index === 0 && <div><label className="block text-sm font-medium text-gray-700">Telefone do Chefe da Equipe</label><input type="tel" placeholder="(XX) XXXXX-XXXX" value={member.telefone} onChange={(e) => handleMemberChange(index, 'telefone', e.target.value)} maxLength="15" className="w-full p-2 border rounded-md text-gray-800" required /></div>}
+                        {index === 0 && <div><label htmlFor={phoneInputId} className="block text-sm font-medium text-gray-700">Telefone do Chefe da Equipe</label><input id={phoneInputId} type="tel" placeholder="(XX) XXXXX-XXXX" value={member.telefone} onChange={(e) => handleMemberChange(index, 'telefone', e.target.value)} maxLength="15" className="w-full p-2 border rounded-md text-gray-800" required /></div>}
                     </div>
                 </div>
-            ))}
+                );
+            })}
             <div className="mb-6 p-4 border border-gray-300 rounded-lg bg-white"><h3 className="font-bold text-lg mb-2 text-gray-700">Viatura</h3><input type="text" placeholder="PLACA (ABC-1234)" value={vehicle} onChange={(e) => setVehicle(formatPlaca(e.target.value))} maxLength="8" className="w-full p-2 border rounded-md text-gray-800 uppercase" required /></div>
-            <div className="flex justify-end space-x-4"><button type="button" onClick={onCancel} className="py-2 px-6 bg-gray-500 hover:bg-gray-600 text-white font-semibold rounded-lg transition">Cancelar</button><button type="submit" className="py-2 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition">Confirmar Registro</button></div>
+            <div className="flex justify-end space-x-4"><button type="button" onClick={onCancel} className="py-2 px-6 bg-gray-500 hover:bg-gray-600 text-white font-semibold rounded-lg transition">Cancelar</button><button type="submit" disabled={singleDelegaciaRestriction.loading || singleDelegaciaRestriction.blocked} className="py-2 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition">{singleDelegaciaRestriction.loading ? 'Validando...' : 'Confirmar Registro'}</button></div>
         </form>
     );
 };

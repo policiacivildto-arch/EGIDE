@@ -26,6 +26,14 @@ export default function AdminDashboard({ userData, showNotification }) {
     const [isVagasModalOpen, setIsVagasModalOpen] = useState(false);
     const [holidays, setHolidays] = useState([]);
 
+    const adminDepartamento =
+        userData?.departamento ||
+        userData?.departamento_nome ||
+        userData?.perfil_departamento?.sigla ||
+        userData?.perfil_departamento?.departamento?.sigla ||
+        userData?.perfil_departamento?.departamento_nome ||
+        '';
+
     const toIsoLocalDate = (date) => {
         const d = new Date(date);
         const year = d.getFullYear();
@@ -281,9 +289,9 @@ export default function AdminDashboard({ userData, showNotification }) {
                 <>
                     {view === 'dashboard' && <ReportsDashboardView showNotification={showNotification} />}
                     {view === 'ranking' && <RankingView showNotification={showNotification} />}
-                    {view === 'schedule' && <ScheduleManagementView vagas={vagas} teams={teams} allUsers={allUsers} showNotification={showNotification} weekId={currentWeek.weekId} />}
+                    {view === 'schedule' && <ScheduleManagementView vagas={vagas} teams={teams} allUsers={allUsers} showNotification={showNotification} weekId={currentWeek.weekId} departamento={adminDepartamento} />}
                     {view === 'convoys' && <ConvoyManagementView teams={teams} convoys={convoys} weekId={currentWeek.weekId} showNotification={showNotification} />}
-                    {view === 'paymentReport' && <PaymentReportView allUsers={allUsers} showNotification={showNotification} />}
+                    {view === 'paymentReport' && <PaymentReportView allUsers={allUsers} showNotification={showNotification} departamento={adminDepartamento} />}
                     {view === 'operationCost' && <OperationCostView allUsers={allUsers} holidays={holidays} showNotification={showNotification} />}
                     {view === 'operationReports' && <OperationReportsView showNotification={showNotification} />}
                     {view === 'alerts' && <AlertsView showNotification={showNotification} setView={setView} setCurrentWeek={setCurrentWeek} />}

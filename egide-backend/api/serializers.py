@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from django.db.models import Q
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.db import transaction
@@ -172,6 +175,57 @@ class EquipeSerializer(serializers.ModelSerializer):
             resolved.append(self._resolve_or_create_policial(matricula, nome, delegacia))
         return resolved
 
+    def _user_can_bypass_single_delegacia_weekly_limit(self):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+
+        if not user or not user.is_authenticated:
+            return False
+
+        try:
+            perfil = user.policial.perfil
+        except Exception:
+            return False
+
+        return perfil.is_admin or perfil.is_coordenador
+
+    def _validate_single_delegacia_weekly_limit(self, vaga, membros, instance=None):
+        if self._user_can_bypass_single_delegacia_weekly_limit():
+            return
+
+        if not vaga or not vaga.data or not membros:
+            return
+
+        week_start = vaga.data - timedelta(days=vaga.data.weekday())
+        week_end = week_start + timedelta(days=6)
+
+        for policial in membros:
+            delegacia = getattr(policial, 'delegacia', None)
+            departamento = getattr(delegacia, 'departamento', None)
+
+            if not departamento:
+                continue
+
+            if departamento.delegacias.filter(ativo=True).count() != 1:
+                continue
+
+            equipes_semana = Equipe.objects.filter(
+                vaga__data__gte=week_start,
+                vaga__data__lte=week_end,
+            ).filter(
+                Q(chefe=policial) | Q(membros=policial)
+            )
+
+            if instance and instance.pk:
+                equipes_semana = equipes_semana.exclude(pk=instance.pk)
+
+            if equipes_semana.exists():
+                raise serializers.ValidationError(
+                    f'{policial.nome} só pode se candidatar uma vez por semana porque o departamento '
+                    f'{departamento.sigla} possui apenas uma delegacia ativa. '
+                    'Se necessário, um administrador pode escalá-lo manualmente.'
+                )
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
         membros_ids = attrs.get('membros')
@@ -199,6 +253,8 @@ class EquipeSerializer(serializers.ModelSerializer):
             if not validated_data.get('chefe') and membros:
                 validated_data['chefe'] = membros[0]
 
+        self._validate_single_delegacia_weekly_limit(validated_data.get('vaga'), membros)
+
         instance = super().create(validated_data)
         if membros is not None:
             instance.membros.set(membros)
@@ -216,8 +272,13 @@ class EquipeSerializer(serializers.ModelSerializer):
             delegacia = vaga.delegacia if vaga else None
             membros = self._resolve_membros_by_matricula(membros_matriculas, membros_nomes, delegacia)
 
+        vaga = validated_data.get('vaga', instance.vaga)
+        membros_efetivos = membros if membros is not None else list(instance.membros.all())
+
         if not validated_data.get('chefe') and chefe_matricula and membros:
             validated_data['chefe'] = next((m for m in membros if m.matricula == chefe_matricula), None)
+
+        self._validate_single_delegacia_weekly_limit(vaga, membros_efetivos, instance=instance)
 
         updated = super().update(instance, validated_data)
         if membros is not None:

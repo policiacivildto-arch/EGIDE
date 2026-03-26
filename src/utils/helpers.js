@@ -195,3 +195,116 @@ export const checkLeaderWeeklyLimit = async (leaderMatricula, weekId) => {
     const result = await checkWeeklyLimit([leaderMatricula], weekId);
     return result.conflict;
 };
+
+export const checkSingleDelegaciaDepartmentWeeklyLimit = async (memberMatriculas, weekId) => {
+    if (!Array.isArray(memberMatriculas) || memberMatriculas.length === 0 || !weekId) {
+        return { blocked: false };
+    }
+
+    const normalizedMatriculas = [...new Set(
+        memberMatriculas
+            .map((matricula) => String(matricula || '').replaceAll(/\D/g, ''))
+            .filter((matricula) => matricula.length === 8)
+    )];
+
+    if (normalizedMatriculas.length === 0) {
+        return { blocked: false };
+    }
+
+    const range = resolveWeekRange(weekId);
+    if (!range) return { blocked: false };
+
+    const [teamsResponse, policiaisResponse, delegaciasResponse] = await Promise.all([
+        apiClient.getTeams({
+            vaga__data__gte: formatIsoDate(range.start),
+            vaga__data__lte: formatIsoDate(range.end),
+        }),
+        apiClient.getPoliciais(),
+        apiClient.getDelegacias({ ativo: true }),
+    ]);
+
+    const teams = Array.isArray(teamsResponse)
+        ? teamsResponse
+        : (teamsResponse?.results || []);
+
+    const policiais = Array.isArray(policiaisResponse)
+        ? policiaisResponse
+        : (policiaisResponse?.results || []);
+
+    const delegacias = Array.isArray(delegaciasResponse)
+        ? delegaciasResponse
+        : (delegaciasResponse?.results || []);
+
+    const policiaisById = new Map(
+        policiais
+            .filter((policial) => policial?.id != null)
+            .map((policial) => [String(policial.id), policial])
+    );
+
+    const policiaisByMatricula = new Map(
+        policiais
+            .filter((policial) => policial?.matricula)
+            .map((policial) => [String(policial.matricula).replaceAll(/\D/g, ''), policial])
+    );
+
+    const delegaciasById = new Map(
+        delegacias
+            .filter((delegacia) => delegacia?.id != null)
+            .map((delegacia) => [String(delegacia.id), delegacia])
+    );
+
+    const activeDelegaciasByDepartment = delegacias.reduce((acc, delegacia) => {
+        if (!delegacia?.ativo || delegacia?.departamento == null) {
+            return acc;
+        }
+
+        const departmentId = String(delegacia.departamento);
+        acc.set(departmentId, (acc.get(departmentId) || 0) + 1);
+        return acc;
+    }, new Map());
+
+    const teamContainsMatricula = (team, matricula) => {
+        const detailedMembers = Array.isArray(team?.membros_detalhes) ? team.membros_detalhes : [];
+        if (detailedMembers.some((member) => String(member?.matricula || '').replaceAll(/\D/g, '') === matricula)) {
+            return true;
+        }
+
+        const memberIds = Array.isArray(team?.membros) ? team.membros : [];
+        if (memberIds.some((memberId) => String(policiaisById.get(String(memberId))?.matricula || '').replaceAll(/\D/g, '') === matricula)) {
+            return true;
+        }
+
+        const leader = policiaisById.get(String(team?.chefe));
+        return String(leader?.matricula || '').replaceAll(/\D/g, '') === matricula;
+    };
+
+    for (const matricula of normalizedMatriculas) {
+        const policial = policiaisByMatricula.get(matricula);
+        const delegacia = delegaciasById.get(String(policial?.delegacia));
+        const departmentId = delegacia?.departamento == null ? null : String(delegacia.departamento);
+
+        if (!policial || !departmentId) {
+            continue;
+        }
+
+        if ((activeDelegaciasByDepartment.get(departmentId) || 0) !== 1) {
+            continue;
+        }
+
+        const alreadyScheduled = teams.some((team) => teamContainsMatricula(team, matricula));
+        if (!alreadyScheduled) {
+            continue;
+        }
+
+        const departmentName = delegacia?.departamento_nome || policial?.departamento_nome || 'este departamento';
+        return {
+            blocked: true,
+            officerName: policial?.nome || 'Policial',
+            officerMatricula: matricula,
+            departmentName,
+            message: `${policial?.nome || 'Este policial'} já tem candidatura nesta semana e não pode se candidatar novamente porque ${departmentName} possui apenas uma delegacia ativa. Apenas a administração pode escalá-lo manualmente.`,
+        };
+    }
+
+    return { blocked: false };
+};

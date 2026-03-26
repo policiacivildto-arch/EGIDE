@@ -1,6 +1,6 @@
 // RelatorioView.js - Componente de Relatório de Operações em Tempo Real
-import React from 'react';
-import { FileText, ArrowRight, ArrowLeft, AlertCircle, Users, Plus } from 'lucide-react';
+import React, { useState } from 'react';
+import { FileText, ArrowRight, ArrowLeft, AlertCircle, Users } from 'lucide-react';
 
 export function RelatorioView({ 
     operations, 
@@ -16,6 +16,12 @@ export function RelatorioView({
     setEquipes,
     userData
 }) {
+    const [substituteSelectorOpen, setSubstituteSelectorOpen] = useState({});
+    const [substituteSearchTerms, setSubstituteSearchTerms] = useState({});
+
+    const normalizeOfficerName = (name) => String(name || '').trim();
+    const getOfficerDisplayName = (name) => normalizeOfficerName(name) || 'Sem nome';
+
     // Filtrar operações baseado no perfil
     let operacoesParaRelatorio = operations.filter(op => 
         op.status === 'Aprovada pelo DTO' || op.status === 'Em Execução'
@@ -31,39 +37,85 @@ export function RelatorioView({
     const handleMarcarPresenca = (operacaoId, equipeId, policial) => {
         const key = `${operacaoId}-${equipeId}-${policial}`;
         const novaPresenca = { ...policiaisPresenca };
-        novaPresenca[key] = !novaPresenca[key];
-        setPoliciaisPresenca(novaPresenca);
+        const substitutoKey = `${key}-substituto`;
+        const marcando = !novaPresenca[key];
+        novaPresenca[key] = marcando;
 
-        if (novaPresenca[key]) {
+        if (marcando) {
+            delete novaPresenca[substitutoKey];
+        }
+
+        if (marcando) {
             novaPresenca[`${operacaoId}-${equipeId}-status`] = 'chegou';
             showNotification('Presença confirmada! Equipe marcada como chegada.', 'success');
         }
         setPoliciaisPresenca(novaPresenca);
     };
 
-    const handleMarcarEquipeChegou = (operacaoId, equipeId) => {
-        const key = `${operacaoId}-${equipeId}-status`;
-        const novaPresenca = { ...policiaisPresenca };
-        const marcando = novaPresenca[key] !== 'chegou';
-        novaPresenca[key] = marcando ? 'chegou' : null;
-        
-        const equipe = equipes.find(eq => eq.id === equipeId);
-        if (equipe) {
-            if (equipe.chefe) {
-                novaPresenca[`${operacaoId}-${equipeId}-${equipe.chefe}`] = marcando;
-            }
-            if (equipe.membros) {
-                equipe.membros.forEach(membro => {
-                    novaPresenca[`${operacaoId}-${equipeId}-${membro}`] = marcando;
-                });
-            }
+    const getAttendanceWindow = (operacao) => {
+        const now = new Date();
+        const start = operacao?.data_hora_inicio ? new Date(operacao.data_hora_inicio) : null;
+        const end = operacao?.data_hora_fim ? new Date(operacao.data_hora_fim) : start;
+
+        if (!start || Number.isNaN(start.getTime())) {
+            return { canMarkActions: true, windowLabel: 'Horário da operação não informado' };
         }
-        
-        setPoliciaisPresenca(novaPresenca);
-        showNotification(
-            marcando ? 'Equipe e todos os policiais marcados como chegados!' : 'Equipe desmarcada',
-            'success'
-        );
+
+        let endDate = end;
+        if (!endDate || Number.isNaN(endDate.getTime())) {
+            endDate = start;
+        }
+        if (endDate <= start) {
+            endDate = new Date(endDate.getTime() + 24 * 60 * 60 * 1000);
+        }
+
+        const windowStart = new Date(start.getTime() - 60 * 60 * 1000);
+        const windowEnd = new Date(endDate.getTime() + 60 * 60 * 1000);
+
+        return {
+            canMarkActions: now >= windowStart && now <= windowEnd,
+            windowLabel: `${windowStart.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} até ${windowEnd.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+        };
+    };
+
+    const getCandidateNames = (operacaoId, policialAtual) => {
+        const nomes = new Set();
+        equipes
+            .filter((eq) => eq.operacaoId === operacaoId)
+            .forEach((eq) => {
+                const chefe = normalizeOfficerName(eq.chefe);
+                if (chefe) nomes.add(chefe);
+                if (Array.isArray(eq.membros)) {
+                    eq.membros.forEach((nome) => {
+                        const nomeLimpo = normalizeOfficerName(nome);
+                        if (nomeLimpo) nomes.add(nomeLimpo);
+                    });
+                }
+            });
+
+        nomes.delete(normalizeOfficerName(policialAtual));
+        return Array.from(nomes).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    };
+
+    const handleOpenSubstituteSelector = (operacaoId, equipeId, policial) => {
+        const key = `${operacaoId}-${equipeId}-${policial}`;
+        setSubstituteSelectorOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+        setSubstituteSearchTerms((prev) => ({ ...prev, [key]: '' }));
+    };
+
+    const handleSelectSubstitute = (operacaoId, equipeId, policial, substitutoNome) => {
+        const key = `${operacaoId}-${equipeId}-${policial}`;
+        const substitutoKey = `${key}-substituto`;
+        const novoEstado = {
+            ...policiaisPresenca,
+            [key]: true,
+            [substitutoKey]: substitutoNome,
+            [`${operacaoId}-${equipeId}-status`]: 'chegou',
+        };
+
+        setPoliciaisPresenca(novoEstado);
+        setSubstituteSelectorOpen((prev) => ({ ...prev, [key]: false }));
+        showNotification(`Substituição registrada: ${policial} -> ${substitutoNome}`, 'success');
     };
 
     const getEquipesFaltam = (operacaoId) => {
@@ -77,7 +129,7 @@ export function RelatorioView({
                     <FileText className="text-cyan-400" size={28} />
                     <span>Frequência Operacional</span>
                 </h2>
-                <p className="text-gray-400 mb-6">Controle de presença e faltas em tempo real</p>
+                                <p className="text-gray-400 mb-6">Controle de presença e substituição em tempo real</p>
 
                 {operacoesParaRelatorio.length === 0 ? (
                     <div className="text-center py-12 text-gray-400">
@@ -208,6 +260,7 @@ export function RelatorioView({
                                     ) : (
                                         equipesOperacao.map(equipe => {
                                             const equipeChegou = policiaisPresenca[`${operacao.id}-${equipe.id}-status`] === 'chegou';
+                                            const { canMarkActions, windowLabel } = getAttendanceWindow(operacao);
                                             
                                             return (
                                                 <div 
@@ -232,17 +285,10 @@ export function RelatorioView({
                                                                     🚔 Viatura: {equipe.viatura}
                                                                 </p>
                                                             )}
+                                                            <p className="text-xs text-gray-400 mt-2">
+                                                                Janela para confirmar presença/substituição: {windowLabel} {canMarkActions ? '✅ permitido' : '🔒 fora do horário'}
+                                                            </p>
                                                         </div>
-                                                        <button
-                                                            onClick={() => handleMarcarEquipeChegou(operacao.id, equipe.id)}
-                                                            className={`px-4 py-2 rounded text-white text-sm ${
-                                                                equipeChegou 
-                                                                    ? 'bg-gray-500 hover:bg-gray-600' 
-                                                                    : 'bg-green-600 hover:bg-green-700'
-                                                            }`}
-                                                        >
-                                                            {equipeChegou ? 'Desmarcar' : 'Marcar Chegada'}
-                                                        </button>
                                                     </div>
 
                                                     {/* Lista de Policiais */}
@@ -267,64 +313,38 @@ export function RelatorioView({
                                                                         return `${presentes}/${total} presentes`;
                                                                     })()}
                                                                 </span>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const novaPresenca = { ...policiaisPresenca };
-                                                                        let todosMarcados = true;
-                                                                        if (equipe.chefe && !novaPresenca[`${operacao.id}-${equipe.id}-${equipe.chefe}`]) {
-                                                                            todosMarcados = false;
-                                                                        }
-                                                                        if (equipe.membros) {
-                                                                            equipe.membros.forEach(m => {
-                                                                                if (!novaPresenca[`${operacao.id}-${equipe.id}-${m}`]) {
-                                                                                    todosMarcados = false;
-                                                                                }
-                                                                            });
-                                                                        }
-                                                                        
-                                                                        const marcar = !todosMarcados;
-                                                                        if (equipe.chefe) {
-                                                                            novaPresenca[`${operacao.id}-${equipe.id}-${equipe.chefe}`] = marcar;
-                                                                        }
-                                                                        if (equipe.membros) {
-                                                                            equipe.membros.forEach(m => {
-                                                                                novaPresenca[`${operacao.id}-${equipe.id}-${m}`] = marcar;
-                                                                            });
-                                                                        }
-                                                                        
-                                                                        novaPresenca[`${operacao.id}-${equipe.id}-status`] = marcar ? 'chegou' : null;
-                                                                        
-                                                                        setPoliciaisPresenca(novaPresenca);
-                                                                        showNotification(
-                                                                            marcar ? 'Todos os policiais marcados como presentes!' : 'Todas as presenças desmarcadas',
-                                                                            'success'
-                                                                        );
-                                                                    }}
-                                                                    className="bg-cyan-600 hover:bg-cyan-700 px-3 py-1 rounded text-xs text-white"
-                                                                >
-                                                                    ✓ Marcar Todos
-                                                                </button>
                                                             </div>
                                                         </div>
                                                         {equipe.chefe && (
                                                             <div className="bg-gray-700 p-3 rounded flex items-center justify-between">
                                                                 <div className="flex items-center space-x-3">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={policiaisPresenca[`${operacao.id}-${equipe.id}-${equipe.chefe}`] || false}
-                                                                        onChange={() => handleMarcarPresenca(operacao.id, equipe.id, equipe.chefe)}
-                                                                        className="w-5 h-5 rounded"
-                                                                    />
                                                                     <span className="text-white">
-                                                                        👮 {equipe.chefe} <span className="text-yellow-400 text-xs">(Líder)</span>
+                                                                        👮 {getOfficerDisplayName(equipe.chefe)} <span className="text-yellow-400 text-xs">(Líder)</span>
                                                                     </span>
+                                                                    {policiaisPresenca[`${operacao.id}-${equipe.id}-${equipe.chefe}-substituto`] && (
+                                                                        <span className="text-xs text-purple-300">
+                                                                            (Substituído por {policiaisPresenca[`${operacao.id}-${equipe.id}-${equipe.chefe}-substituto`]})
+                                                                        </span>
+                                                                    )}
                                                                 </div>
-                                                                <button
-                                                                    onClick={() => setShowSubstituicaoModal({ operacaoId: operacao.id, equipeId: equipe.id, policial: equipe.chefe })}
-                                                                    className="bg-orange-600 hover:bg-orange-700 px-3 py-1 rounded text-xs text-white"
-                                                                >
-                                                                    Substituir
-                                                                </button>
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        onClick={() => handleMarcarPresenca(operacao.id, equipe.id, equipe.chefe)}
+                                                                        disabled={!canMarkActions}
+                                                                        title={canMarkActions ? 'Confirmar presença' : `Fora da janela permitida: ${windowLabel}`}
+                                                                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed px-3 py-1 rounded text-xs text-white"
+                                                                    >
+                                                                        Presença
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleOpenSubstituteSelector(operacao.id, equipe.id, equipe.chefe)}
+                                                                        disabled={!canMarkActions}
+                                                                        title={canMarkActions ? 'Registrar substituição' : `Fora da janela permitida: ${windowLabel}`}
+                                                                        className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-500 disabled:cursor-not-allowed px-3 py-1 rounded text-xs text-white"
+                                                                    >
+                                                                        Substituir
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         )}
 
@@ -332,46 +352,96 @@ export function RelatorioView({
                                                         {equipe.membros && equipe.membros.map((membro, idx) => (
                                                             <div key={idx} className="bg-gray-700 p-3 rounded flex items-center justify-between">
                                                                 <div className="flex items-center space-x-3">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={policiaisPresenca[`${operacao.id}-${equipe.id}-${membro}`] || false}
-                                                                        onChange={() => handleMarcarPresenca(operacao.id, equipe.id, membro)}
-                                                                        className="w-5 h-5 rounded"
-                                                                    />
-                                                                    <span className="text-white">👮 {membro}</span>
+                                                                    <span className="text-white">👮 {getOfficerDisplayName(membro)}</span>
+                                                                    {policiaisPresenca[`${operacao.id}-${equipe.id}-${membro}-substituto`] && (
+                                                                        <span className="text-xs text-purple-300">
+                                                                            (Substituído por {policiaisPresenca[`${operacao.id}-${equipe.id}-${membro}-substituto`]})
+                                                                        </span>
+                                                                    )}
                                                                 </div>
-                                                                <button
-                                                                    onClick={() => setShowSubstituicaoModal({ operacaoId: operacao.id, equipeId: equipe.id, policial: membro })}
-                                                                    className="bg-orange-600 hover:bg-orange-700 px-3 py-1 rounded text-xs text-white"
-                                                                >
-                                                                    Substituir
-                                                                </button>
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        onClick={() => handleMarcarPresenca(operacao.id, equipe.id, membro)}
+                                                                        disabled={!canMarkActions}
+                                                                        title={canMarkActions ? 'Confirmar presença' : `Fora da janela permitida: ${windowLabel}`}
+                                                                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed px-3 py-1 rounded text-xs text-white"
+                                                                    >
+                                                                        Presença
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleOpenSubstituteSelector(operacao.id, equipe.id, membro)}
+                                                                        disabled={!canMarkActions}
+                                                                        title={canMarkActions ? 'Registrar substituição' : `Fora da janela permitida: ${windowLabel}`}
+                                                                        className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-500 disabled:cursor-not-allowed px-3 py-1 rounded text-xs text-white"
+                                                                    >
+                                                                        Substituir
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         ))}
 
-                                                        {/* Botão Adicionar Policial */}
-                                                        <button
-                                                            onClick={() => {
-                                                                const nomePolicial = prompt('Digite o nome do policial a adicionar:');
-                                                                if (nomePolicial) {
-                                                                    const equipesAtualizadas = equipes.map(eq => {
-                                                                        if (eq.id === equipe.id) {
-                                                                            return {
-                                                                                ...eq,
-                                                                                membros: [...(eq.membros || []), nomePolicial]
-                                                                            };
-                                                                        }
-                                                                        return eq;
-                                                                    });
-                                                                    setEquipes(equipesAtualizadas);
-                                                                    showNotification(`Policial ${nomePolicial} adicionado à equipe!`, 'success');
-                                                                }
-                                                            }}
-                                                            className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded text-white text-sm flex items-center justify-center space-x-2"
-                                                        >
-                                                            <Plus size={16} />
-                                                            <span>Adicionar Policial</span>
-                                                        </button>
+                                                        {equipe.chefe && substituteSelectorOpen[`${operacao.id}-${equipe.id}-${equipe.chefe}`] && (
+                                                            <div className="bg-gray-800 p-3 rounded border border-gray-600">
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder={`Buscar substituto para ${equipe.chefe}...`}
+                                                                    value={substituteSearchTerms[`${operacao.id}-${equipe.id}-${equipe.chefe}`] || ''}
+                                                                    onChange={(e) => setSubstituteSearchTerms((prev) => ({ ...prev, [`${operacao.id}-${equipe.id}-${equipe.chefe}`]: e.target.value }))}
+                                                                    className="w-full p-2 mb-2 rounded bg-gray-700 text-white border border-gray-600"
+                                                                />
+                                                                <div className="max-h-36 overflow-y-auto space-y-1">
+                                                                    {getCandidateNames(operacao.id, equipe.chefe)
+                                                                        .filter((nome) => {
+                                                                            const termo = (substituteSearchTerms[`${operacao.id}-${equipe.id}-${equipe.chefe}`] || '').trim().toLowerCase();
+                                                                            return !termo || nome.toLowerCase().includes(termo);
+                                                                        })
+                                                                        .map((nome) => (
+                                                                            <button
+                                                                                key={nome}
+                                                                                type="button"
+                                                                                onClick={() => handleSelectSubstitute(operacao.id, equipe.id, equipe.chefe, nome)}
+                                                                                className="w-full text-left px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm"
+                                                                            >
+                                                                                {nome}
+                                                                            </button>
+                                                                        ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {equipe.membros && equipe.membros.map((membro) => {
+                                                            const selectorKey = `${operacao.id}-${equipe.id}-${membro}`;
+                                                            if (!substituteSelectorOpen[selectorKey]) {
+                                                                return null;
+                                                            }
+
+                                                            const termoBusca = (substituteSearchTerms[selectorKey] || '').trim().toLowerCase();
+                                                            const candidatos = getCandidateNames(operacao.id, membro).filter((nome) => !termoBusca || nome.toLowerCase().includes(termoBusca));
+
+                                                            return (
+                                                                <div key={`${selectorKey}-busca`} className="bg-gray-800 p-3 rounded border border-gray-600">
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder={`Buscar substituto para ${membro}...`}
+                                                                        value={substituteSearchTerms[selectorKey] || ''}
+                                                                        onChange={(e) => setSubstituteSearchTerms((prev) => ({ ...prev, [selectorKey]: e.target.value }))}
+                                                                        className="w-full p-2 mb-2 rounded bg-gray-700 text-white border border-gray-600"
+                                                                    />
+                                                                    <div className="max-h-36 overflow-y-auto space-y-1">
+                                                                        {candidatos.map((nome) => (
+                                                                            <button
+                                                                                key={`${selectorKey}-${nome}`}
+                                                                                type="button"
+                                                                                onClick={() => handleSelectSubstitute(operacao.id, equipe.id, membro, nome)}
+                                                                                className="w-full text-left px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm"
+                                                                            >
+                                                                                {nome}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             );
