@@ -7,6 +7,8 @@ import {
     displayMatricula 
 } from '../../../utils/helpers'
 import { LoadingSpinner } from '../../../components/ui/Shared';
+import { Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const ATTENDANCE_STORAGE_KEY = 'payment_report_attendance_v1';
 
@@ -329,6 +331,75 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         };
     };
 
+    const exportToXLSX = () => {
+        if (frequencyRows.length === 0) {
+            showNotification('Nenhum dado para exportar. Realize uma busca primeiro.', 'warning');
+            return;
+        }
+
+        const exportData = frequencyRows.flatMap(teamRow => {
+            const baseRow = {
+                'Data': teamRow.dateObj.toLocaleDateString('pt-BR'),
+                'Equipe': teamRow.teamName,
+                'Comboio': teamRow.comboio,
+                'Área': teamRow.area,
+                'Telefone': teamRow.phone,
+                'Hora Início': teamRow.startTime,
+                'Hora Fim': teamRow.endTime,
+            };
+
+            // Se houver membros, expandir em linhas separadas
+            if (teamRow.members.length > 0) {
+                return teamRow.members.map((member, idx) => {
+                    const key = getMemberStatusKey(teamRow.id, member);
+                    const status = attendanceStatus[key] || 'Pendente';
+                    const substitute = substitutions[key];
+                    const statusLabel = status === 'presente' ? 'Presente' : status === 'falta' ? 'Falta' : status === 'substituto' ? 'Substituto' : 'Pendente';
+                    
+                    return {
+                        ...baseRow,
+                        'Integrante': getUserDisplayName(member),
+                        'Matrícula': displayMatricula(member?.matricula || ''),
+                        'Status': statusLabel,
+                        'Substituto Por': substitute ? `${substitute.nome} (${displayMatricula(substitute.matricula)})` : '',
+                    };
+                });
+            } else {
+                return [{
+                    ...baseRow,
+                    'Integrante': 'Nenhum',
+                    'Matrícula': '',
+                    'Status': 'N/A',
+                    'Substituto Por': '',
+                }];
+            }
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        
+        // Ajustar largura de colunas
+        worksheet['!cols'] = [
+            { wch: 12 },  // Data
+            { wch: 20 },  // Equipe
+            { wch: 15 },  // Comboio
+            { wch: 25 },  // Área
+            { wch: 15 },  // Telefone
+            { wch: 12 },  // Hora Início
+            { wch: 12 },  // Hora Fim
+            { wch: 25 },  // Integrante
+            { wch: 12 },  // Matrícula
+            { wch: 15 },  // Status
+            { wch: 30 },  // Substituto Por
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Frequência Operacional');
+        
+        const fileName = `Frequencia_${startDate}_a_${endDate}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+        showNotification(`Planilha exportada: ${fileName}`, 'success');
+    };
+
     return (
         <div>
             <h3 className="text-2xl font-bold mb-4">Frequência Operacional (Atualizada v2)</h3>
@@ -337,6 +408,10 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                 <div><label className="block text-sm font-bold mb-1">Data de Fim</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md" /></div>
                 <button onClick={fetchServices} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500">
                     {loading ? 'Buscando...' : 'Buscar'}
+                </button>
+                <button onClick={exportToXLSX} disabled={frequencyRows.length === 0} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500 flex items-center space-x-2">
+                    <Download size={18} />
+                    <span>Baixar Planilha</span>
                 </button>
             </div>
 
