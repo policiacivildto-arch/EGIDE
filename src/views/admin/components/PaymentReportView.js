@@ -44,6 +44,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     const [startDate, setStartDate] = useState(today);
     const [endDate, setEndDate] = useState(today);
     const [services, setServices] = useState([]);
+    const [vagaDelegaciaById, setVagaDelegaciaById] = useState({});
     const [convoysForPeriod, setConvoysForPeriod] = useState([]);
     const [loading, setLoading] = useState(false);
     const [expandedTeams, setExpandedTeams] = useState({});
@@ -103,6 +104,28 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         return 'Pendente';
     };
 
+    const isGenericDepartmentLabel = useCallback((value) => {
+        const normalized = String(value || '').trim().toUpperCase();
+        if (!normalized) return true;
+
+        const blockedLabels = new Set([
+            'COAF',
+            'DTO',
+            'DTO/COAF',
+            'DEPARTAMENTO TECNICO OPERACIONAL',
+            'DEPARTAMENTO TÉCNICO OPERACIONAL',
+        ]);
+
+        return blockedLabels.has(normalized);
+    }, []);
+
+    const pickTeamLabel = useCallback((value) => {
+        const text = String(value || '').trim();
+        if (!text) return '';
+        if (isGenericDepartmentLabel(text)) return '';
+        return text;
+    }, [isGenericDepartmentLabel]);
+
     const getDelegaciaFromMembers = useCallback((service) => {
         const memberDelegacias = (service?.membros_detalhes || [])
             .map((member) => String(member?.delegacia_nome || '').trim())
@@ -121,26 +144,27 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     }, []);
 
     const resolveTeamName = useCallback((service) => {
-        // Prioridade refinada: usar delegacia real, nunca o departamento como COAF.
-        if (service?.vaga_info?.delegacia_nome) {
-            return service.vaga_info.delegacia_nome;
-        }
+        // Prioridade refinada: usar delegacia real, nunca departamento genérico (ex.: COAF).
+        const vagaInfoDelegacia = pickTeamLabel(service?.vaga_info?.delegacia_nome);
+        if (vagaInfoDelegacia) return vagaInfoDelegacia;
+
+        const vagaId = String(service?.vaga || service?.vaga_info?.id || '').trim();
+        const vagaMapDelegacia = pickTeamLabel(vagaDelegaciaById[vagaId]);
+        if (vagaMapDelegacia) return vagaMapDelegacia;
 
         const memberDelegacia = getDelegaciaFromMembers(service);
         if (memberDelegacia) {
             return memberDelegacia;
         }
 
-        if (service?.delegaciaPrincipal) {
-            return service.delegaciaPrincipal;
-        }
+        const delegaciaPrincipal = pickTeamLabel(service?.delegaciaPrincipal);
+        if (delegaciaPrincipal) return delegaciaPrincipal;
 
-        if (service?.teamName) {
-            return service.teamName;
-        }
+        const teamName = pickTeamLabel(service?.teamName);
+        if (teamName) return teamName;
 
         return `Equipe ${service?.id}`;
-    }, [getDelegaciaFromMembers]);
+    }, [getDelegaciaFromMembers, pickTeamLabel, vagaDelegaciaById]);
 
     const getPolicialId = useCallback((member) => {
         if (!member) return null;
@@ -235,12 +259,17 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         setServices([]);
         setConvoysForPeriod([]);
         try {
-            const [teamsResponse, convoysResponse] = await Promise.all([
+            const [teamsResponse, convoysResponse, vagasResponse] = await Promise.all([
                 apiClient.getTeams({
                     'vaga__data__gte': startDate,
                     'vaga__data__lte': endDate,
                 }),
                 apiClient.getConvoys(),
+                apiClient.getVagas({
+                    'data__gte': startDate,
+                    'data__lte': endDate,
+                    page_size: 2000,
+                }),
             ]);
 
             const fetchedServices = Array.isArray(teamsResponse)
@@ -249,6 +278,16 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             const allConvoys = Array.isArray(convoysResponse)
                 ? convoysResponse
                 : (convoysResponse?.results || []);
+            const fetchedVagas = Array.isArray(vagasResponse)
+                ? vagasResponse
+                : (vagasResponse?.results || []);
+
+            const vagaMap = fetchedVagas.reduce((acc, vaga) => {
+                const key = String(vaga?.id || '').trim();
+                if (!key) return acc;
+                acc[key] = String(vaga?.delegacia_nome || '').trim();
+                return acc;
+            }, {});
 
             const filteredConvoys = allConvoys.filter((convoy) => {
                 const convoyDate = convoy?.data || convoy?.date;
@@ -261,10 +300,12 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
 
             setServices(fetchedServices);
             setConvoysForPeriod(filteredConvoys);
+            setVagaDelegaciaById(vagaMap);
 
         } catch (error) {
             console.error("Erro ao buscar serviços:", error);
             showNotification("Falha ao carregar relatório.", "error");
+            setVagaDelegaciaById({});
         } finally {
             setLoading(false);
         }
