@@ -108,15 +108,16 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         const normalized = String(value || '').trim().toUpperCase();
         if (!normalized) return true;
 
-        const blockedLabels = new Set([
-            'COAF',
-            'DTO',
-            'DTO/COAF',
-            'DEPARTAMENTO TECNICO OPERACIONAL',
-            'DEPARTAMENTO TÉCNICO OPERACIONAL',
-        ]);
+        if (
+            normalized.startsWith('COAF') ||
+            normalized.startsWith('DTO') ||
+            normalized.includes('DEPARTAMENTO TECNICO OPERACIONAL') ||
+            normalized.includes('DEPARTAMENTO TÉCNICO OPERACIONAL')
+        ) {
+            return true;
+        }
 
-        return blockedLabels.has(normalized);
+        return false;
     }, []);
 
     const pickTeamLabel = useCallback((value) => {
@@ -608,7 +609,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                                 <td colSpan="6" className="px-4 py-3">
                                                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                                                         <div className="text-xs text-gray-400">
-                                                            Janela para registrar presença/falta/substituição: {windowLabel} {canMarkActions ? '✅ permitido' : '🔒 fora do horário - ações bloqueadas'}
+                                                            Janela para registrar presença/substituição: {windowLabel} {canMarkActions ? '✅ permitido' : '🔒 fora do horário - ações bloqueadas'}
                                                         </div>
                                                     </div>
                                                     <div className="space-y-2">
@@ -642,14 +643,6 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                                                                 className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white text-xs"
                                                                             >
                                                                                 Presença
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => setMemberStatus(teamRow, member, 'falta')}
-                                                                                disabled={!canMarkActions}
-                                                                                title={canMarkActions ? 'Registrar falta' : `Fora da janela permitida: ${windowLabel}`}
-                                                                                className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white text-xs"
-                                                                            >
-                                                                                Falta
                                                                             </button>
                                                                             <button
                                                                                 onClick={() => handleOpenSubstituteSelector(teamRow, member)}
