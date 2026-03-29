@@ -189,10 +189,10 @@ const generateEscalaPDF = async ({ dataOperacaoStr, convoysDoDia, teams, showNot
                     imageElement.onload = resolve;
                     imageElement.onerror = reject;
                 });
-                const imageWidth = 40;
-                const imageHeight = 40;
+                const imageWidth = 80;
+                const imageHeight = 80;
                 const imageX = (pageWidth - imageWidth) / 2;
-                const imageY = 54;
+                const imageY = 72;
                 pdf.addImage(imageElement, 'PNG', imageX, imageY, imageWidth, imageHeight);
             } catch (error) {
                 console.warn('Nao foi possivel carregar o brasao na capa do PDF:', error);
@@ -209,18 +209,18 @@ const generateEscalaPDF = async ({ dataOperacaoStr, convoysDoDia, teams, showNot
         pdf.setFontSize(16);
         pdf.text('DEPARTAMENTO TÉCNICO OPERACIONAL', pageWidth / 2, 42, { align: 'center' });
         pdf.setFontSize(13);
-        pdf.text('SEÇÃO DE OPERAÇÕES', pageWidth / 2, 52, { align: 'center' });
+        pdf.text('SESSÃO DE OPERAÇÕES', pageWidth / 2, 52, { align: 'center' });
 
         await addCoverImage();
 
         pdf.setFontSize(18);
-        pdf.text('Plano Operacional', pageWidth / 2, 98, { align: 'center' });
+        pdf.text('Plano Operacional', pageWidth / 2, 230, { align: 'center' });
         pdf.setFontSize(15);
-        pdf.text('Operação ÉGIDE', pageWidth / 2, 110, { align: 'center' });
+        pdf.text('Operação ÉGIDE', pageWidth / 2, 242, { align: 'center' });
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(12);
-        pdf.text(`Data da Escala: ${dataFormatada}`, pageWidth / 2, 146, { align: 'center' });
-        pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth / 2, 156, { align: 'center' });
+        pdf.text(`Data da Escala: ${dataFormatada}`, pageWidth / 2, 258, { align: 'center' });
+        pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth / 2, 268, { align: 'center' });
 
         pdf.setFontSize(10);
         pdf.text('Documento de Escala Operacional', pageWidth / 2, pageHeight - 18, { align: 'center' });
