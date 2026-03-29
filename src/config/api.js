@@ -453,6 +453,17 @@ class DjangoApiClient {
     return this.delete('feriados', id);
   }
 
+  /**
+   * Métodos de Frequência Operacional
+   */
+  async getFrequencias(params = {}) {
+    return this.getList('frequencias', params);
+  }
+
+  async registrarFrequenciasLote(registros = []) {
+    return this.create('frequencias/registrar_lote', { registros });
+  }
+
   _isNotFoundError(error) {
     if (error?.status === 404) return true;
     const message = String(error?.message || '').toLowerCase();

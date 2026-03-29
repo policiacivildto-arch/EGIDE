@@ -204,6 +204,37 @@ class Comboio(models.Model):
         return f"Comboio {self.id} - {self.data}"
 
 
+class FrequenciaPolicial(models.Model):
+    """Registro de presença/falta/substituição de policiais nas operações (comboios)"""
+    STATUS_CHOICES = (
+        ('presente', 'Presente'),
+        ('falta', 'Falta'),
+        ('substituto', 'Substituto'),
+        ('pendente', 'Pendente'),
+    )
+
+    equipe = models.ForeignKey(Equipe, on_delete=models.CASCADE, related_name='frequencias')
+    policial = models.ForeignKey(Policial, on_delete=models.CASCADE, related_name='frequencias')
+    data_operacao = models.DateField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pendente')
+    substituto = models.ForeignKey(
+        Policial, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='frequencias_como_substituto'
+    )
+    registrado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-data_operacao']
+        unique_together = ('equipe', 'policial', 'data_operacao')
+        verbose_name = 'Frequência de Policial'
+        verbose_name_plural = 'Frequências de Policiais'
+
+    def __str__(self):
+        return f"{self.policial.nome} - {self.data_operacao} ({self.status})"
+
+
 # ===================================
 # SISTEMA DE OPERAÇÕES
 # ===================================

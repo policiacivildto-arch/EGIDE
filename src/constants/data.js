@@ -514,7 +514,7 @@ export const PAY_RATES = {
 };
 
 
-export const AIS_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12, 13,23, 24, 25];
+export const AIS_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34];
 export const DPC_LIST = ["KLEVER FARIAS", "ALCEU VIANA", "HUGGO LEONARDO", "LUIS JUNIOR", "EVNA AMERICA", "ROBERTA FROTA", "JOÃO GABRIEL", "KEYLA LACERDA", "WILSON CAMELO", "JULIUS BERNARDO"];
 export const OIP_LIST = ["JARBAS", "LUCAS", "PAULO JUNIOR", "ALEX", "ROGERIO", "JOÃO PAULO CAVALCANTE TEIXEIRA"];
 export const BRIEFING_LOCATIONS = ["Polícia Civil - CISP", ...DEPARTMENTS.DPC];
@@ -528,29 +528,32 @@ export const AIS_BAIRROS = {
     "1": ["Jaguaruana", "Limoeiro do Norte", "Quixeré", "Russas", "São João do Jaguaribe", "Tabuleiro do Norte"],
     "2": ["Aurora", "Barbalha", "Caririaçu", "Crato", "Farias Brito", "Jardim", "Juazeiro do Norte", "Missão Velha", "Nova Olinda", "Santana do Cariri"],
     "3": ["Alcântaras", "Cariré", "Coreaú", "Forquilha", "Frecheirinha", "Graça", "Groaíras", "Massapê", "Meruoca", "Mucambo", "Pacujá", "Santana do Acaraú", "Senador Sá", "Sobral"],
-    "5": ["Álvaro Weyne", "Carlito Pamplona", "Centro (Fortaleza)", "Ellery", "Farias Brito (Fortaleza)", "Jacarecanga", "Monte Castelo", "Moura Brasil", "São Gerardo"],
+    "4": ["Boa Viagem", "Canindé", "Caridade", "Itatira", "Madalena", "Paramoti"],
+    "5": ["Álvaro Weyne", "Carlito Pamplona", "Centro", "Ellery", "Farias Brito", "Jacarecanga", "Monte Castelo", "Moura Brasil", "São Gerardo"],
     "6": ["Aeroporto", "Benfica", "Bom Futuro", "Couto Fernandes", "Damas", "Demócrito Rocha", "Rachel de Queiroz", "Fátima", "Itaoca", "Itaperi", "Jardim América", "José Bonifácio", "Montese", "Panamericano", "Parangaba", "Parreão", "Serrinha", "Vila Peri", "Vila União"],
     "7": ["Ararendá", "Catunda", "Crateús", "Hidrolândia", "Independência", "Ipaporanga", "Ipu", "Ipueiras", "Monsenhor Tabosa", "Nova Russas", "Novo Oriente", "Pires Ferreira", "Poranga", "Reriutaba", "Santa Quitéria", "Tamboril", "Varjota"],
-    "8": ["Aldeota", "Cais do Porto", "Meireles", "Mucuripe", "Varjota (Fortaleza)", "Vicente Pinzón"],
-    "9": ["Banabuiú", "Choró", "Deputado Irapuan Pinheiro", "Ibaretama", "Ibicuitinga", "Jaguaretama", "Milhã", "Morada Nova", "Pedra Branca", "Quixadá", "Quixeramobim", "Senador Pompeu", "Solonópole"],
+    "8": ["Aldeota", "Cais do Porto", "Meireles", "Mucuripe", "Varjota", "Vicente Pinzón"],
+    "9": ["Banabuiú", "Choró", "Dep. Irapuan Pinheiro", "Ibaretama", "Ibicuitinga", "Jaguaretama", "Milhã", "Morada Nova", "Pedra Branca", "Quixadá", "Quixeramobim", "Senador Pompeu", "Solonópole"],
     "10": ["Acopiara", "Cariús", "Iguatu", "Jucás", "Quixelô", "Saboeiro", "Tarrafas"],
-    "12": ["Alto do Garrote", "Bom Jesus", "Cabatan", "Açude", "Barra Nova", "Camurupim", "Cumbuco", "Curicaca", "Anil", "Capuan", "Centro (Caucaia)", "Cigana", "Cipó", "Jardim Icaraí", "Garrote", "Grilo", "Itapoã", "Icaraí", "Itambé", "Mestre Antônio", "Lagoa do Banana", "Iparana", "Jandaiguaba", "Nova Cigana", "Novo Pabussu", "Pabussu", "Pacheco", "Padre Júlio Maria", "Padre Romualdo", "Parque Leblon", "Paumirim", "Planalto Caucaia", "Parque Soledade", "Pitombeira", "Mixira", "Cauípe", "Tabuba", "Guagiru", "Caraúbas", "Coité (Caucaia)", "Matões", "Lagoa dos Porcos", "Genipabú", "Córrego do Alexandre", "Porteiras", "Angico", "Guararu", "Cauípe 2", "Pau Branco", "Araticuba", "Boqueirão da Arara", "Boqueirãozinho", "Camará", "Jacurutu", "Bom Tempo", "Tabuleiro Grande", "Santa Edwiges", "São Bento", "Industrial", "Junco", "Santa Rosa", "Japuara", "Catuana", "São Pedro", "Primavera", "Mangabeira", "Distrito de Caucaia (Sede) – Zona Rural Oeste", "Distrito Guararu", "Distrito Sítios Novos", "Distrito Catuana"],
+    "11": ["Acaraú", "Amontada", "Apuiarés", "Bela Cruz", "Cruz", "Gen. Sampaio", "Irauçuba", "Itapajé", "Itapipoca", "Itarema", "Jijoca de Jericoacoara", "Marco", "Miraíma", "Morrinhos", "Pentecoste", "Tejuçuoca", "Tururu", "Umirim", "Uruburetama"],
+    "12": ["Centro", "Icaraí", "Cumbuco", "Tabuba", "Iparana", "Pacheco", "Jurema", "Parque Soledade", "Nova Cigana", "Araticuba", "Sítios Novos"],
     "13": ["Aiuaba", "Arneiroz", "Catarina", "Mombaça", "Parambu", "Piquet Carneiro", "Quiterianópolis", "Tauá"],
     "14": ["Maracanaú"],
     "15": ["Aquiraz", "Cascavel", "Eusébio", "Pindoretama"],
-    "16": ["Ancuri", "Barroso", "Coaçu", "Conjunto Palmeiras", "Curió", "Guajeru", "Jangurussu", "Lagoa Redonda", "Messejana", "Parque Santa Maria (Fortaleza)", "Paupina", "Pedras", "São Bento"],
-    "17": ["Bom Jardim", "Conjunto Ceará I", "Conjunto Ceará II", "Genibaú", "Granja Lisboa", "Granja Portugal", "Siqueira"],
-    "18": ["Amadeu Furtado", "Antônio Bezerra", "Autran Nunes", "Bela Vista", "Bonsucesso", "Dom Lustosa", "Henrique Jorge", "João XXIII", "Jóquei Clube", "Olavo Oliveira", "Padre Andrade", "Parque Araxá", "Parquelândia", "Pici", "Presidente Kennedy", "Quintino Cunha", "Rodolfo Teófilo"],
-    "19": ["Aerolândia", "Alto da Balança", "Boa Vista / Castelão", "Cajazeiras", "Cambeba", "Cidade dos Funcionários", "Dias Macêdo", "Edson Queiroz", "Jardim das Oliveiras", "José de Alencar", "Parque Dois Irmãos", "Parque Iracema", "Parque Manibura", "Passaré", "Sabiaguaba", "Sapiranga / Coité"],
+    "16": ["Ancuri", "Barroso", "Coaçu", "Conj. Palmeiras", "Curió", "Guajeru", "Jangurussu", "Lagoa Redonda", "Messejana", "Pq. Santa Maria", "Paupina", "Pedras", "São Bento"],
+    "17": ["Bom Jardim", "Conj. Ceará I", "Conj. Ceará II", "Genibaú", "Granja Lisboa", "Granja Portugal", "Siqueira"],
+    "18": ["Amadeu Furtado", "Antônio Bezerra", "Autran Nunes", "Bela Vista", "Bonsucesso", "Dom Lustosa", "Henrique Jorge", "João XXIII", "Jóquei Clube", "Olavo Oliveira", "Padre Andrade", "Parquelândia", "Pici", "Pres. Kennedy", "Quintino Cunha"],
+    "19": ["Aerolândia", "Alto da Balança", "Castelão", "Cajazeiras", "Cambeba", "Cid. dos Funcionários", "Dias Macêdo", "Edson Queiroz", "Jd. das Oliveiras", "José de Alencar", "Passaré", "Sabiaguaba", "Sapiranga"],
     "20": ["Barra do Ceará", "Cristo Redentor", "Floresta", "Jardim Guanabara", "Jardim Iracema", "Pirambu", "Vila Velha"],
-    "21": ["Aracapé", "Canindezinho", "Conjunto Esperança", "Jardim Cearense", "Manoel Sátiro", "Maraponga", "Mondubim", "Novo Mondubim (Fortaleza)", "Parque Presidente Vargas", "Parque Santa Rosa", "Parque São José", "Planalto Ayrton Senna", "Prefeito José Walter"],
-    "22": ["Cidade 2000", "Cocó", "De Lourdes", "Dionísio Torres", "Engenheiro Luciano Cavalcante", "Guararapes", "Joaquim Távora", "Manuel Dias Branco", "Papicu", "Praia do Futuro I", "Praia do Futuro II", "Salinas", "Tauape"],
+    "21": ["Aracapé", "Canindezinho", "Conj. Esperança", "Jd. Cearense", "Manoel Sátiro", "Maraponga", "Mondubim", "Pq. Pres. Vargas", "Pq. Santa Rosa", "Planalto Ayrton Senna", "José Walter"],
+    "22": ["Cidade 2000", "Cocó", "De Lourdes", "Dionísio Torres", "Eng. Luciano Cavalcante", "Guararapes", "Joaquim Távora", "Papicu", "Praia do Futuro I", "Praia do Futuro II", "Salinas", "Tauape"],
     "23": ["Paracuru", "Paraipaba", "São Luís do Curu", "Trairi", "São Gonçalo do Amarante"],
     "24": ["Guaiúba", "Maranguape", "Pacatuba"],
     "25": ["Chorozinho", "Horizonte", "Itaitinga", "Pacajus"],
-    "26": ["Conjunto Metropolitano", "Guadalajara", "Lago Verde", "Parque Albano", "Parque das Nações", "Potira", "São Miguel", "Patrícia Gomes", "Sobradinho", "Tabapuá", "Tabapuá Brasília", "Tabapuá Brasília II", "Marechal Rondon", "Araturi", "Nova Metrópole", "Arianópoles", "Campo Grande", "Urucutuba", "Toco", "Riachão", "Carrapicho", "Distrito Tucunduba", "Distrito de Caucaia (Sede) – Zona Rural Leste", "Distrito Bom Princípio", "Distrito Mirambé"],
+    "26": ["Guadalajara", "Potira", "Pq. Albano", "Araturi", "Nova Metrópole", "Arianópoles", "Tabapuá", "Marechal Rondon", "Sede (Rural Leste)", "Mirambé"],
     "27": ["Carnaubal", "Croatá", "Guaraciaba do Norte", "Ibiapina", "São Benedito", "Tianguá", "Ubajara", "Viçosa do Ceará"],
     "28": ["Barroquinha", "Camocim", "Chaval", "Granja", "Martinópole", "Moraújo", "Uruoca"],
+    "29": ["Acarape", "Aracoiaba", "Aratuba", "Baturité", "Capistrano", "Guaramiranga", "Itapiúna", "Mulungu", "Ocara", "Pacoti", "Palmácia", "Redenção"],
     "30": ["Aracati", "Beberibe", "Fortim", "Icapuí", "Itaiçaba", "Palhano"],
     "31": ["Alto Santo", "Ereré", "Iracema", "Jaguaribara", "Jaguaribe", "Pereiro", "Potiretama"],
     "32": ["Abaiara", "Barro", "Brejo Santo", "Jati", "Mauriti", "Milagres", "Penaforte", "Porteiras"],

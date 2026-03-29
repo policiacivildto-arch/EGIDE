@@ -10,36 +10,45 @@ import { LoadingSpinner } from '../../../components/ui/Shared';
 import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const ATTENDANCE_STORAGE_KEY = 'payment_report_attendance_v1';
-
 export const PaymentReportView = ({ allUsers = [], showNotification, departamento }) => {
-    const today = new Date().toISOString().split('T')[0];
+    const toLocalISODate = (dateObj) => {
+        if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return '';
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+
+    const parseDateSafe = (value) => {
+        if (!value) return null;
+
+        if (typeof value === 'string') {
+            const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+            if (dateOnlyMatch) {
+                const year = Number(dateOnlyMatch[1]);
+                const month = Number(dateOnlyMatch[2]);
+                const day = Number(dateOnlyMatch[3]);
+                return new Date(year, month - 1, day, 0, 0, 0, 0);
+            }
+        }
+
+        if (typeof value === 'object' && value?.seconds) {
+            return new Date(value.seconds * 1000);
+        }
+
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const today = toLocalISODate(new Date());
     const [startDate, setStartDate] = useState(today);
     const [endDate, setEndDate] = useState(today);
     const [services, setServices] = useState([]);
     const [convoysForPeriod, setConvoysForPeriod] = useState([]);
     const [loading, setLoading] = useState(false);
     const [expandedTeams, setExpandedTeams] = useState({});
-    const [attendanceStatus, setAttendanceStatus] = useState(() => {
-        try {
-            const saved = localStorage.getItem(ATTENDANCE_STORAGE_KEY);
-            if (!saved) return {};
-            const parsed = JSON.parse(saved);
-            return parsed?.attendanceStatus || {};
-        } catch {
-            return {};
-        }
-    });
-    const [substitutions, setSubstitutions] = useState(() => {
-        try {
-            const saved = localStorage.getItem(ATTENDANCE_STORAGE_KEY);
-            if (!saved) return {};
-            const parsed = JSON.parse(saved);
-            return parsed?.substitutions || {};
-        } catch {
-            return {};
-        }
-    });
+    const [attendanceStatus, setAttendanceStatus] = useState({});
+    const [substitutions, setSubstitutions] = useState({});
     const [substituteSelectorOpen, setSubstituteSelectorOpen] = useState({});
     const [substituteSearchTerms, setSubstituteSearchTerms] = useState({});
 
@@ -104,48 +113,100 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     const resolveTeamName = useCallback((service) => {
         const departamentoObservacao = extractDepartamentoFromObservacoes(service?.observacoes);
         return (
-            departamentoObservacao ||
+            service?.vaga_info?.delegacia_nome ||
+            service?.delegaciaPrincipal ||
             service?.departamento_sigla ||
             service?.departamento_nome ||
             service?.departamento ||
             service?.teamName ||
-            service?.delegaciaPrincipal ||
-            service?.vaga_info?.delegacia_nome ||
+            departamentoObservacao ||
             `Equipe ${service?.id}`
         );
     }, [extractDepartamentoFromObservacoes]);
 
-    useEffect(() => {
-        localStorage.setItem(ATTENDANCE_STORAGE_KEY, JSON.stringify({ attendanceStatus, substitutions }));
-    }, [attendanceStatus, substitutions]);
+    const getPolicialId = useCallback((member) => {
+        if (!member) return null;
+        if (member?.id) return member.id;
+
+        const matricula = String(member?.matricula || '').replaceAll(/\D/g, '');
+        if (matricula) {
+            const byMatricula = allUsers.find((u) => String(u?.matricula || '').replaceAll(/\D/g, '') === matricula);
+            if (byMatricula?.id) return byMatricula.id;
+        }
+
+        const memberName = getUserName(member).toLowerCase();
+        if (memberName) {
+            const byName = allUsers.find((u) => getUserName(u).toLowerCase() === memberName);
+            if (byName?.id) return byName.id;
+        }
+
+        return null;
+    }, [allUsers]);
 
     const persistTeamAttendance = async (teamRow, nextAttendanceStatus, nextSubstitutions) => {
-        const teamKeys = Object.keys(nextAttendanceStatus).filter((key) => key.startsWith(`${teamRow.id}-`));
-        const attendancePayload = teamKeys.map((key) => ({
-            key,
-            status: nextAttendanceStatus[key],
-            substitution: nextSubstitutions[key] || null,
-        }));
+        const registros = teamRow.members
+            .map((member) => {
+                const policialId = getPolicialId(member);
+                if (!policialId) return null;
 
-        const observacoesAtuais = String(teamRow?.rawService?.observacoes || '');
-        const semBlocoAnterior = observacoesAtuais.replace(/\n?ATTENDANCE::\{[\s\S]*\}$/m, '').trim();
-        const attendanceText = `ATTENDANCE::${JSON.stringify({
-            updatedAt: new Date().toISOString(),
-            teamId: teamRow.id,
-            date: teamRow.dateKey,
-            attendance: attendancePayload,
-        })}`;
+                const key = getMemberStatusKey(teamRow.id, member);
+                const status = nextAttendanceStatus[key] || 'pendente';
+                const substituto = nextSubstitutions[key]?.id || null;
 
-        const observacoes = semBlocoAnterior
-            ? `${semBlocoAnterior}\n${attendanceText}`
-            : attendanceText;
+                return {
+                    equipe: teamRow.id,
+                    policial: policialId,
+                    data_operacao: teamRow.dateKey,
+                    status,
+                    substituto,
+                };
+            })
+            .filter(Boolean);
+
+        if (registros.length === 0) return;
 
         try {
-            await apiClient.updateTeam(teamRow.id, { observacoes });
+            await apiClient.registrarFrequenciasLote(registros);
         } catch (error) {
-            console.error('Falha ao persistir presença no backend:', error);
+            console.error('Falha ao persistir frequência no backend:', error);
+            showNotification('Falha ao salvar frequência no servidor.', 'error');
         }
     };
+
+    const hydrateAttendanceFromBackend = useCallback((rows, frequencias) => {
+        const nextAttendanceStatus = {};
+        const nextSubstitutions = {};
+
+        const byTeamAndPolicial = new Map();
+        frequencias.forEach((item) => {
+            const mapKey = `${item?.equipe}-${item?.policial}`;
+            byTeamAndPolicial.set(mapKey, item);
+        });
+
+        rows.forEach((teamRow) => {
+            teamRow.members.forEach((member) => {
+                const policialId = getPolicialId(member);
+                if (!policialId) return;
+
+                const item = byTeamAndPolicial.get(`${teamRow.id}-${policialId}`);
+                if (!item) return;
+
+                const statusKey = getMemberStatusKey(teamRow.id, member);
+                nextAttendanceStatus[statusKey] = item.status || 'pendente';
+
+                if (item.substituto) {
+                    nextSubstitutions[statusKey] = {
+                        id: item.substituto,
+                        nome: item.substituto_nome || 'Substituto',
+                        matricula: item.substituto_matricula || '',
+                    };
+                }
+            });
+        });
+
+        setAttendanceStatus(nextAttendanceStatus);
+        setSubstitutions(nextSubstitutions);
+    }, [getPolicialId]);
 
     const fetchServices = useCallback(async () => {
         if (!startDate || !endDate) {
@@ -174,9 +235,9 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             const filteredConvoys = allConvoys.filter((convoy) => {
                 const convoyDate = convoy?.data || convoy?.date;
                 if (!convoyDate) return false;
-                const isoDate = typeof convoyDate === 'string'
-                    ? convoyDate.split('T')[0]
-                    : new Date(convoyDate.seconds * 1000).toISOString().split('T')[0];
+                const convoyDateObj = parseDateSafe(convoyDate);
+                if (!convoyDateObj) return false;
+                const isoDate = toLocalISODate(convoyDateObj);
                 return isoDate >= startDate && isoDate <= endDate;
             });
 
@@ -201,11 +262,9 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         const map = new Map();
         convoysForPeriod.forEach((convoy) => {
             const convoyDate = convoy?.data || convoy?.date;
-            const dateObj = typeof convoyDate === 'string'
-                ? new Date(convoyDate)
-                : new Date(convoyDate?.seconds * 1000);
+            const dateObj = parseDateSafe(convoyDate);
             if (!dateObj || Number.isNaN(dateObj.getTime())) return;
-            const dateKey = dateObj.toISOString().split('T')[0];
+            const dateKey = toLocalISODate(dateObj);
             const existing = map.get(dateKey) || [];
             map.set(dateKey, [...existing, convoy]);
         });
@@ -216,12 +275,10 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         return services
             .map((service) => {
                 const vagaDate = service?.vaga_info?.data || service?.vagaDate;
-                const dateObj = typeof vagaDate === 'string'
-                    ? new Date(vagaDate)
-                    : new Date(vagaDate?.seconds * 1000);
+                const dateObj = parseDateSafe(vagaDate);
                 if (!dateObj || Number.isNaN(dateObj.getTime())) return null;
 
-                const dateKey = dateObj.toISOString().split('T')[0];
+                const dateKey = toLocalISODate(dateObj);
                 const convoysOnDate = convoysByDate.get(dateKey) || [];
                 const firstConvoy = convoysOnDate[0];
 
@@ -229,9 +286,12 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                 const startTime = service.horarioEntrada || (turno === 'night' ? '19:00' : '08:00');
                 const endTime = service.horarioSaida || (turno === 'night' ? '01:00' : '20:00');
 
-                const members = Array.isArray(service?.membros_detalhes) && service.membros_detalhes.length > 0
-                    ? service.membros_detalhes
-                    : (service?.registeringOfficer ? [service.registeringOfficer] : []);
+                let members = [];
+                if (Array.isArray(service?.membros_detalhes) && service.membros_detalhes.length > 0) {
+                    members = service.membros_detalhes;
+                } else if (service?.registeringOfficer) {
+                    members = [service.registeringOfficer];
+                }
 
                 return {
                     id: service.id,
@@ -254,6 +314,35 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             .filter(Boolean)
             .sort((a, b) => b.dateObj - a.dateObj);
     }, [services, convoysByDate, resolveTeamName]);
+
+    useEffect(() => {
+        const loadPersistedAttendance = async () => {
+            if (frequencyRows.length === 0) {
+                setAttendanceStatus({});
+                setSubstitutions({});
+                return;
+            }
+
+            const teamIds = [...new Set(frequencyRows.map((row) => row.id).filter(Boolean))];
+            if (teamIds.length === 0) return;
+
+            try {
+                const response = await apiClient.getFrequencias({
+                    equipe__in: teamIds.join(','),
+                    data_operacao__gte: startDate,
+                    data_operacao__lte: endDate,
+                    page_size: 2000,
+                });
+
+                const frequencias = Array.isArray(response) ? response : (response?.results || []);
+                hydrateAttendanceFromBackend(frequencyRows, frequencias);
+            } catch (error) {
+                console.error('Falha ao carregar frequência registrada:', error);
+            }
+        };
+
+        loadPersistedAttendance();
+    }, [frequencyRows, startDate, endDate, hydrateAttendanceFromBackend]);
 
     const toggleTeamExpand = (teamId) => {
         setExpandedTeams((prev) => ({ ...prev, [teamId]: !prev[teamId] }));
@@ -352,9 +441,9 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             if (teamRow.members.length > 0) {
                 return teamRow.members.map((member, idx) => {
                     const key = getMemberStatusKey(teamRow.id, member);
-                    const status = attendanceStatus[key] || 'Pendente';
+                    const status = attendanceStatus[key] || 'pendente';
                     const substitute = substitutions[key];
-                    const statusLabel = status === 'presente' ? 'Presente' : status === 'falta' ? 'Falta' : status === 'substituto' ? 'Substituto' : 'Pendente';
+                    const statusLabel = getStatusLabel(status);
                     
                     return {
                         ...baseRow,
@@ -404,8 +493,8 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         <div>
             <h3 className="text-2xl font-bold mb-4">Frequência Operacional (Atualizada v2)</h3>
             <div className="bg-gray-800 p-4 rounded-lg mb-6 flex items-end space-x-4">
-                <div><label className="block text-sm font-bold mb-1">Data de Início</label><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md" /></div>
-                <div><label className="block text-sm font-bold mb-1">Data de Fim</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md" /></div>
+                <div><label htmlFor="payment-report-start-date" className="block text-sm font-bold mb-1">Data de Início</label><input id="payment-report-start-date" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md" /></div>
+                <div><label htmlFor="payment-report-end-date" className="block text-sm font-bold mb-1">Data de Fim</label><input id="payment-report-end-date" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md" /></div>
                 <button onClick={fetchServices} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500">
                     {loading ? 'Buscando...' : 'Buscar'}
                 </button>

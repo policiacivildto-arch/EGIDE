@@ -1,10 +1,10 @@
 import React from 'react';
 import { FileText, Plus, Trash2 } from 'lucide-react';
-import { DEPARTMENTS } from '../../../constants/data';
+import { DEPARTMENTS, AIS_OPTIONS } from '../../../constants/data';
 
 export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotification, userDepartamento }) {
     const tiposPenais = ['Homicídio', 'Tráfico de Drogas', 'ORCRIM / Lavagem de Dinheiro', 'Roubo', 'Furto'];
-    const aisList = Array.from({ length: 25 }, (_, i) => `AIS ${i + 1}`);
+    const aisList = AIS_OPTIONS.map((ais) => `AIS ${ais}`);
     const faccoesList = ['CV', 'GDE', 'Neutros', 'PCC', 'TCP'];
     const alvosSensiveisList = ['Mulher', 'Policial', 'Político', 'Advogado', 'Servidor Público'];
     const orgaosApoio = ['MP', 'Polícia Militar', 'Polícia Federal', 'Polícia Rodoviária Federal', 'Receita Federal', 'SEFAZ', 'AMC', 'Guarda Municipal'];

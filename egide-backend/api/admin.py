@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Departamento, Delegacia, Policial, Viatura, Vaga,
-    Equipe, Operacao, Comboio,
+    Equipe, Operacao, Comboio, FrequenciaPolicial,
     # Sistema de Operações
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
@@ -75,6 +75,14 @@ class ComboioAdmin(admin.ModelAdmin):
     search_fields = ['descricao', 'ais', 'bairros']
     readonly_fields = ['criado_em', 'atualizado_em']
     filter_horizontal = ['operacoes']
+
+
+@admin.register(FrequenciaPolicial)
+class FrequenciaPolicialAdmin(admin.ModelAdmin):
+    list_display = ['policial', 'equipe', 'data_operacao', 'status', 'substituto', 'criado_em']
+    list_filter = ['status', 'data_operacao']
+    search_fields = ['policial__nome', 'policial__matricula']
+    readonly_fields = ['criado_em', 'atualizado_em']
 
 
 # =====================================================

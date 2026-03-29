@@ -10,7 +10,7 @@ from .models import (
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
     EventoOperacao, DepartamentoEvento, EscalaPolicial,
-    Feriado
+    Feriado, FrequenciaPolicial
 )
 from .models_security import (
     PerfilPolicial, PerfilDepartamento,
@@ -614,5 +614,21 @@ class FeriadoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Feriado
         fields = ['id', 'data', 'nome', 'descricao', 'tipo', 'criado_em', 'atualizado_em']
+        read_only_fields = ['criado_em', 'atualizado_em']
+
+
+class FrequenciaPolicialSerializer(serializers.ModelSerializer):
+    policial_nome = serializers.CharField(source='policial.nome', read_only=True)
+    policial_matricula = serializers.CharField(source='policial.matricula', read_only=True)
+    substituto_nome = serializers.CharField(source='substituto.nome', read_only=True, allow_null=True)
+    substituto_matricula = serializers.CharField(source='substituto.matricula', read_only=True, allow_null=True)
+
+    class Meta:
+        model = FrequenciaPolicial
+        fields = [
+            'id', 'equipe', 'policial', 'policial_nome', 'policial_matricula',
+            'data_operacao', 'status', 'substituto', 'substituto_nome',
+            'substituto_matricula', 'registrado_por', 'criado_em', 'atualizado_em'
+        ]
         read_only_fields = ['criado_em', 'atualizado_em']
 

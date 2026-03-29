@@ -14,7 +14,7 @@ from .models import (
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
     EventoOperacao, DepartamentoEvento, EscalaPolicial,
-    Feriado
+    Feriado, FrequenciaPolicial
 )
 from .serializers import (
     DepartamentoSerializer, DelegaciaSerializer, PolicialSerializer,
@@ -26,7 +26,7 @@ from .serializers import (
     EventoOperacaoSerializer, EventoOperacaoListSerializer,
     DepartamentoEventoSerializer, DepartamentoEventoSimplificadoSerializer,
     EscalaPolicialSerializer,
-    FeriadoSerializer
+    FeriadoSerializer, FrequenciaPolicialSerializer
 )
 
 
@@ -784,4 +784,52 @@ class FeriadoViewSet(viewsets.ModelViewSet):
     search_fields = ['nome', 'descricao']
     ordering_fields = ['data', 'criado_em']
     ordering = ['data']
+
+
+class FrequenciaPolicialViewSet(viewsets.ModelViewSet):
+    """ViewSet para registrar frequência (presença/falta/substituto) de policiais nas operações"""
+    queryset = FrequenciaPolicial.objects.all()
+    serializer_class = FrequenciaPolicialSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = {
+        'equipe': ['exact', 'in'],
+        'policial': ['exact', 'in'],
+        'data_operacao': ['exact', 'gte', 'lte'],
+        'status': ['exact', 'in'],
+    }
+    search_fields = ['policial__nome', 'policial__matricula']
+    ordering_fields = ['data_operacao', 'criado_em']
+    ordering = ['-data_operacao']
+
+    @action(detail=False, methods=['post'])
+    def registrar_lote(self, request):
+        """Registra ou atualiza frequência de múltiplos policiais de uma equipe de uma vez"""
+        registros = request.data.get('registros', [])
+        if not registros:
+            return Response({'error': 'Nenhum registro enviado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        resultados = []
+        for reg in registros:
+            equipe_id = reg.get('equipe')
+            policial_id = reg.get('policial')
+            data_operacao = reg.get('data_operacao')
+            status_freq = reg.get('status', 'pendente')
+            substituto_id = reg.get('substituto')
+
+            if not all([equipe_id, policial_id, data_operacao]):
+                continue
+
+            obj, _ = FrequenciaPolicial.objects.update_or_create(
+                equipe_id=equipe_id,
+                policial_id=policial_id,
+                data_operacao=data_operacao,
+                defaults={
+                    'status': status_freq,
+                    'substituto_id': substituto_id,
+                    'registrado_por': request.user if request.user.is_authenticated else None,
+                }
+            )
+            resultados.append(FrequenciaPolicialSerializer(obj).data)
+
+        return Response({'registros': resultados, 'total': len(resultados)})
 
