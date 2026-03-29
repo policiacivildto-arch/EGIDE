@@ -77,6 +77,23 @@ class Policial(models.Model):
         return f"{self.nome} ({self.matricula})"
 
 
+class Pagamento(models.Model):
+    policial = models.ForeignKey('Policial', on_delete=models.CASCADE, related_name='pagamentos')
+    data_operacao = models.DateField()
+    horario_inicial = models.DateTimeField()
+    horario_final = models.DateTimeField()
+    valor_pago = models.DecimalField(max_digits=10, decimal_places=2)
+    observacao = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = 'Pagamentos'
+        ordering = ['-data_operacao', 'policial']
+
+    def __str__(self):
+        return f"Pagamento {self.policial.nome} - {self.data_operacao}"
+
 class Viatura(models.Model):
     """Viaturas disponíveis para operações"""
     placa = models.CharField(

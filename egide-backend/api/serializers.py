@@ -10,8 +10,18 @@ from .models import (
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
     EventoOperacao, DepartamentoEvento, EscalaPolicial,
-    Feriado, FrequenciaPolicial
+    Feriado, FrequenciaPolicial, Pagamento
 )
+class PagamentoSerializer(serializers.ModelSerializer):
+    policial_nome = serializers.CharField(source='policial.nome', read_only=True)
+
+    class Meta:
+        model = Pagamento
+        fields = [
+            'id', 'policial', 'policial_nome', 'data_operacao', 'horario_inicial',
+            'horario_final', 'valor_pago', 'observacao', 'criado_em', 'atualizado_em'
+        ]
+        read_only_fields = ['criado_em', 'atualizado_em']
 from .models_security import (
     PerfilPolicial, PerfilDepartamento,
     NotificacaoDepartamento, LogAuditoria, SessaoUsuario

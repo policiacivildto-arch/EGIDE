@@ -26,8 +26,22 @@ from .serializers import (
     EventoOperacaoSerializer, EventoOperacaoListSerializer,
     DepartamentoEventoSerializer, DepartamentoEventoSimplificadoSerializer,
     EscalaPolicialSerializer,
-    FeriadoSerializer, FrequenciaPolicialSerializer
+    FeriadoSerializer, FrequenciaPolicialSerializer,
+    PagamentoSerializer
 )
+# Pagamento API
+from .models import Pagamento
+from .utils_pagamento import calcular_pagamento_backend
+
+class PagamentoViewSet(viewsets.ModelViewSet):
+    """ViewSet para gerenciar Pagamentos"""
+    queryset = Pagamento.objects.all()
+    serializer_class = PagamentoSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['policial', 'data_operacao']
+    search_fields = ['policial__nome']
+    ordering_fields = ['data_operacao', 'valor_pago', 'criado_em']
+    ordering = ['-data_operacao', 'policial']
 
 
 class DepartamentoViewSet(viewsets.ModelViewSet):
@@ -803,7 +817,9 @@ class FrequenciaPolicialViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def registrar_lote(self, request):
-        """Registra ou atualiza frequência de múltiplos policiais de uma equipe de uma vez"""
+        """Registra ou atualiza frequência de múltiplos policiais de uma equipe de uma vez
+        Ao confirmar presença, cria/atualiza registro em Pagamento para o policial/data/operacao."""
+        from .models import Pagamento
         registros = request.data.get('registros', [])
         if not registros:
             return Response({'error': 'Nenhum registro enviado.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -830,6 +846,48 @@ class FrequenciaPolicialViewSet(viewsets.ModelViewSet):
                 }
             )
             resultados.append(FrequenciaPolicialSerializer(obj).data)
+
+            # Se presença confirmada, cria/atualiza Pagamento com cálculo
+            if status_freq.lower() == 'presente':
+                policial = obj.policial
+                equipe = obj.equipe
+                vaga = getattr(equipe, 'vaga', None)
+                cargo = policial.cargo if policial else ''
+                servico = 'EXTRA'  # Ajuste se necessário
+                # Buscar horários e datas
+                data_entrada = obj.data_operacao
+                data_saida = obj.data_operacao
+                horario_inicial = getattr(obj, 'horario_inicial', None) or timezone.now()
+                horario_final = getattr(obj, 'horario_final', None) or timezone.now()
+                if hasattr(obj, 'horario_inicial') and hasattr(obj, 'horario_final') and obj.horario_inicial and obj.horario_final:
+                    horario_inicial = obj.horario_inicial
+                    horario_final = obj.horario_final
+                # Se vaga tiver turno, pode ajustar horário padrão
+                if vaga and vaga.turno == 'day':
+                    horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('08:00', '%H:%M').time()))
+                    horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('20:00', '%H:%M').time()))
+                elif vaga and vaga.turno == 'night':
+                    horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('19:00', '%H:%M').time()))
+                    horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('01:00', '%H:%M').time()))
+                valor_pago = calcular_pagamento_backend(
+                    cargo,
+                    servico,
+                    data_entrada,
+                    horario_inicial.timetz() if hasattr(horario_inicial, 'timetz') else horario_inicial.time(),
+                    data_saida,
+                    horario_final.timetz() if hasattr(horario_final, 'timetz') else horario_final.time(),
+                )
+                observacao = ''
+                Pagamento.objects.update_or_create(
+                    policial_id=policial_id,
+                    data_operacao=data_operacao,
+                    defaults={
+                        'horario_inicial': horario_inicial,
+                        'horario_final': horario_final,
+                        'valor_pago': valor_pago,
+                        'observacao': observacao,
+                    }
+                )
 
         return Response({'registros': resultados, 'total': len(resultados)})
 

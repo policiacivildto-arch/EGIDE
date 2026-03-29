@@ -13,6 +13,7 @@ from api.views import (
     # Sistema de Eventos
     EventoOperacaoViewSet, DepartamentoEventoViewSet, EscalaPolicialViewSet,
     FrequenciaPolicialViewSet,
+    PagamentoViewSet,
 )
 from api.views_auth import (
     login_view,
@@ -58,6 +59,7 @@ def api_root(request):
         'docs': 'Acesse /api/ para explorar os endpoints disponíveis'
     })
 
+
 router = DefaultRouter()
 router.register(r'departamentos', DepartamentoViewSet)
 router.register(r'delegacias', DelegaciaViewSet)
@@ -68,6 +70,7 @@ router.register(r'equipes', EquipeViewSet)
 router.register(r'operacoes', OperacaoViewSet)
 router.register(r'comboios', ComboioViewSet)
 router.register(r'feriados', FeriadoViewSet)
+router.register(r'pagamentos', PagamentoViewSet)
 
 # Rotas do Sistema de Operações
 router.register(r'operacoes-policiais', OperacaoPolicialViewSet, basename='operacaopolicial')
