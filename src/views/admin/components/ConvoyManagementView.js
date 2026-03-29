@@ -189,10 +189,10 @@ const generateEscalaPDF = async ({ dataOperacaoStr, convoysDoDia, teams, showNot
                     imageElement.onload = resolve;
                     imageElement.onerror = reject;
                 });
-                const imageWidth = 28;
-                const imageHeight = 28;
+                const imageWidth = 40;
+                const imageHeight = 40;
                 const imageX = (pageWidth - imageWidth) / 2;
-                const imageY = 58;
+                const imageY = 54;
                 pdf.addImage(imageElement, 'PNG', imageX, imageY, imageWidth, imageHeight);
             } catch (error) {
                 console.warn('Nao foi possivel carregar o brasao na capa do PDF:', error);
@@ -207,16 +207,16 @@ const generateEscalaPDF = async ({ dataOperacaoStr, convoysDoDia, teams, showNot
         // Capa no estilo do template de plano operacional
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(16);
-        pdf.text('DEPARTAMENTO TECNICO OPERACIONAL', pageWidth / 2, 42, { align: 'center' });
+        pdf.text('DEPARTAMENTO TÉCNICO OPERACIONAL', pageWidth / 2, 42, { align: 'center' });
         pdf.setFontSize(13);
-        pdf.text('SECAO DE OPERACOES', pageWidth / 2, 52, { align: 'center' });
+        pdf.text('SEÇÃO DE OPERAÇÕES', pageWidth / 2, 52, { align: 'center' });
 
         await addCoverImage();
 
         pdf.setFontSize(18);
-        pdf.text('PLANO OPERACIONAL', pageWidth / 2, 98, { align: 'center' });
+        pdf.text('Plano Operacional', pageWidth / 2, 98, { align: 'center' });
         pdf.setFontSize(15);
-        pdf.text('OPERACAO EGIDE', pageWidth / 2, 110, { align: 'center' });
+        pdf.text('Operação ÉGIDE', pageWidth / 2, 110, { align: 'center' });
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(12);
         pdf.text(`Data da Escala: ${dataFormatada}`, pageWidth / 2, 146, { align: 'center' });
