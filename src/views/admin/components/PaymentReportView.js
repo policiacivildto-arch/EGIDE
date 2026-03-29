@@ -103,26 +103,35 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         return 'Pendente';
     };
 
-    const extractDepartamentoFromObservacoes = useCallback((observacoes) => {
-        const text = String(observacoes || '');
-        const re = /Departamento:\s*([^|\n]+)/i;
-        const match = re.exec(text);
-        return String(match?.[1] || '').trim();
-    }, []);
-
     const resolveTeamName = useCallback((service) => {
-        const departamentoObservacao = extractDepartamentoFromObservacoes(service?.observacoes);
-        return (
-            service?.vaga_info?.delegacia_nome ||
-            service?.delegaciaPrincipal ||
-            service?.departamento_sigla ||
-            service?.departamento_nome ||
-            service?.departamento ||
-            service?.teamName ||
-            departamentoObservacao ||
-            `Equipe ${service?.id}`
-        );
-    }, [extractDepartamentoFromObservacoes]);
+        // Prioridade refinada: sempre prefira dados estruturados de vaga_info
+        if (service?.vaga_info?.delegacia_nome) {
+            return service.vaga_info.delegacia_nome;
+        }
+        
+        if (service?.delegaciaPrincipal) {
+            return service.delegaciaPrincipal;
+        }
+        
+        if (service?.departamento_sigla) {
+            return service.departamento_sigla;
+        }
+        
+        if (service?.departamento_nome) {
+            return service.departamento_nome;
+        }
+        
+        if (service?.departamento) {
+            return service.departamento;
+        }
+        
+        if (service?.teamName) {
+            return service.teamName;
+        }
+        
+        // NUNCA extrai "COAF" de observações - esse era o culpado
+        return `Equipe ${service?.id}`;
+    }, []);
 
     const getPolicialId = useCallback((member) => {
         if (!member) return null;
