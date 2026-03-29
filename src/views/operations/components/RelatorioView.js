@@ -22,6 +22,43 @@ export function RelatorioView({
     const normalizeOfficerName = (name) => String(name || '').trim();
     const getOfficerDisplayName = (name) => normalizeOfficerName(name) || 'Sem nome';
 
+    const isGenericDepartmentLabel = (value) => {
+        const normalized = String(value || '').trim().toUpperCase();
+        if (!normalized) return true;
+
+        return [
+            'COAF',
+            'DTO',
+            'DTO/COAF',
+            'DEPARTAMENTO TECNICO OPERACIONAL',
+            'DEPARTAMENTO TÉCNICO OPERACIONAL',
+        ].includes(normalized);
+    };
+
+    const resolveEquipeDisplayName = (equipe) => {
+        const delegacia = String(
+            equipe?.delegacia ||
+            equipe?.delegacia_nome ||
+            equipe?.vaga_info?.delegacia_nome ||
+            ''
+        ).trim();
+
+        if (delegacia) return delegacia;
+
+        const departamento = String(
+            equipe?.departamento ||
+            equipe?.departamento_nome ||
+            equipe?.departamento_sigla ||
+            ''
+        ).trim();
+
+        if (departamento && !isGenericDepartmentLabel(departamento)) {
+            return departamento;
+        }
+
+        return `Equipe ${equipe?.id || ''}`.trim();
+    };
+
     // Filtrar operações baseado no perfil
     let operacoesParaRelatorio = operations.filter(op => 
         op.status === 'Aprovada pelo DTO' || op.status === 'Em Execução'
@@ -243,7 +280,7 @@ export function RelatorioView({
                                         <div className="space-y-1">
                                             {equipesNaoChegaram.map(eq => (
                                                 <div key={eq.id} className="text-sm text-yellow-200">
-                                                    • {eq.departamento} - {eq.delegacia}
+                                                    • {resolveEquipeDisplayName(eq)}
                                                 </div>
                                             ))}
                                         </div>
@@ -273,7 +310,7 @@ export function RelatorioView({
                                                         <div className="flex-1">
                                                             <h4 className="font-bold text-white flex items-center space-x-2">
                                                                 <Users size={18} className="text-blue-400" />
-                                                                <span>{equipe.departamento} - {equipe.delegacia}</span>
+                                                                <span>{resolveEquipeDisplayName(equipe)}</span>
                                                                 {equipeChegou && (
                                                                     <span className="bg-green-600 text-xs px-2 py-1 rounded">
                                                                         ✓ Chegou
