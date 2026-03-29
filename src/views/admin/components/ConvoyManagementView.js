@@ -189,7 +189,7 @@ const generateEscalaPDF = async ({ dataOperacaoStr, convoysDoDia, teams, showNot
                     imageElement.onload = resolve;
                     imageElement.onerror = reject;
                 });
-                const imageWidth = 80;
+                const imageWidth = 68;
                 const imageHeight = 80;
                 const imageX = (pageWidth - imageWidth) / 2;
                 const imageY = 72;
