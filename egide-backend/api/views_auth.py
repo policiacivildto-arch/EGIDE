@@ -18,8 +18,12 @@ from django.utils.text import slugify
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from urllib.parse import urlencode
+import logging
 from api.models_security import LogAuditoria, PerfilDepartamento
 from api.models import Delegacia, Policial, Departamento
+
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_text(value):
@@ -328,8 +332,8 @@ def password_reset_view(request):
                 recipient_list=[email],
                 fail_silently=False,
             )
-        except Exception as exc:
-            return Response({'error': f'Falha ao enviar email de redefinição: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception:
+            logger.exception('Falha ao enviar email de redefinição para %s', email)
 
         return Response({
             'message': 'Se o email existir, um link de redefinição foi enviado.',
