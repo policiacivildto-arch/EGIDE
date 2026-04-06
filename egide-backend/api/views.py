@@ -260,12 +260,58 @@ class OperacaoPolicialViewSet(viewsets.ModelViewSet):
             return OperacaoPolicialListSerializer
         return OperacaoPolicialSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, 'user', None)
+
+        if not user or not user.is_authenticated:
+            return queryset
+
+        if hasattr(user, 'perfil_delegacia'):
+            perfil_delegacia = user.perfil_delegacia
+            departamento = perfil_delegacia.delegacia.departamento if perfil_delegacia.delegacia else None
+            delegacia = perfil_delegacia.delegacia
+
+            if departamento and delegacia:
+                return queryset.filter(
+                    Q(departamento_solicitante=departamento) |
+                    Q(delegacia_solicitante=delegacia) |
+                    Q(departamentos_apoio=departamento) |
+                    Q(equipes_operacao__delegacia=delegacia) |
+                    Q(equipes_operacao__departamento=departamento)
+                ).distinct()
+
+        if hasattr(user, 'perfil_departamento'):
+            perfil_departamento = user.perfil_departamento
+            if perfil_departamento.is_dto:
+                return queryset
+
+            departamento = perfil_departamento.departamento
+            return queryset.filter(
+                Q(departamento_solicitante=departamento) |
+                Q(departamentos_apoio=departamento) |
+                Q(equipes_operacao__departamento=departamento)
+            ).distinct()
+
+        return queryset
+
     def perform_create(self, serializer):
-        # Salvar com usuário se autenticado, senão salvar sem usuário
-        if self.request.user and self.request.user.is_authenticated:
-            serializer.save(criado_por=self.request.user)
-        else:
-            serializer.save(criado_por=None)
+        user = self.request.user if self.request.user and self.request.user.is_authenticated else None
+
+        if user and hasattr(user, 'perfil_delegacia'):
+            perfil_delegacia = user.perfil_delegacia
+            serializer.save(
+                criado_por=user,
+                delegacia_solicitante=perfil_delegacia.delegacia,
+                departamento_solicitante=perfil_delegacia.delegacia.departamento if perfil_delegacia.delegacia else None,
+            )
+            return
+
+        if user and hasattr(user, 'perfil_departamento') and not self.request.data.get('departamento_solicitante'):
+            serializer.save(criado_por=user, departamento_solicitante=user.perfil_departamento.departamento)
+            return
+
+        serializer.save(criado_por=user)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def aprovar(self, request, pk=None):
@@ -407,6 +453,39 @@ class OperacaoPolicialViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def minhas_operacoes(self, request):
         """Retorna operações do usuário por departamento e participação em equipe"""
+        if hasattr(request.user, 'perfil_delegacia'):
+            perfil_delegacia = request.user.perfil_delegacia
+            delegacia = perfil_delegacia.delegacia
+            departamento = delegacia.departamento if delegacia else None
+
+            operacoes = self.queryset.filter(
+                Q(delegacia_solicitante=delegacia) |
+                Q(departamento_solicitante=departamento) |
+                Q(departamentos_apoio=departamento) |
+                Q(equipes_operacao__delegacia=delegacia) |
+                Q(equipes_operacao__departamento=departamento)
+            ).distinct()
+
+            serializer = self.get_serializer(operacoes, many=True)
+            return Response(serializer.data)
+
+        if hasattr(request.user, 'perfil_departamento'):
+            perfil_departamento = request.user.perfil_departamento
+            departamento = perfil_departamento.departamento
+
+            if perfil_departamento.is_dto:
+                serializer = self.get_serializer(self.queryset.distinct(), many=True)
+                return Response(serializer.data)
+
+            operacoes = self.queryset.filter(
+                Q(departamento_solicitante=departamento) |
+                Q(departamentos_apoio=departamento) |
+                Q(equipes_operacao__departamento=departamento)
+            ).distinct()
+
+            serializer = self.get_serializer(operacoes, many=True)
+            return Response(serializer.data)
+
         policial = Policial.objects.filter(usuario=request.user).first()
 
         # Fallback para contas antigas/desvinculadas do User -> Policial.
@@ -878,6 +957,7 @@ class FrequenciaPolicialViewSet(viewsets.ModelViewSet):
                     horario_final.timetz() if hasattr(horario_final, 'timetz') else horario_final.time(),
                 )
                 observacao = ''
+                print(f"[DEBUG PAGAMENTO] Criando/atualizando Pagamento para policial_id={policial_id}, data_operacao={data_operacao}, valor_pago={valor_pago}, horario_inicial={horario_inicial}, horario_final={horario_final}")
                 Pagamento.objects.update_or_create(
                     policial_id=policial_id,
                     data_operacao=data_operacao,

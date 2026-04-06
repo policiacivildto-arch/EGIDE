@@ -23,7 +23,7 @@ class PagamentoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['criado_em', 'atualizado_em']
 from .models_security import (
-    PerfilPolicial, PerfilDepartamento,
+    PerfilPolicial, PerfilDepartamento, PerfilDelegacia,
     NotificacaoDepartamento, LogAuditoria, SessaoUsuario
 )
 
@@ -418,6 +418,7 @@ class AporteFinanceiroSerializer(serializers.ModelSerializer):
 
 class OperacaoPolicialSerializer(serializers.ModelSerializer):
     departamento_solicitante_nome = serializers.CharField(source='departamento_solicitante.nome', read_only=True)
+    delegacia_solicitante_nome = serializers.CharField(source='delegacia_solicitante.nome', read_only=True)
     responsavel_operacao_nome = serializers.CharField(source='responsavel_operacao.nome', read_only=True)
     aprovado_por_nome = serializers.CharField(source='aprovado_por.username', read_only=True)
     criado_por_nome = serializers.CharField(source='criado_por.username', read_only=True)
@@ -437,6 +438,7 @@ class OperacaoPolicialSerializer(serializers.ModelSerializer):
         model = OperacaoPolicial
         fields = [
             'id', 'nome', 'departamento_solicitante', 'departamento_solicitante_nome',
+            'delegacia_solicitante', 'delegacia_solicitante_nome',
             'tipo_operacao', 'objetivo', 'data_hora_inicio', 'data_hora_fim', 
             'data_hora_briefing', 'local_concentracao', 'responsavel_operacao', 
             'responsavel_operacao_nome', 'departamentos_apoio', 'departamentos_apoio_detalhes',
@@ -449,6 +451,18 @@ class OperacaoPolicialSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['criado_por', 'criado_em', 'atualizado_em', 
                             'aprovado_por', 'data_aprovacao', 'responsavel_custo']
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        delegacia_solicitante = attrs.get('delegacia_solicitante')
+        departamento_solicitante = attrs.get('departamento_solicitante')
+
+        if delegacia_solicitante and departamento_solicitante and delegacia_solicitante.departamento_id != departamento_solicitante.id:
+            raise serializers.ValidationError({
+                'delegacia_solicitante': 'A delegacia informada não pertence ao departamento solicitante.'
+            })
+
+        return attrs
     
     def get_total_equipes(self, obj):
         return obj.equipes_operacao.count()
@@ -463,12 +477,13 @@ class OperacaoPolicialSerializer(serializers.ModelSerializer):
 class OperacaoPolicialListSerializer(serializers.ModelSerializer):
     """Serializer simplificado para listagem"""
     departamento_solicitante_sigla = serializers.CharField(source='departamento_solicitante.sigla', read_only=True)
+    delegacia_solicitante_nome = serializers.CharField(source='delegacia_solicitante.nome', read_only=True)
     responsavel_nome = serializers.CharField(source='responsavel_operacao.nome', read_only=True)
     total_equipes = serializers.SerializerMethodField()
     
     class Meta:
         model = OperacaoPolicial
-        fields = ['id', 'nome', 'departamento_solicitante_sigla', 'tipo_operacao',
+        fields = ['id', 'nome', 'departamento_solicitante_sigla', 'delegacia_solicitante_nome', 'tipo_operacao',
                   'status', 'data_hora_inicio', 'data_hora_briefing', 
                   'responsavel_nome', 'total_equipes', 'criado_em']
         read_only_fields = ['criado_em']

@@ -8,6 +8,35 @@ Define classes de permissão para controlar acesso aos endpoints da API
 from rest_framework import permissions
 
 
+def _get_area_profile(user):
+    if not user or not user.is_authenticated:
+        return None
+
+    if hasattr(user, 'perfil_delegacia'):
+        return user.perfil_delegacia
+
+    if hasattr(user, 'perfil_departamento'):
+        return user.perfil_departamento
+
+    return None
+
+
+def _get_area_departamento(user):
+    profile = _get_area_profile(user)
+    if not profile:
+        return None
+    if hasattr(profile, 'delegacia'):
+        return profile.delegacia.departamento if profile.delegacia else None
+    return getattr(profile, 'departamento', None)
+
+
+def _get_area_delegacia(user):
+    profile = _get_area_profile(user)
+    if profile and hasattr(profile, 'delegacia'):
+        return profile.delegacia
+    return None
+
+
 class IsAuthenticated(permissions.BasePermission):
     """
     Permite acesso apenas para usuários autenticados
@@ -229,7 +258,7 @@ class IsDepartamento(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         
-        return hasattr(request.user, 'perfil_departamento')
+        return bool(_get_area_profile(request.user))
 
 
 class IsDTO(permissions.BasePermission):
@@ -242,10 +271,8 @@ class IsDTO(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         
-        try:
-            return request.user.perfil_departamento.is_dto
-        except:
-            return False
+        profile = _get_area_profile(request.user)
+        return bool(profile and getattr(profile, 'is_dto', False))
 
 
 class DepartamentoCanCreateDemanda(permissions.BasePermission):
@@ -287,17 +314,29 @@ class DepartamentoCanViewOwnOperations(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         
-        try:
-            perfil_dept = request.user.perfil_departamento
-            # DTO vê tudo
-            if perfil_dept.is_dto:
-                return True
-            # Verifica se a operação está relacionada ao departamento
-            if hasattr(obj, 'departamento'):
-                return obj.departamento == perfil_dept.departamento
+        profile = _get_area_profile(request.user)
+        departamento = _get_area_departamento(request.user)
+        delegacia = _get_area_delegacia(request.user)
+
+        if not profile or not departamento:
             return False
-        except:
-            return False
+
+        if getattr(profile, 'is_dto', False):
+            return True
+
+        if hasattr(obj, 'departamento_solicitante_id') and obj.departamento_solicitante_id == departamento.id:
+            return True
+
+        if delegacia and hasattr(obj, 'delegacia_solicitante_id') and obj.delegacia_solicitante_id == delegacia.id:
+            return True
+
+        if hasattr(obj, 'departamentos_apoio') and obj.departamentos_apoio.filter(id=departamento.id).exists():
+            return True
+
+        if delegacia and hasattr(obj, 'equipes_operacao') and obj.equipes_operacao.filter(delegacia=delegacia).exists():
+            return True
+
+        return False
 
 
 class DepartamentoCanRespondNotification(permissions.BasePermission):
@@ -313,12 +352,13 @@ class DepartamentoCanRespondNotification(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         
-        try:
-            perfil_dept = request.user.perfil_departamento
-            # Notificação foi enviada para este departamento
-            return obj.para_departamento == perfil_dept
-        except:
+        profile = _get_area_profile(request.user)
+        departamento = _get_area_departamento(request.user)
+
+        if not profile or not departamento:
             return False
+
+        return getattr(obj.para_departamento, 'departamento_id', None) == departamento.id
 
 
 class DTOCanSendNotifications(permissions.BasePermission):
@@ -378,6 +418,8 @@ def get_user_role(user):
         str: 'admin', 'coordenador', 'policial', 'departamento' ou None
     """
     try:
+        if hasattr(user, 'perfil_delegacia'):
+            return 'delegacia'
         if hasattr(user, 'perfil_departamento'):
             return 'departamento'
         return user.policial.perfil.tipo

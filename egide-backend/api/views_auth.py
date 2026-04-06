@@ -19,7 +19,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from urllib.parse import urlencode
 import logging
-from api.models_security import LogAuditoria, PerfilDepartamento
+from api.models_security import LogAuditoria, PerfilDepartamento, PerfilDelegacia
 from api.models import Delegacia, Policial, Departamento
 
 
@@ -71,6 +71,117 @@ def _is_pre_registered_user(user):
     if not user:
         return False
     return user.username.startswith('precad_') and user.email.endswith('@precad.egide.local')
+
+
+def _get_user_department_id(user):
+    try:
+        if hasattr(user, 'perfil_delegacia') and user.perfil_delegacia.delegacia_id:
+            delegacia = user.perfil_delegacia.delegacia
+            if delegacia and delegacia.departamento_id:
+                return delegacia.departamento_id
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'perfil_departamento') and user.perfil_departamento.departamento_id:
+            return user.perfil_departamento.departamento_id
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'policial') and user.policial.delegacia_id:
+            delegacia = user.policial.delegacia
+            if delegacia and delegacia.departamento_id:
+                return delegacia.departamento_id
+    except Exception:
+        pass
+
+    return None
+
+
+def _get_user_delegacia_id(user):
+    try:
+        if hasattr(user, 'perfil_delegacia') and user.perfil_delegacia.delegacia_id:
+            return user.perfil_delegacia.delegacia_id
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'policial') and user.policial.delegacia_id:
+            return user.policial.delegacia_id
+    except Exception:
+        pass
+
+    return None
+
+
+def _get_user_role_claim(user):
+    if getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False):
+        return 'admin'
+
+    try:
+        if hasattr(user, 'perfil_delegacia'):
+            return 'delegacia'
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'perfil_departamento'):
+            return 'departamento'
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'policial') and hasattr(user.policial, 'perfil'):
+            return user.policial.perfil.tipo
+    except Exception:
+        pass
+
+    return 'policial'
+
+
+def _build_token_claims(user):
+    role_claim = _get_user_role_claim(user)
+    claims = {
+        'user_id': user.id,
+        'app_role': role_claim,
+        'role_type': role_claim,
+        'username': user.username,
+    }
+
+    department_id = _get_user_department_id(user)
+    if department_id is not None:
+        claims['departamento_id'] = department_id
+
+    delegacia_id = _get_user_delegacia_id(user)
+    if delegacia_id is not None:
+        claims['delegacia_id'] = delegacia_id
+
+    try:
+        if hasattr(user, 'policial'):
+            claims['policial_id'] = user.policial.id
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'perfil_delegacia'):
+            claims['perfil_delegacia_id'] = user.perfil_delegacia.id
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'perfil_departamento'):
+            claims['perfil_departamento_id'] = user.perfil_departamento.id
+            claims['departamento_sigla'] = getattr(
+                user.perfil_departamento,
+                'sigla_departamento',
+                user.perfil_departamento.sigla,
+            )
+            claims['is_dto'] = bool(user.perfil_departamento.is_dto)
+    except Exception:
+        pass
+
+    return claims
 
 
 @api_view(['POST'])
@@ -164,6 +275,20 @@ def register_view(request):
                 'DEPARTAMENTO ESSENCIAL': 'DPE',
                 'ESPECIAL': 'DPE',
                 'DEPARTAMENTO ESPECIAL': 'DPE',
+                'N O DO DEPATRI': 'DEPATRI',
+                'N O DEPATRI': 'DEPATRI',
+                'NUCLEO MEU CELULAR': 'DEPATRI',
+                'N O DPE': 'DPE',
+                'N O DHPP': 'DHPP',
+                'N O DE ARACATI': 'DPI SUL',
+                'N O DE JUAZEIRO DO NORTE': 'DPI SUL',
+                'N O DE QUIXADA': 'DPI SUL',
+                'N O DE IGUATU': 'DPI SUL',
+                'N O DE TAUA': 'DPI SUL',
+                'N O DPGV': 'DPGV',
+                'N O DA CAPITAL': 'DPC',
+                'N O DPI NORTE': 'DPI NORTE',
+                'N O DRA': 'DRA',
             }
             candidate_sigla = department_aliases.get(normalized_department, departamento_name)
 
@@ -333,6 +458,8 @@ def password_reset_view(request):
                 fail_silently=False,
             )
         except Exception:
+            # Não expõe falha interna ao cliente para evitar enumeração de contas
+            # e impedir timeout no frontend por indisponibilidade do provedor SMTP.
             logger.exception('Falha ao enviar email de redefinição para %s', email)
 
         return Response({
@@ -435,25 +562,24 @@ def login_view(request):
     # Se falhar, tenta buscar por email e autenticar com username
     if user is None and '@' in username_or_email:
         from django.contrib.auth import get_user_model
-        User = get_user_model()
+        user_model = get_user_model()
         try:
-            user_obj = User.objects.get(email=username_or_email)
+            user_obj = user_model.objects.get(email=username_or_email)
             user = authenticate(username=user_obj.username, password=password)
             print(f'🔍 DEBUG Login - Tentou com email, username encontrado: {user_obj.username}')
-        except User.DoesNotExist:
-            print(f'🔍 DEBUG Login - Email não encontrado')
-            pass
+        except user_model.DoesNotExist:
+            print('🔍 DEBUG Login - Email não encontrado')
 
     # Fallback final: valida senha diretamente no usuário localizado.
     # Isso evita falhas intermitentes de backend de autenticação em alguns ambientes.
     if user is None:
         from django.contrib.auth import get_user_model
-        User = get_user_model()
+        user_model = get_user_model()
         candidate = None
         if '@' in username_or_email:
-            candidate = User.objects.filter(email__iexact=username_or_email).first()
+            candidate = user_model.objects.filter(email__iexact=username_or_email).first()
         else:
-            candidate = User.objects.filter(username__iexact=username_or_email).first()
+            candidate = user_model.objects.filter(username__iexact=username_or_email).first()
 
         if candidate and candidate.check_password(password) and candidate.is_active:
             user = candidate
@@ -478,11 +604,15 @@ def login_view(request):
             status=status.HTTP_403_FORBIDDEN
         )
     
-    # Gerar tokens JWT
+    # Gerar tokens JWT com claims usadas pelas políticas de RLS no Supabase.
+    token_claims = _build_token_claims(user)
     refresh = RefreshToken.for_user(user)
+    for claim_name, claim_value in token_claims.items():
+        refresh[claim_name] = claim_value
     
     # Buscar perfil de departamento (se existir)
     perfil_data = None
+    perfil_delegacia_data = None
     policial_data = None
     try:
         if hasattr(user, 'perfil_departamento'):
@@ -491,6 +621,21 @@ def login_view(request):
                 'sigla': perfil.sigla,
                 'departamento': perfil.departamento.nome if perfil.departamento else None,
                 'ativo': perfil.ativo
+            }
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'perfil_delegacia'):
+            perfil_delegacia = user.perfil_delegacia
+            perfil_delegacia_data = {
+                'id': perfil_delegacia.id,
+                'delegacia': perfil_delegacia.delegacia.nome if perfil_delegacia.delegacia else None,
+                'delegacia_id': perfil_delegacia.delegacia_id,
+                'departamento': perfil_delegacia.delegacia.departamento.nome if perfil_delegacia.delegacia and perfil_delegacia.delegacia.departamento else None,
+                'departamento_id': perfil_delegacia.delegacia.departamento_id if perfil_delegacia.delegacia else None,
+                'ativo': perfil_delegacia.ativo,
+                'is_dto': perfil_delegacia.is_dto,
             }
     except Exception:
         pass
@@ -532,7 +677,9 @@ def login_view(request):
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
         },
+        'token_claims': token_claims,
         'perfil_departamento': perfil_data,
+        'perfil_delegacia': perfil_delegacia_data,
         'policial': policial_data,
     })
 
@@ -593,11 +740,34 @@ def me_view(request):
     
     # Buscar perfil de departamento
     perfil_data = None
+    perfil_delegacia_data = None
     policial_data = None
     try:
         if hasattr(user, 'perfil_departamento'):
             perfil = user.perfil_departamento
-            perfil_data = PerfilDepartamentoSerializer(perfil).data
+            perfil_data = {
+                'id': perfil.id,
+                'sigla': perfil.sigla,
+                'departamento': perfil.departamento.nome if perfil.departamento else None,
+                'departamento_id': perfil.departamento_id,
+                'ativo': perfil.ativo,
+                'is_dto': perfil.is_dto,
+            }
+    except Exception:
+        pass
+
+    try:
+        if hasattr(user, 'perfil_delegacia'):
+            perfil = user.perfil_delegacia
+            perfil_delegacia_data = {
+                'id': perfil.id,
+                'delegacia': perfil.delegacia.nome if perfil.delegacia else None,
+                'delegacia_id': perfil.delegacia_id,
+                'departamento': perfil.delegacia.departamento.nome if perfil.delegacia and perfil.delegacia.departamento else None,
+                'departamento_id': perfil.delegacia.departamento_id if perfil.delegacia else None,
+                'ativo': perfil.ativo,
+                'is_dto': perfil.is_dto,
+            }
     except Exception:
         pass
 
@@ -632,5 +802,6 @@ def me_view(request):
             'last_login': user.last_login,
         },
         'perfil_departamento': perfil_data,
+        'perfil_delegacia': perfil_delegacia_data,
         'policial': policial_data,
     })

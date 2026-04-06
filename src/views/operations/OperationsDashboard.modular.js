@@ -170,7 +170,7 @@ export default function OperationsDashboard({ userData, showNotification }) {
     const renderSidebar = () => (
         <div className={`fixed left-0 top-0 h-full bg-gray-900 transition-all duration-300 z-50 ${sidebarOpen ? 'w-64' : 'w-16'}`}>
             <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-                {sidebarOpen && <h2 className="text-lg font-bold text-white">Painel de Controle</h2>}
+                {sidebarOpen && <h2 className="text-lg font-bold text-white">Painel de guerrilha</h2>}
                 <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-white">
                     {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
                 </button>

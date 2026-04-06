@@ -3,13 +3,26 @@ import brasaoPCCE from '../assets/brasao-pcce.png';
 
 export const PCCE_LOGO_URL = brasaoPCCE;
 
+function addNucleoOperacionalOption(mapaDepartamentos) {
+    Object.entries(mapaDepartamentos).forEach(([sigla, unidades]) => {
+        const possuiNucleoOperacional = unidades.some((unidade) =>
+            /N\.?\s*O\b|NUCLEO OPERACIONAL|NÚCLEO OPERACIONAL/i.test(unidade)
+        );
+
+        if (!possuiNucleoOperacional) {
+            unidades.unshift(`NÚCLEO OPERACIONAL - ${sigla}`);
+        }
+    });
+}
+
 // Organograma completo da PCCE
 export const ORGANOGRAMA = {
     "DTO": ["SUPERVISÃO", "APOIO"],
     "DEPATRI": [
-        "N.O DO DEPATRI - DEPATRI",
-        "N.O DEPATRI - DEPATRI",
-        "NUCLEO MEU CELULAR - DEPATRI",
+        "DEPATRI",
+        "NÚCLEO OPERACIONAL DO DEPATRI - DEPATRI",
+        "NÚCLEO OPERACIONAL DEPATRI - DEPATRI",
+        "NÚCLEO MEU CELULAR - DEPATRI",
         "Delegacia de Polícia Civil Antissequestro",
         "Delegacia de Polícia Civil de Defraudações e Falsificações",
         "Delegacia de Polícia Civil de Roubos e Furtos",
@@ -27,7 +40,10 @@ export const ORGANOGRAMA = {
         "9ª Delegacia de Polícia Civil de Homicídios e Proteção à Pessoa",
         "10ª Delegacia de Polícia Civil de Homicídios e Proteção à Pessoa",
         "Delegacia de Polícia Civil de Homicídios Contra Agentes de Segurança Pública",
-        "Delegacia de Polícia Civil de Pessoas Desaparecidas"
+        "Delegacia de Polícia Civil de Pessoas Desaparecidas",
+        "DHPP Caucaia",
+        "DHPP Maracanaú",
+        "DHPP Maranguape"
     ],
     "DPC": [
         "1ª Delegacia de Polícia Civil da Capital",
@@ -247,18 +263,21 @@ export const ORGANOGRAMA = {
     "ASJ": ["Assessoria Jurídica"],
     "COGEP": [], 
     "COTIC": [], 
-    "COLOG": [], 
+    "COLOG": ["COLOG"], 
     "CODIP": [], 
     "GAB": [], 
     "CORE": ["Coordenadoria de Operações e Recursos Especiais"]
 };
 
+addNucleoOperacionalOption(ORGANOGRAMA);
+
 // Mapeamento completo de Delegacias por Departamento (oficial PCCE)
 export const DEPARTMENTS = {
     "DEPATRI": [
-        "N.O DO DEPATRI - DEPATRI",
-        "N.O DEPATRI - DEPATRI",
-        "NUCLEO MEU CELULAR - DEPATRI",
+        "DEPATRI",
+        "NÚCLEO OPERACIONAL DO DEPATRI - DEPATRI",
+        "NÚCLEO OPERACIONAL DEPATRI - DEPATRI",
+        "NÚCLEO MEU CELULAR - DEPATRI",
         "Delegacia de Polícia Civil Antissequestro",
         "Delegacia de Polícia Civil de Defraudações e Falsificações",
         "Delegacia de Polícia Civil de Roubos e Furtos",
@@ -276,7 +295,10 @@ export const DEPARTMENTS = {
         "9ª Delegacia de Polícia Civil de Homicídios e Proteção à Pessoa",
         "10ª Delegacia de Polícia Civil de Homicídios e Proteção à Pessoa",
         "Delegacia de Polícia Civil de Homicídios Contra Agentes de Segurança Pública",
-        "Delegacia de Polícia Civil de Pessoas Desaparecidas"
+        "Delegacia de Polícia Civil de Pessoas Desaparecidas",
+        "DHPP Caucaia",
+        "DHPP Maracanaú",
+        "DHPP Maranguape"
     ],
     "DPC": [
         "1ª Delegacia de Polícia Civil da Capital",
@@ -499,6 +521,7 @@ export const DEPARTMENTS = {
     "CODIP": ["CODIP"],
     "COTIC": ["COTIC"],
     "COGEP": ["COGEP"],
+    "COLOG": ["COLOG"],
     "GDGPC": ["GDGPC"],
     "AESP": ["AESP"],
     "COAFI": ["COAFI"],
@@ -506,6 +529,8 @@ export const DEPARTMENTS = {
     "ASCON": ["ASCON"],
     "COREG": ["COREG"]
 };
+
+addNucleoOperacionalOption(DEPARTMENTS);
 
 export const PAY_RATES = {
     "OIP": {

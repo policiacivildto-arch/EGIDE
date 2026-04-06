@@ -9,7 +9,7 @@ from .models import (
     EventoOperacao, DepartamentoEvento, EscalaPolicial
 )
 from .models_security import (
-    PerfilPolicial, PerfilDepartamento, LogAuditoria, 
+    PerfilPolicial, PerfilDepartamento, PerfilDelegacia, LogAuditoria, 
     SessaoUsuario, NotificacaoDepartamento
 )
 
@@ -91,9 +91,9 @@ class FrequenciaPolicialAdmin(admin.ModelAdmin):
 
 @admin.register(OperacaoPolicial)
 class OperacaoPolicialAdmin(admin.ModelAdmin):
-    list_display = ['id', 'nome', 'departamento_solicitante', 'tipo_operacao', 'status', 'data_hora_inicio', 'criado_em']
-    list_filter = ['status', 'tipo_operacao', 'departamento_solicitante', 'data_hora_inicio']
-    search_fields = ['nome', 'objetivo']
+    list_display = ['id', 'nome', 'departamento_solicitante', 'delegacia_solicitante', 'tipo_operacao', 'status', 'data_hora_inicio', 'criado_em']
+    list_filter = ['status', 'tipo_operacao', 'departamento_solicitante', 'delegacia_solicitante', 'data_hora_inicio']
+    search_fields = ['nome', 'objetivo', 'delegacia_solicitante__nome']
     readonly_fields = ['criado_por', 'criado_em', 'atualizado_em']
     filter_horizontal = ['departamentos_apoio']
     
@@ -214,6 +214,14 @@ class PerfilDepartamentoAdmin(admin.ModelAdmin):
     list_display = ['sigla', 'departamento', 'ativo', 'ultimo_acesso', 'criado_em']
     list_filter = ['sigla', 'ativo', 'criado_em']
     search_fields = ['user__username', 'departamento__nome']
+    readonly_fields = ['criado_em', 'atualizado_em', 'ultimo_acesso']
+
+
+@admin.register(PerfilDelegacia)
+class PerfilDelegaciaAdmin(admin.ModelAdmin):
+    list_display = ['delegacia', 'ativo', 'ultimo_acesso', 'criado_em']
+    list_filter = ['delegacia__departamento', 'ativo', 'criado_em']
+    search_fields = ['user__username', 'delegacia__nome', 'delegacia__departamento__nome']
     readonly_fields = ['criado_em', 'atualizado_em', 'ultimo_acesso']
 
 

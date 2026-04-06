@@ -280,6 +280,14 @@ class OperacaoPolicial(models.Model):
         on_delete=models.CASCADE, 
         related_name='operacoes_solicitadas'
     )
+    delegacia_solicitante = models.ForeignKey(
+        Delegacia,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='operacoes_solicitadas',
+        help_text='Delegacia que originou a demanda da operação'
+    )
     tipo_operacao = models.CharField(max_length=20, choices=TIPO_CHOICES, default='Interna')
     objetivo = models.TextField()
     data_hora_inicio = models.DateTimeField()
@@ -341,6 +349,9 @@ class OperacaoPolicial(models.Model):
         return f"{self.nome} ({self.get_status_display()})"
 
     def save(self, *args, **kwargs):
+        if self.delegacia_solicitante and self.delegacia_solicitante.departamento_id:
+            self.departamento_solicitante = self.delegacia_solicitante.departamento
+
         # Lógica automática de alocação de custos
         if self.tipo_operacao == 'Interna':
             self.responsavel_custo = self.departamento_solicitante

@@ -23,21 +23,53 @@ class PerfilDepartamento(models.Model):
     Os departamentos podem visualizar operações e responder a notificações do DTO
     """
     DEPARTAMENTOS_CHOICES = [
-        ('depatri', 'DEPATRI - Delegacia de Proteção ao Patrimônio'),
-        ('dhpp', 'DHPP - Delegacia de Homicídios e Proteção à Pessoa'),
-        ('dpc', 'DPC - Delegacia de Polícia da Criança'),
+        ('depatri', 'DEPATRI - Departamento de Patrimônio'),
+        ('dhpp', 'DHPP - Departamento de Homicídios e Proteção à Pessoa'),
+        ('dpc', 'DPC - Departamento de Polícia da Criança'),
         ('coplan', 'COPLAN - Coordenadoria de Plantões'),
-        ('dpm', 'DPM - Delegacia de Proteção à Mulher'),
+        ('dpm', 'DPM - Departamento de Proteção à Mulher'),
         ('dpi_norte', 'DPI Norte - Departamento de Polícias Interior Norte'),
         ('dpi_sul', 'DPI Sul - Departamento de Polícias Interior Sul'),
-        ('dhpp_caucaia', 'DHPP Caucaia - Delegacia de Homicídios Caucaia'),
+        ('dhpp_caucaia', 'DHPP Caucaia - Departamento de Homicídios Caucaia'),
         ('dpe', 'DPE - Departamento de Polícias Especializadas'),
-        ('dpgv', 'DPGV - Delegacia de Proteção a Grupos Vulneráveis'),
+        ('dpgv', 'DPGV - Departamento de Proteção a Grupos Vulneráveis'),
         ('dra', 'DRA - Departamento de Recuperação de Ativos'),
-        ('drco', 'DRCO - Delegacia de Repressão ao Crime Organizado'),
+        ('drco', 'DRCO - Departamento de Repressão ao Crime Organizado'),
         ('dto', 'DTO - Departamento Técnico Operacional'),
         ('gadel', 'GADEL - Gabinete'),
+        ('no_do_depatri', 'N.O DO DEPATRI - DEPATRI'),
+        ('no_dpe', 'N.O DPE - DPE'),
+        ('nucleo_meu_celular', 'NUCLEO MEU CELULAR - DEPATRI'),
+        ('no_dhpp', 'N.O DHPP - DHPP'),
+        ('no_aracati', 'N.O DE ARACATI - DPI SUL'),
+        ('no_juazeiro_norte', 'N.O DE JUAZEIRO DO NORTE - DPI SUL'),
+        ('no_quixada', 'N.O DE QUIXADA - DPI SUL'),
+        ('no_iguatu', 'N.O DE IGUATU - DPI SUL'),
+        ('no_taua', 'N.O DE TAUA - DPI SUL'),
+        ('no_dpgv', 'N.O DPGV - DPGV'),
+        ('no_capital', 'N.O DA CAPITAL - DPC'),
+        ('no_dpi_norte', 'N.O DPI NORTE - DPI NORTE'),
+        ('no_depatri', 'N.O DEPATRI - DEPATRI'),
+        ('no_dra', 'N.O DRA - DRA'),
     ]
+
+    # Núcleos operacionais são lotações internas e herdam o departamento-mãe.
+    NUCLEO_PARA_DEPARTAMENTO = {
+        'no_do_depatri': 'depatri',
+        'no_depatri': 'depatri',
+        'nucleo_meu_celular': 'depatri',
+        'no_dpe': 'dpe',
+        'no_dhpp': 'dhpp',
+        'no_aracati': 'dpi_sul',
+        'no_juazeiro_norte': 'dpi_sul',
+        'no_quixada': 'dpi_sul',
+        'no_iguatu': 'dpi_sul',
+        'no_taua': 'dpi_sul',
+        'no_dpgv': 'dpgv',
+        'no_capital': 'dpc',
+        'no_dpi_norte': 'dpi_norte',
+        'no_dra': 'dra',
+    }
     
     user = models.OneToOneField(
         User, 
@@ -90,12 +122,84 @@ class PerfilDepartamento(models.Model):
     
     def __str__(self):
         return f"{self.get_sigla_display()}"
+
+    @property
+    def sigla_departamento(self):
+        """Retorna a sigla-base do departamento para regras de acesso."""
+        return self.NUCLEO_PARA_DEPARTAMENTO.get(self.sigla, self.sigla)
     
     @property
     def is_dto(self):
         """Verifica se é o DTO (departamento especial)"""
-        return self.sigla == 'dto'
+        return self.sigla_departamento == 'dto'
+
+    def save(self, *args, **kwargs):
+        # Se vier um N.O no menu, persistimos a sigla do departamento-mãe.
+        self.sigla = self.NUCLEO_PARA_DEPARTAMENTO.get(self.sigla, self.sigla)
+        super().save(*args, **kwargs)
     
+    def atualizar_ultimo_acesso(self):
+        """Atualiza a data/hora do último acesso"""
+        self.ultimo_acesso = timezone.now()
+        self.save(update_fields=['ultimo_acesso'])
+
+
+class PerfilDelegacia(models.Model):
+    """
+    Perfil de usuário para Delegacias vinculadas a um departamento.
+    Permite acompanhar operações originadas na delegacia e responder
+    solicitações operacionais do respectivo departamento.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='perfil_delegacia'
+    )
+    delegacia = models.ForeignKey(
+        'Delegacia',
+        on_delete=models.CASCADE,
+        related_name='perfis'
+    )
+    ativo = models.BooleanField(
+        default=True,
+        help_text='Indica se a delegacia pode acessar o sistema'
+    )
+    ultimo_acesso = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Data e hora do último acesso ao sistema'
+    )
+    pode_ver_operacoes = models.BooleanField(
+        default=True,
+        help_text='Pode visualizar operações da delegacia e do departamento'
+    )
+    pode_responder_notificacoes = models.BooleanField(
+        default=True,
+        help_text='Pode responder solicitações operacionais do departamento'
+    )
+
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Perfil de Delegacia'
+        verbose_name_plural = 'Perfis de Delegacias'
+        ordering = ['delegacia__nome']
+
+    def __str__(self):
+        departamento = self.delegacia.departamento.sigla if self.delegacia and self.delegacia.departamento else 'Sem departamento'
+        return f'{self.delegacia.nome} ({departamento})'
+
+    @property
+    def departamento(self):
+        return self.delegacia.departamento if self.delegacia else None
+
+    @property
+    def is_dto(self):
+        departamento = self.departamento
+        return bool(departamento and str(departamento.sigla).upper() == 'DTO')
+
     def atualizar_ultimo_acesso(self):
         """Atualiza a data/hora do último acesso"""
         self.ultimo_acesso = timezone.now()

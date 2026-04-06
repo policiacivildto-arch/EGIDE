@@ -68,9 +68,16 @@ export default function App() {
 
             if (loadedUserData.is_staff || loadedUserData.is_superuser) {
                 loadedUserData.role = 'admin';
+            } else if (response.perfil_delegacia) {
+                loadedUserData.role = 'delegacia';
+                loadedUserData.perfil_delegacia = response.perfil_delegacia;
+                loadedUserData.departamento = response.perfil_delegacia.departamento;
+                loadedUserData.delegacia = response.perfil_delegacia.delegacia;
+                loadedUserData.delegacia_id = response.perfil_delegacia.delegacia_id;
             } else if (response.perfil_departamento) {
                 loadedUserData.role = 'departamento';
                 loadedUserData.perfil_departamento = response.perfil_departamento;
+                loadedUserData.departamento = response.perfil_departamento.departamento;
             } else {
                 loadedUserData.role = 'officer';
 
@@ -263,7 +270,7 @@ export default function App() {
                         ? <Navigate to="/login" replace />
                         : userData?.role === 'admin'
                             ? <Navigate to="/egide/admin" replace />
-                            : userData?.role === 'departamento'
+                            : userData?.role === 'departamento' || userData?.role === 'delegacia'
                                 ? protectedLayout(<DashboardDepartamento userData={userData} showNotification={showNotification} />)
                                 : protectedLayout(<OfficerDashboard user={userData} showNotification={showNotification} />)
                 }
