@@ -7,6 +7,9 @@ export const PCCE_LOGO_URL = brasaoPCCE;
 export const ORGANOGRAMA = {
     "DTO": ["SUPERVISÃO", "APOIO"],
     "DEPATRI": [
+        "N.O DO DEPATRI - DEPATRI",
+        "N.O DEPATRI - DEPATRI",
+        "NUCLEO MEU CELULAR - DEPATRI",
         "Delegacia de Polícia Civil Antissequestro",
         "Delegacia de Polícia Civil de Defraudações e Falsificações",
         "Delegacia de Polícia Civil de Roubos e Furtos",
@@ -253,6 +256,9 @@ export const ORGANOGRAMA = {
 // Mapeamento completo de Delegacias por Departamento (oficial PCCE)
 export const DEPARTMENTS = {
     "DEPATRI": [
+        "N.O DO DEPATRI - DEPATRI",
+        "N.O DEPATRI - DEPATRI",
+        "NUCLEO MEU CELULAR - DEPATRI",
         "Delegacia de Polícia Civil Antissequestro",
         "Delegacia de Polícia Civil de Defraudações e Falsificações",
         "Delegacia de Polícia Civil de Roubos e Furtos",
