@@ -223,7 +223,12 @@ class ComboioViewSet(viewsets.ModelViewSet):
     serializer_class = ComboioSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['data', 'status', 'dpc', 'oip']
+    filterset_fields = {
+        'data': ['exact', 'gte', 'lte'],
+        'status': ['exact'],
+        'dpc': ['exact'],
+        'oip': ['exact'],
+    }
     search_fields = ['descricao', 'ais', 'bairros']
     ordering_fields = ['data', 'status', 'criado_em']
     ordering = ['-data']
