@@ -10,7 +10,7 @@ import { LoadingSpinner } from '../../../components/ui/Shared';
 import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-export const PaymentReportView = ({ allUsers = [], showNotification, departamento }) => {
+export const PaymentReportView = ({ allUsers = [], showNotification, departamento, onDatesChange }) => {
     const toLocalISODate = (dateObj) => {
         if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return '';
         const y = dateObj.getFullYear();
@@ -52,6 +52,13 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     const [substitutions, setSubstitutions] = useState({});
     const [substituteSelectorOpen, setSubstituteSelectorOpen] = useState({});
     const [substituteSearchTerms, setSubstituteSearchTerms] = useState({});
+
+    // Notifica AdminDashboard quando as datas mudam para sincronizar com OperationCostView
+    useEffect(() => {
+        if (onDatesChange) {
+            onDatesChange(startDate, endDate);
+        }
+    }, [startDate, endDate, onDatesChange]);
 
     const getUserName = (user) => {
         if (!user) return '';

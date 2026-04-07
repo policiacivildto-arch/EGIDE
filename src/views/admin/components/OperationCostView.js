@@ -12,12 +12,12 @@ import PropTypes from 'prop-types';
 import { Document, Paragraph, Table, TableRow, TableCell, TextRun, AlignmentType, WidthType, Packer } from 'docx';
 import { saveAs } from 'file-saver';
 
-export const OperationCostView = ({ showNotification, allUsers, holidays, departamento }) => {
+export const OperationCostView = ({ showNotification, allUsers, holidays, departamento, sharedStartDate, sharedEndDate }) => {
     const adminData = useAdminData();
     const resolvedAllUsers = allUsers || adminData.allUsers || [];
     const today = new Date().toISOString().split('T')[0];
-    const [startDate, setStartDate] = useState(today);
-    const [endDate, setEndDate] = useState(today);
+    const [startDate, setStartDate] = useState(sharedStartDate || today);
+    const [endDate, setEndDate] = useState(sharedEndDate || today);
     const [convoySchedules, setConvoySchedules] = useState({});
     const [planoOperacionalNumero, setPlanoOperacionalNumero] = useState('');
     const [diretorNome, setDiretorNome] = useState('');
@@ -26,6 +26,12 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
     const [costData, setCostData] = useState(null); // Armazena os resultados do cálculo
     const [memberSchedules, setMemberSchedules] = useState({});
     const [expandedOperations, setExpandedOperations] = useState({});
+
+    // Sincroniza datas com PaymentReportView quando navegando entre abas
+    useEffect(() => {
+        if (sharedStartDate) setStartDate(sharedStartDate);
+        if (sharedEndDate) setEndDate(sharedEndDate);
+    }, [sharedStartDate, sharedEndDate]);
 
     // Para otimizar, criamos um mapa de Matrícula -> Detalhes do Usuário
     const normalizeMatricula = (value) => String(value || '').replaceAll(/\D/g, '');

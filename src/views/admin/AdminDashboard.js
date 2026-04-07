@@ -25,6 +25,8 @@ export default function AdminDashboard({ userData, showNotification }) {
     const [loading, setLoading] = useState(true);
     const [isVagasModalOpen, setIsVagasModalOpen] = useState(false);
     const [holidays, setHolidays] = useState([]);
+    const [sharedStartDate, setSharedStartDate] = useState(null);
+    const [sharedEndDate, setSharedEndDate] = useState(null);
 
     const adminDepartamento =
         userData?.departamento ||
@@ -40,6 +42,11 @@ export default function AdminDashboard({ userData, showNotification }) {
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    };
+
+    const handlePaymentReportDatesChange = (startDate, endDate) => {
+        setSharedStartDate(startDate);
+        setSharedEndDate(endDate);
     };
 
     const viewNames = {
@@ -291,8 +298,8 @@ export default function AdminDashboard({ userData, showNotification }) {
                     {view === 'ranking' && <RankingView showNotification={showNotification} />}
                     {view === 'schedule' && <ScheduleManagementView vagas={vagas} teams={teams} allUsers={allUsers} showNotification={showNotification} weekId={currentWeek.weekId} departamento={adminDepartamento} />}
                     {view === 'convoys' && <ConvoyManagementView teams={teams} convoys={convoys} weekId={currentWeek.weekId} showNotification={showNotification} />}
-                    {view === 'paymentReport' && <PaymentReportView allUsers={allUsers} showNotification={showNotification} departamento={adminDepartamento} />}
-                    {view === 'operationCost' && <OperationCostView allUsers={allUsers} holidays={holidays} showNotification={showNotification} />}
+                    {view === 'paymentReport' && <PaymentReportView allUsers={allUsers} showNotification={showNotification} departamento={adminDepartamento} onDatesChange={handlePaymentReportDatesChange} />}
+                    {view === 'operationCost' && <OperationCostView allUsers={allUsers} holidays={holidays} showNotification={showNotification} sharedStartDate={sharedStartDate} sharedEndDate={sharedEndDate} />}
                     {view === 'operationReports' && <OperationReportsView showNotification={showNotification} />}
                     {view === 'alerts' && <AlertsView showNotification={showNotification} setView={setView} setCurrentWeek={setCurrentWeek} />}
                     {view === 'users' && <UserManagementView userData={userData} showNotification={showNotification} />}
