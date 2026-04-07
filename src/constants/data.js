@@ -296,8 +296,13 @@ export const DEPARTMENTS = {
         "10ª Delegacia de Polícia Civil de Homicídios e Proteção à Pessoa",
         "Delegacia de Polícia Civil de Homicídios Contra Agentes de Segurança Pública",
         "Delegacia de Polícia Civil de Pessoas Desaparecidas",
+        "DEPARTAMENTO DE POLÍCIA CIVIL DE DHPP - DHPP",
+        "NÚCLEO OPERACIONAL - DHPP",
+        "NÚCLEO LOCAL DE CRIME - DHPP",
+        "NÚCLEO LOCAL DE PLANTÃO - DHPP",
         "DHPP Caucaia",
         "DHPP Maracanaú",
+
         "DHPP Maranguape"
     ],
     "DPC": [
@@ -326,6 +331,8 @@ export const DEPARTMENTS = {
         "23ª Delegacia de Polícia Civil da Capital",
         "24ª Delegacia de Polícia Civil da Capital",
         "25ª Delegacia de Polícia Civil da Capital",
+        "DEPARTAMENTO DE POLÍCIA CIVIL DE CAPITAL - DPC",
+      "NÚCLEO OPERACIONAL -DPC ",
         "1ª Seccional da Capital",
         "2ª Seccional da Capital",
         "3ª Seccional da Capital",
@@ -333,6 +340,7 @@ export const DEPARTMENTS = {
         "5ª Seccional da Capital"
     ],
     "DPM": [
+        "DEPARTAMENTO DE POLÍCIA CIVIL DE METROPOLITANA - DPM",
         "1ª Delegacia de Polícia Civil de Caucaia",
         "2ª Delegacia de Polícia Civil de Caucaia",
         "3ª Delegacia de Polícia Civil de Caucaia",
@@ -360,6 +368,7 @@ export const DEPARTMENTS = {
         "Delegacia de Polícia Civil de Pindoretama",
         "Delegacia de Polícia Civil de São Gonçalo do Amarante",
         "Delegacia de Polícia Civil de Trairí",
+        "NÚCLEO OPERACIONAL -DPM ",
         "1ª Seccional da Região Metropolitana",
         "2ª Seccional da Região Metropolitana",
         "3ª Seccional da Região Metropolitana",
@@ -413,6 +422,8 @@ export const DEPARTMENTS = {
         "Delegacia de Polícia Civil de Uruoca",
         "Delegacia de Polícia Civil de Varjota",
         "Delegacia de Polícia Civil de Viçosa do Ceará",
+        "NÚCLEO OPERACIONAL - DPI NORTE",
+        "DEPARTAMENTO DE POLÍCIA CIVIL DE DPI NORTE - DPI NORTE",
         "1ª Seccional do Interior Norte",
         "2ª Seccional do Interior Norte",
         "3ª Seccional do Interior Norte",
@@ -470,6 +481,8 @@ export const DEPARTMENTS = {
         "Delegacia de Polícia Civil de Tabuleiro do Norte",
         "Delegacia de Polícia Civil de Tauá",
         "Delegacia de Polícia Civil de Várzea Alegre",
+         "NÚCLEO OPERACIONAL - DPI SUL",
+        "DEPARTAMENTO DE POLÍCIA CIVIL DE DPI SUL - DPI SUL",
         "1ª Seccional do Interior Sul",
         "2ª Seccional do Interior Sul",
         "3ª Seccional do Interior Sul",
@@ -477,6 +490,8 @@ export const DEPARTMENTS = {
         "5ª Seccional do Interior Sul"
     ],
     "DPE": [
+         "NÚCLEO OPERACIONAL - DPE",
+        "DEPARTAMENTO DE POLÍCIA CIVIL DE DPE - DPE",
         "Delegacia de Polícia Civil de Assuntos Internos",
         "Delegacia de Polícia Civil de Capturas e Polinter",
         "Delegacia de Polícia Civil de Proteção ao Consumidor",
@@ -484,9 +499,11 @@ export const DEPARTMENTS = {
         "Delegacia de Polícia Civil de Proteção ao Turista",
         "Delegacia de Polícia Civil de Repressão aos Crimes Cibernéticos",
         "Delegacia de Polícia Civil do Aeroporto Pinto Martins",
-        "Delegacia do Torcedor e dos Grandes Eventos"
+                "Delegacia do Torcedor e dos Grandes Eventos"
     ],
     "DPGV": [
+         "NÚCLEO OPERACIONAL - DPGV",
+        "DEPARTAMENTO DE POLÍCIA CIVIL DE DPGV - DPGV",
         "1ª Delegacia de Polícia Civil de Defesa da Mulher de Fortaleza",
         "2ª Delegacia de Polícia Civil de Defesa da Mulher de Fortaleza",
         "Delegacia de Polícia Civil da Criança e do Adolescente",
@@ -509,6 +526,8 @@ export const DEPARTMENTS = {
         "Delegacia de Polícia Civil de Combate aos Crimes de Lavagem de Dinheiro"
     ],
     "DRCO": [
+         "NÚCLEO OPERACIONAL - DRCO",
+        "DEPARTAMENTO DE POLÍCIA CIVIL DE DPI NORTE - DRCO",
         "Delegacia de Combate ao Tráfico de Armas, Munições e Explosivos",
         "Delegacia de Polícia Civil de Narcóticos",
         "Delegacia de Polícia Civil de Repressão às Ações Criminosas Organizadas",
@@ -534,13 +553,13 @@ addNucleoOperacionalOption(DEPARTMENTS);
 
 export const PAY_RATES = {
     "OIP": {
-        "A": { dia: 34.42, noite: 44.75 },
-        "B": { dia: 34.42, noite: 44.75 },
-        "C": { dia: 34.42, noite: 44.75 },
-        "D": { dia: 34.42, noite: 44.75 }
+        "A": { dia: 36.15, noite: 47.00 },
+        "B": { dia: 36.15, noite: 47.00 },
+        "C": { dia: 36.15, noite: 47.00 },
+        "D": { dia: 36.15, noite: 47.00 }
     },
     "DPC": {
-        "Especial": { dia: 48.18, noite: 62.63 }
+        "Especial": { dia: 50.60, noite: 65.80 }
     }
 };
 

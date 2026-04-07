@@ -13,20 +13,14 @@ import {
     formatTelefone,
     getWeekInfo,
     normalizeName,
+    parseApiDate,
 } from '../../../utils/helpers';
 import { findPolicialByMatricula } from '../../../constants/policiais';
 import { DEPARTMENTS } from '../../../constants/data';
 
 const getVagaDateObject = (vaga) => {
     const rawDate = vaga?.data || vaga?.date;
-    if (!rawDate) return null;
-    if (typeof rawDate === 'string') {
-        const isoDateMatch = /^(\d{4}-\d{2}-\d{2})/.exec(rawDate);
-        if (isoDateMatch) return new Date(`${isoDateMatch[1]}T12:00:00`);
-        return new Date(rawDate);
-    }
-    if (rawDate?.seconds) return new Date(rawDate.seconds * 1000);
-    return null;
+    return parseApiDate(rawDate);
 };
 
 const getVagaShiftType = (vaga) => String(vaga?.turno || vaga?.shiftType || '').toLowerCase();
@@ -46,13 +40,6 @@ const getVagaDayKey = (vaga) => {
 const getVagaOperationalDayKeys = (vaga) => {
     const parsedDate = getVagaDateObject(vaga);
     if (!parsedDate || Number.isNaN(parsedDate.getTime())) return [];
-
-    if (getVagaShiftType(vaga) === 'night') {
-        const previousDay = new Date(parsedDate);
-        previousDay.setDate(previousDay.getDate() - 1);
-        return [format(previousDay, 'yyyy-MM-dd')];
-    }
-
     return [format(parsedDate, 'yyyy-MM-dd')];
 };
 

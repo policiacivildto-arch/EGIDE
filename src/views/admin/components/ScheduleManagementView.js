@@ -1,13 +1,12 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { apiClient } from '../../../config/api';
-import { getCycleInfo, displayMatricula } from '../../../utils/helpers';
+import { getCycleInfo, displayMatricula, checkWeeklyLimit, parseApiDate, toIsoLocalDate } from '../../../utils/helpers';
 
 import { Modal } from '../../../components/ui/Shared';
 import { ChevronDown, ChevronUp, PlusCircle, CheckSquare, XSquare, Edit, Trash2, AlertTriangle } from 'lucide-react';
 import { AdminRegistrationForm } from './AdminRegistrationForm';
 import { AdminEditTeamModal } from './AdminEditTeamModal';
-import { checkWeeklyLimit } from '../../../utils/helpers'; 
 
     
 export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotification, weekId, departamento }) => {
@@ -19,33 +18,13 @@ export const ScheduleManagementView = ({ vagas, teams, allUsers, showNotificatio
 
   const getTeamsForVaga = (vagaId) => teams.filter((t) => Number(resolveTeamVagaId(t)) === Number(vagaId));
 
-  const parseDate = useCallback((value) => {
-    if (!value) return null;
-    if (typeof value === 'string') {
-      const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
-      if (isoDateMatch) {
-        return new Date(`${isoDateMatch[1]}T12:00:00`);
-      }
-      return new Date(value);
-    }
-    if (value?.seconds) return new Date(value.seconds * 1000);
-    return null;
-  }, []);
-
-  const resolveVagaDate = useCallback((vaga) => parseDate(vaga?.date || vaga?.data), [parseDate]);
+  const resolveVagaDate = useCallback((vaga) => parseApiDate(vaga?.date || vaga?.data), []);
 
   const resolveVagaShift = (vaga) => vaga?.shiftType || vaga?.turno;
 
   const resolveOperationalDate = useCallback((vaga) => {
     const parsedDate = resolveVagaDate(vaga);
     if (!parsedDate || Number.isNaN(parsedDate.getTime())) return null;
-
-    if (resolveVagaShift(vaga) === 'night') {
-      const adjusted = new Date(parsedDate);
-      adjusted.setDate(adjusted.getDate() - 1);
-      return adjusted;
-    }
-
     return parsedDate;
   }, [resolveVagaDate]);
 
@@ -254,14 +233,14 @@ const handleAdminRegister = async (vaga, teamData) => {
         return vagas.reduce((acc, vaga) => { 
             const parsedDate = resolveOperationalDate(vaga);
             if (!parsedDate || Number.isNaN(parsedDate.getTime())) return acc;
-            const dayKey = parsedDate.toDateString(); 
+            const dayKey = toIsoLocalDate(parsedDate); 
             if (!acc[dayKey]) acc[dayKey] = []; 
             acc[dayKey].push(vaga); 
             return acc; 
         }, {});
   }, [vagas, resolveOperationalDate]);
 
-    const sortedDays = useMemo(() => Object.keys(vagasByDay).sort((a, b) => new Date(a) - new Date(b)), [vagasByDay]);
+    const sortedDays = useMemo(() => Object.keys(vagasByDay).sort((a, b) => a.localeCompare(b)), [vagasByDay]);
 
     return (
         <div>
@@ -282,7 +261,7 @@ const handleAdminRegister = async (vaga, teamData) => {
             <div className="space-y-6">
                 {sortedDays.map(dayKey => {
                     const dayVagas = vagasByDay[dayKey];
-                    const dayDate = new Date(dayKey);
+                    const dayDate = parseApiDate(dayKey);
                   const totalSlots = dayVagas.reduce((sum, v) => sum + getVagaCapacity(v), 0);
                   const preenchidas = dayVagas.reduce((sum, v) => sum + getTeamsForVaga(v.id).length, 0);
                     return (

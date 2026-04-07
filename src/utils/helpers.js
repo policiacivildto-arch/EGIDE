@@ -42,6 +42,42 @@ export const formatTelefone = (value) => {
     }
 };
 
+export const parseApiDate = (value) => {
+    if (!value) return null;
+
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : new Date(value);
+    }
+
+    if (typeof value === 'string') {
+        const isoDateMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+        if (isoDateMatch) {
+            const year = Number(isoDateMatch[1]);
+            const month = Number(isoDateMatch[2]);
+            const day = Number(isoDateMatch[3]);
+            return new Date(year, month - 1, day, 12, 0, 0, 0);
+        }
+
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    if (typeof value === 'object' && value?.seconds) {
+        const parsed = new Date(value.seconds * 1000);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    return null;
+};
+
+export const toIsoLocalDate = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
+
 // --- Lógica de Data e Cálculo ---
 export const getCycleInfo = (date = new Date()) => {
     const mutableDate = new Date(date);
@@ -124,10 +160,7 @@ const resolveWeekRange = (weekId) => {
 };
 
 const formatIsoDate = (d) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    return toIsoLocalDate(d);
 };
 
 // --- Validações Assíncronas ---
