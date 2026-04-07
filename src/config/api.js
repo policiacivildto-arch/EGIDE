@@ -73,7 +73,9 @@ class DjangoApiClient {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        console.error(`Erro completo (${response.status}):`, error);
+        if (!options.suppressErrorLog) {
+          console.error(`Erro completo (${response.status}):`, error);
+        }
 
         // Se o token expirou, tenta refresh uma vez e repete a requisição
         if (response.status === 401 && !options._retry && !isAuthLoginEndpoint && !isAuthRefreshEndpoint && hasRefreshToken) {
@@ -116,7 +118,9 @@ class DjangoApiClient {
       }
       return { success: true };
     } catch (error) {
-      console.error(`Erro na requisição ${method} ${endpoint}:`, error);
+      if (!options.suppressErrorLog) {
+        console.error(`Erro na requisição ${method} ${endpoint}:`, error);
+      }
       throw error;
     }
   }
@@ -200,30 +204,30 @@ class DjangoApiClient {
   /**
    * Métodos Genéricos para CRUD
    */
-  async getList(resource, params = {}) {
+  async getList(resource, params = {}, options = {}) {
     const queryString = new URLSearchParams(params).toString();
     const endpoint = `/${resource}/${queryString ? '?' + queryString : ''}`;
-    return this.request('GET', endpoint);
+    return this.request('GET', endpoint, null, options);
   }
 
-  async getDetail(resource, id) {
-    return this.request('GET', `/${resource}/${id}/`);
+  async getDetail(resource, id, options = {}) {
+    return this.request('GET', `/${resource}/${id}/`, null, options);
   }
 
-  async create(resource, data) {
-    return this.request('POST', `/${resource}/`, data);
+  async create(resource, data, options = {}) {
+    return this.request('POST', `/${resource}/`, data, options);
   }
 
-  async update(resource, id, data) {
-    return this.request('PUT', `/${resource}/${id}/`, data);
+  async update(resource, id, data, options = {}) {
+    return this.request('PUT', `/${resource}/${id}/`, data, options);
   }
 
-  async partialUpdate(resource, id, data) {
-    return this.request('PATCH', `/${resource}/${id}/`, data);
+  async partialUpdate(resource, id, data, options = {}) {
+    return this.request('PATCH', `/${resource}/${id}/`, data, options);
   }
 
-  async delete(resource, id) {
-    return this.request('DELETE', `/${resource}/${id}/`);
+  async delete(resource, id, options = {}) {
+    return this.request('DELETE', `/${resource}/${id}/`, null, options);
   }
 
   /**
@@ -532,7 +536,7 @@ class DjangoApiClient {
     }
 
     try {
-      const data = await this.getList('convoy-reports', params);
+      const data = await this.getList('convoy-reports', params, { suppressErrorLog: true });
       this.convoyReportsEndpointAvailable = true;
       return data;
     } catch (error) {
@@ -552,7 +556,7 @@ class DjangoApiClient {
     }
 
     try {
-      const data = await this.getDetail('convoy-reports', id);
+      const data = await this.getDetail('convoy-reports', id, { suppressErrorLog: true });
       this.convoyReportsEndpointAvailable = true;
       return data;
     } catch (error) {
@@ -583,7 +587,7 @@ class DjangoApiClient {
     }
 
     try {
-      const created = await this.create('convoy-reports', data);
+      const created = await this.create('convoy-reports', data, { suppressErrorLog: true });
       this.convoyReportsEndpointAvailable = true;
       return created;
     } catch (error) {
@@ -617,7 +621,7 @@ class DjangoApiClient {
     }
 
     try {
-      const updated = await this.update('convoy-reports', id, data);
+      const updated = await this.update('convoy-reports', id, data, { suppressErrorLog: true });
       this.convoyReportsEndpointAvailable = true;
       return updated;
     } catch (error) {
@@ -645,7 +649,7 @@ class DjangoApiClient {
     }
 
     try {
-      const result = await this.delete('convoy-reports', id);
+      const result = await this.delete('convoy-reports', id, { suppressErrorLog: true });
       this.convoyReportsEndpointAvailable = true;
       return result;
     } catch (error) {
