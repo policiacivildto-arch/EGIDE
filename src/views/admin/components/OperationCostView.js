@@ -182,11 +182,14 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
             convoys.forEach((convoy) => {
                 const defaultSchedule = getDefaultScheduleForConvoy(convoy, teamMap);
                 const existing = convoySchedules[convoy.id] || {};
+                const startTime = normalizeTime(existing.startTime) || defaultSchedule.startTime;
+                const endTime = normalizeTime(existing.endTime) || defaultSchedule.endTime;
                 scheduleDraft[convoy.id] = {
-                    startTime: normalizeTime(existing.startTime) || defaultSchedule.startTime,
-                    endTime: normalizeTime(existing.endTime) || defaultSchedule.endTime,
-                    confirmed: Boolean(existing.confirmed),
-                    confirmedAt: existing.confirmedAt || null,
+                    startTime,
+                    endTime,
+                    // Confirma automaticamente se já tem horários válidos
+                    confirmed: Boolean(existing.confirmed) || Boolean(startTime && endTime),
+                    confirmedAt: existing.confirmedAt || new Date().toISOString(),
                 };
             });
 
