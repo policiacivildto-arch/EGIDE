@@ -317,14 +317,23 @@ class ComboioSerializer(serializers.ModelSerializer):
     dpc_nome = serializers.CharField(source='dpc.nome', read_only=True)
     oip_nome = serializers.CharField(source='oip.nome', read_only=True)
     operacoes_count = serializers.SerializerMethodField()
+    team_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Comboio
-        fields = ['id', 'data', 'descricao', 'dpc', 'dpc_nome', 'oip', 'oip_nome', 'status', 'ais', 'bairros', 'operacoes_count', 'criado_em', 'atualizado_em']
+        fields = ['id', 'data', 'descricao', 'dpc', 'dpc_nome', 'oip', 'oip_nome', 'status', 'ais', 'bairros', 'operacoes_count', 'team_ids', 'criado_em', 'atualizado_em']
         read_only_fields = ['criado_em', 'atualizado_em']
 
     def get_operacoes_count(self, obj):
         return obj.operacoes.count()
+
+    def get_team_ids(self, obj):
+        """Retorna os IDs das equipes vinculadas via operações do comboio"""
+        return list(
+            obj.operacoes.filter(equipe__isnull=False)
+               .values_list('equipe__id', flat=True)
+               .distinct()
+        )
 
 
 # ===================================
