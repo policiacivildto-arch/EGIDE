@@ -89,6 +89,11 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
         return null;
     };
 
+    const toIsoDateKey = (date) => {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+        return date.toISOString().split('T')[0];
+    };
+
     const getTeamIdsFromConvoy = (convoy) => {
         if (Array.isArray(convoy?.teamIds)) return convoy.teamIds;
         if (Array.isArray(convoy?.team_ids)) return convoy.team_ids;
@@ -108,15 +113,6 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
         const startTime = normalizeTime(team?.horarioEntrada) || (shift === 'day' ? '08:00' : '19:00');
         const endTime = normalizeTime(team?.horarioSaida) || (shift === 'day' ? '20:00' : '01:00');
         return { startTime, endTime };
-    };
-
-    const getDefaultScheduleForConvoy = (convoy, teamMap) => {
-        const teamIds = getTeamIdsFromConvoy(convoy);
-        const firstTeam = teamMap.get(teamIds[0]);
-        if (firstTeam) {
-            return getDefaultScheduleFromTeam(firstTeam);
-        }
-        return { startTime: '19:00', endTime: '01:00' };
     };
 
     const handleCalculateCost = async () => { // NOSONAR
@@ -164,10 +160,31 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
             });
 
             const teamMap = new Map();
+            const teamsByDate = new Map();
             teamsList.forEach((team) => {
                 teamMap.set(team.id, team);
                 teamMap.set(String(team.id), team);
+
+                const teamDateRaw = team?.vaga_info?.data || team?.vagaDate;
+                const teamDateObj = parseDateValue(teamDateRaw);
+                const dateKey = toIsoDateKey(teamDateObj);
+                if (!dateKey) return;
+
+                const existingTeams = teamsByDate.get(dateKey) || [];
+                teamsByDate.set(dateKey, [...existingTeams, String(team.id)]);
             });
+
+            const resolveTeamIdsForConvoy = (convoy) => {
+                const explicitTeamIds = getTeamIdsFromConvoy(convoy).map((id) => String(id));
+                if (explicitTeamIds.length > 0) return explicitTeamIds;
+
+                const convoyDateRaw = convoy?.data || convoy?.date;
+                const convoyDateObj = parseDateValue(convoyDateRaw);
+                const dateKey = toIsoDateKey(convoyDateObj);
+                if (!dateKey) return [];
+
+                return teamsByDate.get(dateKey) || [];
+            };
 
             // Mapa de frequência: equipe_id -> Map(policial_id -> registro)
             const frequencias = Array.isArray(frequenciasResponse) ? frequenciasResponse : (frequenciasResponse?.results || []);
@@ -180,7 +197,11 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
 
             const scheduleDraft = {};
             convoys.forEach((convoy) => {
-                const defaultSchedule = getDefaultScheduleForConvoy(convoy, teamMap);
+                const resolvedTeamIds = resolveTeamIdsForConvoy(convoy);
+                const firstTeam = teamMap.get(resolvedTeamIds[0]);
+                const defaultSchedule = firstTeam
+                    ? getDefaultScheduleFromTeam(firstTeam)
+                    : { startTime: '19:00', endTime: '01:00' };
                 const existing = convoySchedules[convoy.id] || {};
                 const startTime = normalizeTime(existing.startTime) || defaultSchedule.startTime;
                 const endTime = normalizeTime(existing.endTime) || defaultSchedule.endTime;
@@ -285,7 +306,7 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                     });
                 }
                 
-                const teamIds = getTeamIdsFromConvoy(convoy);
+                const teamIds = resolveTeamIdsForConvoy(convoy);
                 for (const teamId of teamIds) {
                     const team = teamMap.get(teamId);
                     if (!team) continue;
