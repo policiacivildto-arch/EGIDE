@@ -193,7 +193,16 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         return null;
     }, [allUsers]);
 
+    const getAttendanceTeamId = useCallback((teamRow) => {
+        const candidate = teamRow?.equipeIdForAttendance ?? teamRow?.id;
+        const numeric = Number(candidate);
+        return Number.isFinite(numeric) ? numeric : null;
+    }, []);
+
     const persistTeamAttendance = async (teamRow, nextAttendanceStatus, nextSubstitutions) => {
+        const attendanceTeamId = getAttendanceTeamId(teamRow);
+        if (!attendanceTeamId) return;
+
         const registros = teamRow.members
             .map((member) => {
                 const policialId = getPolicialId(member);
@@ -204,7 +213,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                 const substituto = nextSubstitutions[key]?.id || null;
 
                 return {
-                    equipe: teamRow.id,
+                    equipe: attendanceTeamId,
                     policial: policialId,
                     data_operacao: teamRow.dateKey,
                     status,
@@ -234,11 +243,14 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         });
 
         rows.forEach((teamRow) => {
+            const attendanceTeamId = getAttendanceTeamId(teamRow);
+            if (!attendanceTeamId) return;
+
             teamRow.members.forEach((member) => {
                 const policialId = getPolicialId(member);
                 if (!policialId) return;
 
-                const item = byTeamAndPolicial.get(`${teamRow.id}-${policialId}`);
+                const item = byTeamAndPolicial.get(`${attendanceTeamId}-${policialId}`);
                 if (!item) return;
 
                 const statusKey = getMemberStatusKey(teamRow.id, member);
@@ -256,7 +268,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
 
         setAttendanceStatus(nextAttendanceStatus);
         setSubstitutions(nextSubstitutions);
-    }, [getPolicialId]);
+    }, [getAttendanceTeamId, getPolicialId]);
 
     const fetchServices = useCallback(async () => {
         if (!startDate || !endDate) {
@@ -339,7 +351,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     }, [convoysForPeriod]);
 
     const frequencyRows = useMemo(() => {
-        return services
+        const teamRows = services
             .map((service) => {
                 const vagaDate = service?.vaga_info?.data || service?.vagaDate;
                 const dateObj = parseDateSafe(vagaDate);
@@ -362,6 +374,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
 
                 return {
                     id: service.id,
+                    equipeIdForAttendance: service.id,
                     dateObj,
                     dateKey,
                     teamName: resolveTeamName(service),
@@ -378,9 +391,64 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                     rawService: service,
                 };
             })
-            .filter(Boolean)
-            .sort((a, b) => b.dateObj - a.dateObj);
-    }, [services, convoysByDate, resolveTeamName]);
+            .filter(Boolean);
+
+        const teamIdsByDate = new Map();
+        teamRows.forEach((row) => {
+            if (!row?.dateKey) return;
+            const existing = teamIdsByDate.get(row.dateKey) || [];
+            teamIdsByDate.set(row.dateKey, [...existing, row.id]);
+        });
+
+        const supervisionRows = [];
+        convoysForPeriod.forEach((convoy) => {
+            const convoyDate = convoy?.data || convoy?.date;
+            const dateObj = parseDateSafe(convoyDate);
+            if (!dateObj || Number.isNaN(dateObj.getTime())) return;
+
+            const dateKey = toLocalISODate(dateObj);
+            const attendanceTeamId = (teamIdsByDate.get(dateKey) || [])[0] || null;
+            if (!attendanceTeamId) return;
+
+            const supervisorMembers = [];
+            const dpcUser = allUsers.find((u) => String(u?.id) === String(convoy?.dpc));
+            if (dpcUser || convoy?.dpc_nome || convoy?.dpc) {
+                supervisorMembers.push({
+                    id: dpcUser?.id || convoy?.dpc,
+                    nome: dpcUser?.nome || convoy?.dpc_nome || 'DPC',
+                    matricula: dpcUser?.matricula || '',
+                });
+            }
+
+            const oipUser = allUsers.find((u) => String(u?.id) === String(convoy?.oip));
+            if (oipUser || convoy?.oip_nome || convoy?.oip) {
+                supervisorMembers.push({
+                    id: oipUser?.id || convoy?.oip,
+                    nome: oipUser?.nome || convoy?.oip_nome || 'OIP',
+                    matricula: oipUser?.matricula || '',
+                });
+            }
+
+            if (supervisorMembers.length === 0) return;
+
+            supervisionRows.push({
+                id: `sup-${convoy.id}`,
+                equipeIdForAttendance: attendanceTeamId,
+                dateObj,
+                dateKey,
+                teamName: 'Supervisão do Dia (DTO)',
+                comboio: 'Supervisão',
+                area: `AIS ${convoy?.ais || 'N/A'} - ${convoy?.bairros || 'N/A'}`,
+                phone: 'N/A',
+                startTime: '08:00',
+                endTime: '20:00',
+                members: supervisorMembers,
+                rawService: convoy,
+            });
+        });
+
+        return [...teamRows, ...supervisionRows].sort((a, b) => b.dateObj - a.dateObj);
+    }, [allUsers, convoysByDate, convoysForPeriod, resolveTeamName, services]);
 
     useEffect(() => {
         const loadPersistedAttendance = async () => {
@@ -390,7 +458,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                 return;
             }
 
-            const teamIds = [...new Set(frequencyRows.map((row) => row.id).filter(Boolean))];
+            const teamIds = [...new Set(frequencyRows.map((row) => getAttendanceTeamId(row)).filter(Boolean))];
             if (teamIds.length === 0) return;
 
             try {
@@ -409,7 +477,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         };
 
         loadPersistedAttendance();
-    }, [frequencyRows, startDate, endDate, hydrateAttendanceFromBackend]);
+    }, [frequencyRows, startDate, endDate, hydrateAttendanceFromBackend, getAttendanceTeamId]);
 
     const toggleTeamExpand = (teamId) => {
         setExpandedTeams((prev) => ({ ...prev, [teamId]: !prev[teamId] }));
