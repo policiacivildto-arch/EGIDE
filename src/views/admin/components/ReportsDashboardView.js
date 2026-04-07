@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { getCycleInfo } from '../../../utils/helpers';
+import { apiClient } from '../../../config/api';
 import { LoadingSpinner } from '../../../components/ui/Shared';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -14,29 +15,47 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
      const [loading, setLoading] = useState(false);
  
      useEffect(() => {
-         // Temporariamente desabilitado - migração para Django em andamento
-         setLoading(false);
-         setReports([]);
-         
-         /* TODO: Implementar busca de relatórios via Django API
-         setLoading(true);
          const loadReports = async () => {
-             try {
-                 const data = await apiClient.getReports({ 
-                     cycle_id: cycle.cycleId,
-                     departamento: departamento 
-                 });
-                 setReports(Array.isArray(data) ? data : []);
-             } catch (error) {
-                 console.error('Erro ao carregar relatórios:', error);
+             if (!cycle?.cycleId) {
                  setReports([]);
+                 return;
+             }
+
+             setLoading(true);
+             try {
+                 const [year, month] = cycle.cycleId.split('-').map(Number);
+                 const cycleEndDate = new Date(year, month - 1, 20);
+                 const cycleStartDate = new Date(year, month - 2, 21);
+
+                 const toIso = (dateObj) => {
+                     const y = dateObj.getFullYear();
+                     const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                     const d = String(dateObj.getDate()).padStart(2, '0');
+                     return `${y}-${m}-${d}`;
+                 };
+
+                 const payload = await apiClient.getConvoyReports({
+                     data_operacao__gte: toIso(cycleStartDate),
+                     data_operacao__lte: toIso(cycleEndDate),
+                     departamento,
+                 });
+
+                 const list = Array.isArray(payload)
+                     ? payload
+                     : (Array.isArray(payload?.results) ? payload.results : []);
+
+                 setReports(list);
+             } catch (error) {
+                 console.error('Erro ao carregar relatórios do dashboard:', error);
+                 setReports([]);
+                 showNotification('Falha ao carregar dados do dashboard.', 'error');
              } finally {
                  setLoading(false);
              }
          };
+
          loadReports();
-         */
-     }, [cycle, departamento]);
+    }, [cycle, departamento, showNotification]);
  
      const goToPreviousCycle = () => {
          const [year, month] = cycle.cycleId.split('-').map(Number);

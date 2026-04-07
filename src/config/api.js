@@ -17,6 +17,9 @@ class DjangoApiClient {
     // O backend atual não expõe /api/ranking/.
     // Pode ser reativado via env quando o endpoint existir.
     this.rankingEndpointAvailable = process.env.REACT_APP_ENABLE_RANKING_ENDPOINT === 'true';
+    // O backend de produção pode não expor /api/convoy-reports/.
+    // Mantemos fallback local para evitar spam de 404 no console.
+    this.convoyReportsEndpointAvailable = process.env.REACT_APP_ENABLE_CONVOY_REPORTS_ENDPOINT === 'true';
   }
 
   /**
@@ -487,6 +490,32 @@ class DjangoApiClient {
 
   _filterLocalConvoyReports(reports, params = {}) {
     let filtered = [...reports];
+
+    const parseIsoDate = (raw) => {
+      if (!raw) return null;
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) return null;
+      return parsed.toISOString().split('T')[0];
+    };
+
+    if (params.departamento) {
+      filtered = filtered.filter((report) => String(report?.departamento || '') === String(params.departamento));
+    }
+
+    if (params.data_operacao__gte || params.data_operacao__lte || params.submitted_at__gte || params.submitted_at__lte) {
+      const start = params.data_operacao__gte || params.submitted_at__gte || null;
+      const end = params.data_operacao__lte || params.submitted_at__lte || null;
+
+      filtered = filtered.filter((report) => {
+        const rawDate = report?.data_operacao || report?.submittedAt || report?.submitted_at || report?.createdAt || report?.criado_em;
+        const isoDate = parseIsoDate(rawDate);
+        if (!isoDate) return false;
+        if (start && isoDate < String(start)) return false;
+        if (end && isoDate > String(end)) return false;
+        return true;
+      });
+    }
+
     if (params.convoy_ids) {
       const ids = String(params.convoy_ids).split(',').map((id) => Number(id)).filter((id) => !Number.isNaN(id));
       filtered = filtered.filter((report) => ids.includes(Number(report.convoyId)));
@@ -498,17 +527,38 @@ class DjangoApiClient {
    * Métodos de Relatórios de Comboio
    */
   async getConvoyReports(params = {}) {
+    if (this.convoyReportsEndpointAvailable === false) {
+      return this._filterLocalConvoyReports(this._getLocalConvoyReports(), params);
+    }
+
     try {
-      return await this.getList('convoy-reports', params);
+      const data = await this.getList('convoy-reports', params);
+      this.convoyReportsEndpointAvailable = true;
+      return data;
     } catch (error) {
+      if (error?.status === 404) {
+        this.convoyReportsEndpointAvailable = false;
+      }
       return this._filterLocalConvoyReports(this._getLocalConvoyReports(), params);
     }
   }
 
   async getConvoyReport(id) {
+    if (this.convoyReportsEndpointAvailable === false) {
+      const reports = this._getLocalConvoyReports();
+      const report = reports.find((item) => String(item.id) === String(id));
+      if (report) return report;
+      throw new Error('Relatório não encontrado');
+    }
+
     try {
-      return await this.getDetail('convoy-reports', id);
+      const data = await this.getDetail('convoy-reports', id);
+      this.convoyReportsEndpointAvailable = true;
+      return data;
     } catch (error) {
+      if (error?.status === 404) {
+        this.convoyReportsEndpointAvailable = false;
+      }
       if (this._isNotFoundError(error)) {
         const reports = this._getLocalConvoyReports();
         const report = reports.find((item) => String(item.id) === String(id));
@@ -520,9 +570,26 @@ class DjangoApiClient {
   }
 
   async createConvoyReport(data) {
+    if (this.convoyReportsEndpointAvailable === false) {
+      const reports = this._getLocalConvoyReports();
+      const newReport = {
+        ...data,
+        id: Date.now(),
+        createdAt: new Date().toISOString(),
+      };
+      reports.push(newReport);
+      this._saveLocalConvoyReports(reports);
+      return newReport;
+    }
+
     try {
-      return await this.create('convoy-reports', data);
+      const created = await this.create('convoy-reports', data);
+      this.convoyReportsEndpointAvailable = true;
+      return created;
     } catch (error) {
+      if (error?.status === 404) {
+        this.convoyReportsEndpointAvailable = false;
+      }
       if (this._isNotFoundError(error)) {
         const reports = this._getLocalConvoyReports();
         const newReport = {
@@ -539,9 +606,24 @@ class DjangoApiClient {
   }
 
   async updateConvoyReport(id, data) {
+    if (this.convoyReportsEndpointAvailable === false) {
+      const reports = this._getLocalConvoyReports();
+      const index = reports.findIndex((item) => String(item.id) === String(id));
+      if (index === -1) throw new Error('Relatório não encontrado');
+      const updated = { ...reports[index], ...data, id: reports[index].id };
+      reports[index] = updated;
+      this._saveLocalConvoyReports(reports);
+      return updated;
+    }
+
     try {
-      return await this.update('convoy-reports', id, data);
+      const updated = await this.update('convoy-reports', id, data);
+      this.convoyReportsEndpointAvailable = true;
+      return updated;
     } catch (error) {
+      if (error?.status === 404) {
+        this.convoyReportsEndpointAvailable = false;
+      }
       if (this._isNotFoundError(error)) {
         const reports = this._getLocalConvoyReports();
         const index = reports.findIndex((item) => String(item.id) === String(id));
@@ -556,9 +638,20 @@ class DjangoApiClient {
   }
 
   async deleteConvoyReport(id) {
+    if (this.convoyReportsEndpointAvailable === false) {
+      const reports = this._getLocalConvoyReports().filter((item) => String(item.id) !== String(id));
+      this._saveLocalConvoyReports(reports);
+      return { success: true };
+    }
+
     try {
-      return await this.delete('convoy-reports', id);
+      const result = await this.delete('convoy-reports', id);
+      this.convoyReportsEndpointAvailable = true;
+      return result;
     } catch (error) {
+      if (error?.status === 404) {
+        this.convoyReportsEndpointAvailable = false;
+      }
       if (this._isNotFoundError(error)) {
         const reports = this._getLocalConvoyReports().filter((item) => String(item.id) !== String(id));
         this._saveLocalConvoyReports(reports);

@@ -54,8 +54,16 @@ export const OperationReportsView = ({ showNotification, departamento }) => {
         setReports([]);
         try {
             const [reportsResult, convoysResult] = await Promise.allSettled([
-                apiClient.getConvoyReports(),
-                apiClient.getConvoys(),
+                apiClient.getConvoyReports({
+                    data_operacao__gte: startDate,
+                    data_operacao__lte: endDate,
+                    departamento,
+                }),
+                apiClient.getConvoys({
+                    data__gte: startDate,
+                    data__lte: endDate,
+                    page_size: 500,
+                }),
             ]);
 
             const reportsResponse = reportsResult.status === 'fulfilled' ? reportsResult.value : [];
@@ -72,9 +80,9 @@ export const OperationReportsView = ({ showNotification, departamento }) => {
             const allConvoys = toArray(convoysResponse);
 
             const fetchedReports = allReports.filter((report) => {
-                const submittedAt = report?.submittedAt || report?.submitted_at || report?.criado_em;
-                if (!submittedAt) return false;
-                const isoDate = getIsoDate(submittedAt);
+                const reportDate = report?.data_operacao || report?.submittedAt || report?.submitted_at || report?.createdAt || report?.criado_em;
+                if (!reportDate) return false;
+                const isoDate = getIsoDate(reportDate);
                 if (!isoDate) return false;
 
                 const inRange = isoDate >= startDate && isoDate <= endDate;
