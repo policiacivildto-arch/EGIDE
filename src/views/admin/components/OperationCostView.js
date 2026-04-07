@@ -1,5 +1,5 @@
 // src/views/admin/components/OperationCost.js
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { apiClient } from '../../../config/api';
 import { useAdminData } from '../useAdminData';
 import { calculateShiftCost } from '../../../utils/calculateCost';
