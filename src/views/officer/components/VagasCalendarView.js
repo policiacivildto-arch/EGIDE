@@ -621,18 +621,37 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
                     </div>
                 )}
                 {singleDelegaciaRestriction.blocked && (
-                    <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    const memberKey = member.rowId || `member-${index}`;
                         {singleDelegaciaRestriction.message}
+                    const fieldClassName = "w-full h-12 px-3 border rounded-md text-gray-800 bg-white";
                     </div>
                 )}
             </div>
             {team.map((member, index) => {
                      const memberKey = member.rowId || `member-${index}`;
-                const phoneInputId = `team-leader-phone-${index}`;
-
-                return (
-                <div key={memberKey} className="mb-6 p-4 border border-gray-300 rounded-lg bg-white">
-                    <h3 className="font-bold text-lg mb-2 text-gray-700">Componente {index + 1} {index === 0 ? "(Chefe da Equipe)" : ""}</h3>
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-gray-700">Nome</label>
+                                <input type="text" placeholder="NOME COMPLETO" value={member.nome} onChange={(e) => handleMemberChange(index, 'nome', e.target.value)} className={`${fieldClassName} uppercase`} required />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-gray-700">Matrícula</label>
+                                <input id={`team-member-matricula-${index}`} type="text" placeholder="MATRÍCULA" value={member.matricula} onChange={(e) => handleMemberChange(index, 'matricula', e.target.value)} maxLength="8" className={fieldClassName} required />
+                                <small className="mt-1 block min-h-[18px] text-gray-500">Formato final: {displayMatricula(member.matricula)}</small>
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-gray-700">Departamento</label>
+                                <select value={member.departamento} onChange={(e) => handleMemberChange(index, 'departamento', e.target.value)} className={fieldClassName} required><option value="">SELECIONE O DEPARTAMENTO</option>{Object.keys(DEPARTMENTS || {}).map(dep => <option key={dep} value={dep}>{dep}</option>)}</select>
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-gray-700">Delegacia</label>
+                                <select value={member.delegacia} onChange={(e) => handleMemberChange(index, 'delegacia', e.target.value)} className={fieldClassName} required disabled={!member.departamento}><option value="">SELECIONE A DELEGACIA</option>{member.departamento && (DEPARTMENTS[member.departamento] || []).map(del => <option key={del} value={del}>{del}</option>)}</select>
+                            </div>
+                            {index === 0 && (
+                                <div className="md:col-span-2">
+                                    <label htmlFor={phoneInputId} className="mb-1 block text-sm font-medium text-gray-700">Telefone do Chefe da Equipe</label>
+                                    <input id={phoneInputId} type="tel" placeholder="(XX) XXXXX-XXXX" value={member.telefone} onChange={(e) => handleMemberChange(index, 'telefone', e.target.value)} maxLength="15" className={fieldClassName} required />
+                                </div>
+                            )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <input type="text" placeholder="NOME COMPLETO" value={member.nome} onChange={(e) => handleMemberChange(index, 'nome', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 uppercase" required />
                         <div><input id={`team-member-matricula-${index}`} type="text" placeholder="MATRÍCULA" value={member.matricula} onChange={(e) => handleMemberChange(index, 'matricula', e.target.value)} maxLength="8" className="w-full p-2 border rounded-md text-gray-800" required /><small className="text-gray-500">Formato final: {displayMatricula(member.matricula)}</small></div>
