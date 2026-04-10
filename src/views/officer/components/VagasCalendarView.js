@@ -50,6 +50,25 @@ const isVagaDisponivel = (vaga) => {
     return status.includes('dispon');
 };
 
+const fetchAllPages = async (fetcher, params = {}) => {
+    const aggregated = [];
+    let page = 1;
+
+    while (true) {
+        const response = await fetcher({ ...params, page });
+        const items = Array.isArray(response) ? response : (response?.results || []);
+        aggregated.push(...items);
+
+        if (Array.isArray(response) || !response?.next) {
+            break;
+        }
+
+        page += 1;
+    }
+
+    return aggregated;
+};
+
 const normalizeMatriculaDigits = (value) => String(value || '').replaceAll(/\D/g, '');
 
 const teamHasOfficer = (team, user) => {
@@ -78,25 +97,6 @@ export const VagasCalendarView = ({ user, showNotification }) => {
     const [modalContent, setModalContent] = useState(null);
     const [hasInitialLoad, setHasInitialLoad] = useState(false);
     const userIdentity = user?.uid || user?.matricula || user?.email || null;
-
-    const fetchAllPages = async (fetcher, params = {}) => {
-        const aggregated = [];
-        let page = 1;
-
-        while (true) {
-            const response = await fetcher({ ...params, page });
-            const items = Array.isArray(response) ? response : (response?.results || []);
-            aggregated.push(...items);
-
-            if (Array.isArray(response) || !response?.next) {
-                break;
-            }
-
-            page += 1;
-        }
-
-        return aggregated;
-    };
 
     useEffect(() => {
         setHasInitialLoad(false);
@@ -443,7 +443,47 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
         { rowId: 'member-2', nome: '', matricula: '', departamento: '', delegacia: '' },
     ]);
     const [vehicle, setVehicle] = useState('');
+    const [policiaisCatalog, setPoliciaisCatalog] = useState([]);
+    const [delegaciasCatalog, setDelegaciasCatalog] = useState([]);
     const [singleDelegaciaRestriction, setSingleDelegaciaRestriction] = useState({ blocked: false, loading: false, message: '' });
+
+    const policiaisByMatricula = useMemo(() => new Map(
+        policiaisCatalog
+            .filter((policial) => policial?.matricula)
+            .map((policial) => [normalizeMatriculaDigits(policial.matricula), policial])
+    ), [policiaisCatalog]);
+
+    const delegaciasById = useMemo(() => new Map(
+        delegaciasCatalog
+            .filter((delegacia) => delegacia?.id != null)
+            .map((delegacia) => [String(delegacia.id), delegacia])
+    ), [delegaciasCatalog]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadCatalogs = async () => {
+            try {
+                const [policiais, delegacias] = await Promise.all([
+                    fetchAllPages(apiClient.getPoliciais.bind(apiClient)),
+                    fetchAllPages(apiClient.getDelegacias.bind(apiClient), { ativo: true }),
+                ]);
+
+                if (!cancelled) {
+                    setPoliciaisCatalog(policiais);
+                    setDelegaciasCatalog(delegacias);
+                }
+            } catch (error) {
+                console.error('Erro ao carregar catálogos para preenchimento automático da equipe:', error);
+            }
+        };
+
+        loadCatalogs();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const restoreMatriculaInputFocus = (index) => {
         if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -511,11 +551,23 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
             if (field === 'nome') updatedMember.nome = normalizeName(value);
             if (field === 'matricula') {
                 updatedMember.matricula = formatMatricula(value);
-                const found = findPolicialByMatricula(value);
-                if (found) {
-                    updatedMember.nome = found.nome;
-                    // Optionally set department/cargo if available
-                    if (found.cargo) updatedMember.departamento = found.cargo;
+                const normalizedMatricula = normalizeMatriculaDigits(updatedMember.matricula);
+
+                const foundInApi = policiaisByMatricula.get(normalizedMatricula);
+                if (foundInApi) {
+                    if (foundInApi.nome) updatedMember.nome = normalizeName(foundInApi.nome);
+
+                    const delegaciaFromApi = delegaciasById.get(String(foundInApi.delegacia));
+                    const resolvedDepartamento = delegaciaFromApi?.departamento_nome || '';
+                    const resolvedDelegacia = delegaciaFromApi?.nome || foundInApi.delegacia_nome || '';
+
+                    if (resolvedDepartamento) updatedMember.departamento = resolvedDepartamento;
+                    if (resolvedDelegacia) updatedMember.delegacia = resolvedDelegacia;
+                } else {
+                    const found = findPolicialByMatricula(normalizedMatricula);
+                    if (found?.nome) {
+                        updatedMember.nome = found.nome;
+                    }
                 }
             }
             if (field === 'telefone') updatedMember.telefone = formatTelefone(value);
@@ -562,6 +614,18 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
         <form onSubmit={handleSubmit}>
             <h2 className="text-2xl font-bold mb-4 text-gray-800">Registrar Equipe para Serviço</h2>
             <p className="mb-6 text-gray-600">Dia: <span className="font-semibold">{(getVagaOperationalDateObject(vaga) || new Date()).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span></p>
+            <div className="mb-4 min-h-[56px]">
+                {singleDelegaciaRestriction.loading && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        Validando restrições semanais da equipe...
+                    </div>
+                )}
+                {singleDelegaciaRestriction.blocked && (
+                    <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+                        {singleDelegaciaRestriction.message}
+                    </div>
+                )}
+            </div>
             {team.map((member, index) => {
                      const memberKey = member.rowId || `member-${index}`;
                 const phoneInputId = `team-leader-phone-${index}`;
@@ -579,16 +643,6 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
                 </div>
                 );
             })}
-            {singleDelegaciaRestriction.loading && (
-                <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    Validando restrições semanais da equipe...
-                </div>
-            )}
-            {singleDelegaciaRestriction.blocked && (
-                <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-                    {singleDelegaciaRestriction.message}
-                </div>
-            )}
             <div className="mb-6 p-4 border border-gray-300 rounded-lg bg-white"><h3 className="font-bold text-lg mb-2 text-gray-700">Viatura</h3><input type="text" placeholder="PLACA (ABC-1234)" value={vehicle} onChange={(e) => setVehicle(formatPlaca(e.target.value))} maxLength="8" className="w-full p-2 border rounded-md text-gray-800 uppercase" required /></div>
             <div className="flex justify-end space-x-4"><button type="button" onClick={onCancel} className="py-2 px-6 bg-gray-500 hover:bg-gray-600 text-white font-semibold rounded-lg transition">Cancelar</button><button type="submit" disabled={singleDelegaciaRestriction.loading || singleDelegaciaRestriction.blocked} className="py-2 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition">{singleDelegaciaRestriction.loading ? 'Validando...' : 'Confirmar Registro'}</button></div>
         </form>
