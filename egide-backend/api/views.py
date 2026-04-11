@@ -909,7 +909,9 @@ class FrequenciaPolicialViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Nenhum registro enviado.'}, status=status.HTTP_400_BAD_REQUEST)
 
         resultados = []
-        for reg in registros:
+        erros = []
+
+        for index, reg in enumerate(registros):
             equipe_id = reg.get('equipe')
             policial_id = reg.get('policial')
             data_operacao = reg.get('data_operacao')
@@ -917,62 +919,71 @@ class FrequenciaPolicialViewSet(viewsets.ModelViewSet):
             substituto_id = reg.get('substituto')
 
             if not all([equipe_id, policial_id, data_operacao]):
+                erros.append({'index': index, 'erro': 'Campos obrigatórios ausentes (equipe, policial, data_operacao).'})
                 continue
 
-            obj, _ = FrequenciaPolicial.objects.update_or_create(
-                equipe_id=equipe_id,
-                policial_id=policial_id,
-                data_operacao=data_operacao,
-                defaults={
-                    'status': status_freq,
-                    'substituto_id': substituto_id,
-                    'registrado_por': request.user if request.user.is_authenticated else None,
-                }
-            )
-            resultados.append(FrequenciaPolicialSerializer(obj).data)
+            if substituto_id and not Policial.objects.filter(id=substituto_id).exists():
+                erros.append({'index': index, 'erro': f'Substituto inválido (id={substituto_id}). Registro salvo sem substituto.'})
+                substituto_id = None
 
-            # Se presença confirmada, cria/atualiza Pagamento com cálculo
-            if status_freq.lower() == 'presente':
-                policial = obj.policial
-                equipe = obj.equipe
-                vaga = getattr(equipe, 'vaga', None)
-                cargo = policial.cargo if policial else ''
-                servico = 'EXTRA'  # Ajuste se necessário
-                # Buscar horários e datas
-                data_entrada = obj.data_operacao
-                data_saida = obj.data_operacao
-                horario_inicial = getattr(obj, 'horario_inicial', None) or timezone.now()
-                horario_final = getattr(obj, 'horario_final', None) or timezone.now()
-                if hasattr(obj, 'horario_inicial') and hasattr(obj, 'horario_final') and obj.horario_inicial and obj.horario_final:
-                    horario_inicial = obj.horario_inicial
-                    horario_final = obj.horario_final
-                # Se vaga tiver turno, pode ajustar horário padrão
-                if vaga and vaga.turno == 'day':
-                    horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('08:00', '%H:%M').time()))
-                    horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('20:00', '%H:%M').time()))
-                elif vaga and vaga.turno == 'night':
-                    horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('19:00', '%H:%M').time()))
-                    horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('01:00', '%H:%M').time()))
-                valor_pago = calcular_pagamento_backend(
-                    cargo,
-                    servico,
-                    data_entrada,
-                    horario_inicial.timetz() if hasattr(horario_inicial, 'timetz') else horario_inicial.time(),
-                    data_saida,
-                    horario_final.timetz() if hasattr(horario_final, 'timetz') else horario_final.time(),
-                )
-                observacao = ''
-                print(f"[DEBUG PAGAMENTO] Criando/atualizando Pagamento para policial_id={policial_id}, data_operacao={data_operacao}, valor_pago={valor_pago}, horario_inicial={horario_inicial}, horario_final={horario_final}")
-                Pagamento.objects.update_or_create(
+            try:
+                obj, _ = FrequenciaPolicial.objects.update_or_create(
+                    equipe_id=equipe_id,
                     policial_id=policial_id,
                     data_operacao=data_operacao,
                     defaults={
-                        'horario_inicial': horario_inicial,
-                        'horario_final': horario_final,
-                        'valor_pago': valor_pago,
-                        'observacao': observacao,
+                        'status': status_freq,
+                        'substituto_id': substituto_id,
+                        'registrado_por': request.user if request.user.is_authenticated else None,
                     }
                 )
+                resultados.append(FrequenciaPolicialSerializer(obj).data)
+            except Exception as exc:
+                erros.append({'index': index, 'erro': f'Falha ao salvar frequência: {str(exc)}'})
+                continue
 
-        return Response({'registros': resultados, 'total': len(resultados)})
+            # Se presença confirmada, cria/atualiza Pagamento com cálculo.
+            # Falhas de pagamento não devem quebrar a gravação da frequência.
+            if status_freq.lower() == 'presente':
+                try:
+                    policial = obj.policial
+                    equipe = obj.equipe
+                    vaga = getattr(equipe, 'vaga', None)
+                    cargo = policial.cargo if policial else ''
+                    servico = 'EXTRA'  # Ajuste se necessário
+                    data_entrada = obj.data_operacao
+                    data_saida = obj.data_operacao
+                    horario_inicial = timezone.now()
+                    horario_final = timezone.now()
+
+                    if vaga and vaga.turno == 'day':
+                        horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('08:00', '%H:%M').time()))
+                        horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('20:00', '%H:%M').time()))
+                    elif vaga and vaga.turno == 'night':
+                        horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('19:00', '%H:%M').time()))
+                        horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('01:00', '%H:%M').time()))
+
+                    valor_pago = calcular_pagamento_backend(
+                        cargo,
+                        servico,
+                        data_entrada,
+                        horario_inicial.timetz() if hasattr(horario_inicial, 'timetz') else horario_inicial.time(),
+                        data_saida,
+                        horario_final.timetz() if hasattr(horario_final, 'timetz') else horario_final.time(),
+                    )
+
+                    Pagamento.objects.update_or_create(
+                        policial_id=policial_id,
+                        data_operacao=data_operacao,
+                        defaults={
+                            'horario_inicial': horario_inicial,
+                            'horario_final': horario_final,
+                            'valor_pago': valor_pago,
+                            'observacao': '',
+                        }
+                    )
+                except Exception as exc:
+                    erros.append({'index': index, 'erro': f'Falha ao gerar pagamento: {str(exc)}'})
+
+        return Response({'registros': resultados, 'total': len(resultados), 'erros': erros})
 

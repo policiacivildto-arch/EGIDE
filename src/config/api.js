@@ -13,7 +13,10 @@ const CONVOY_REPORTS_STORAGE_KEY = 'egide_convoy_reports_local';
 class DjangoApiClient {
   constructor(baseURL = API_BASE_URL) {
     this.baseURL = baseURL;
-    this.token = localStorage.getItem('auth_token');
+    this.token = localStorage.getItem('auth_token') || localStorage.getItem('access_token') || localStorage.getItem('django_token');
+    if (this.token && !localStorage.getItem('auth_token')) {
+      localStorage.setItem('auth_token', this.token);
+    }
     // O backend atual não expõe /api/ranking/.
     // Pode ser reativado via env quando o endpoint existir.
     this.rankingEndpointAvailable = process.env.REACT_APP_ENABLE_RANKING_ENDPOINT === 'true';
@@ -29,9 +32,24 @@ class DjangoApiClient {
     this.token = token;
     if (token) {
       localStorage.setItem('auth_token', token);
+      localStorage.setItem('access_token', token);
     } else {
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('django_token');
     }
+  }
+
+  getRefreshToken() {
+    return localStorage.getItem('refresh_token') || localStorage.getItem('django_refresh_token');
+  }
+
+  clearAuthStorage() {
+    this.setToken(null);
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('django_refresh_token');
+    localStorage.removeItem('django_user');
+    localStorage.removeItem('user_data');
   }
 
   /**
@@ -42,7 +60,7 @@ class DjangoApiClient {
     const isAuthLoginEndpoint = endpoint.startsWith('/auth/login/');
     const isAuthRefreshEndpoint = endpoint.startsWith('/auth/refresh/');
     const isAuthRegisterEndpoint = endpoint.startsWith('/auth/register/');
-    const hasRefreshToken = Boolean(localStorage.getItem('refresh_token'));
+    const hasRefreshToken = Boolean(this.getRefreshToken());
     const headers = {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -88,8 +106,7 @@ class DjangoApiClient {
         }
 
         if (response.status === 401) {
-          this.setToken(null);
-          localStorage.removeItem('refresh_token');
+          this.clearAuthStorage();
         }
 
         // Trata erros de validação que vêm em formato de objeto
@@ -138,16 +155,15 @@ class DjangoApiClient {
 
   async logout() {
     try {
-      const refresh = localStorage.getItem('refresh_token');
+      const refresh = this.getRefreshToken();
       await this.request('POST', '/auth/logout/', refresh ? { refresh } : null);
     } finally {
-      this.setToken(null);
-      localStorage.removeItem('refresh_token');
+      this.clearAuthStorage();
     }
   }
 
   async refreshToken() {
-    const refreshToken = localStorage.getItem('refresh_token');
+    const refreshToken = this.getRefreshToken();
     if (!refreshToken) throw new Error('Nenhum refresh token disponível');
     try {
       const response = await this.request('POST', '/auth/refresh/', { refresh: refreshToken });
@@ -155,14 +171,14 @@ class DjangoApiClient {
         this.setToken(response.access);
         if (response.refresh) {
           localStorage.setItem('refresh_token', response.refresh);
+          localStorage.setItem('django_refresh_token', response.refresh);
         }
         return response;
       }
       throw new Error('Token não retornado');
     } catch (error) {
       // Se refresh falhar, limpa os tokens
-      this.setToken(null);
-      localStorage.removeItem('refresh_token');
+      this.clearAuthStorage();
       throw error;
     }
   }
