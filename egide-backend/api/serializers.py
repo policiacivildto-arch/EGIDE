@@ -236,6 +236,38 @@ class EquipeSerializer(serializers.ModelSerializer):
                     'Se necessário, um administrador pode escalá-lo manualmente.'
                 )
 
+    def _validate_daily_unique_allocation(self, vaga, membros, chefe=None, instance=None):
+        if not vaga or not vaga.data:
+            return
+
+        candidatos = []
+        if chefe:
+            candidatos.append(chefe)
+        if membros:
+            candidatos.extend(list(membros))
+
+        vistos = set()
+        unicos = []
+        for policial in candidatos:
+            if not policial or policial.id in vistos:
+                continue
+            vistos.add(policial.id)
+            unicos.append(policial)
+
+        for policial in unicos:
+            equipes_dia = Equipe.objects.filter(vaga__data=vaga.data).filter(
+                Q(chefe=policial) | Q(membros=policial)
+            )
+
+            if instance and instance.pk:
+                equipes_dia = equipes_dia.exclude(pk=instance.pk)
+
+            if equipes_dia.exists():
+                raise serializers.ValidationError(
+                    f'{policial.nome} já está escalado(a) em outra equipe no dia {vaga.data}. '
+                    'Não é permitido se candidatar duas vezes no mesmo dia.'
+                )
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
         membros_ids = attrs.get('membros')
@@ -263,6 +295,11 @@ class EquipeSerializer(serializers.ModelSerializer):
             if not validated_data.get('chefe') and membros:
                 validated_data['chefe'] = membros[0]
 
+        self._validate_daily_unique_allocation(
+            validated_data.get('vaga'),
+            membros,
+            chefe=validated_data.get('chefe'),
+        )
         self._validate_single_delegacia_weekly_limit(validated_data.get('vaga'), membros)
 
         instance = super().create(validated_data)
@@ -288,6 +325,8 @@ class EquipeSerializer(serializers.ModelSerializer):
         if not validated_data.get('chefe') and chefe_matricula and membros:
             validated_data['chefe'] = next((m for m in membros if m.matricula == chefe_matricula), None)
 
+        chefe_efetivo = validated_data.get('chefe', instance.chefe)
+        self._validate_daily_unique_allocation(vaga, membros_efetivos, chefe=chefe_efetivo, instance=instance)
         self._validate_single_delegacia_weekly_limit(vaga, membros_efetivos, instance=instance)
 
         updated = super().update(instance, validated_data)
