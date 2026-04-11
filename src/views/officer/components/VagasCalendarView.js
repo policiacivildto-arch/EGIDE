@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import ReactCalendar from 'react-calendar';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { apiClient } from '../../../config/api';
@@ -135,7 +135,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
                     setMonthlyTeams(teamsArray);
                 }
             } catch (error) {
-                console.error('Erro ao carregar dados do mês:', error);
+                console.error('Erro ao carregar dados do mÃªs:', error);
             } finally {
                 if (showSpinner && !cancelled) {
                     setLoading(false);
@@ -154,7 +154,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             };
         }
 
-        // Atualiza dados em background sem interromper interação do formulario.
+        // Atualiza dados em background sem interromper interaÃ§Ã£o do formulario.
         const interval = setInterval(() => {
             fetchMonthlyData();
         }, 20000);
@@ -229,7 +229,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             : false;
         if (isAlreadyLeader) {
             showNotification(
-                'Você já é o chefe de uma equipe escalada para esta semana e não pode registrar outra.',
+                'VocÃª jÃ¡ Ã© o chefe de uma equipe escalada para esta semana e nÃ£o pode registrar outra.',
                 'error'
             );
             return;
@@ -240,7 +240,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             ? await checkWeeklyLimit(memberMatriculas, resolvedWeekId)
             : { conflict: false };
 
-        let teamStatus = 'Em Análise';
+        let teamStatus = 'Em AnÃ¡lise';
         let conflictDetails = null;
 
         if (validation.conflict) {
@@ -250,7 +250,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
                 officerMatricula: validation.officerMatricula,
             };
             showNotification(
-                `ALERTA: ${validation.officerName} (Mat. ${displayMatricula(validation.officerMatricula)}) já está escalado(a) nesta semana. A inscrição será enviada para análise do conflito.`,
+                `ALERTA: ${validation.officerName} (Mat. ${displayMatricula(validation.officerMatricula)}) jÃ¡ estÃ¡ escalado(a) nesta semana. A inscriÃ§Ã£o serÃ¡ enviada para anÃ¡lise do conflito.`,
                 'warning',
                 8000
             );
@@ -259,7 +259,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
         try {
             const vagaDateObj = getVagaDateObject(vaga);
             if (!vagaDateObj) {
-                showNotification('Data da vaga inválida. Atualize a página e tente novamente.', 'error');
+                showNotification('Data da vaga invÃ¡lida. Atualize a pÃ¡gina e tente novamente.', 'error');
                 return;
             }
 
@@ -268,7 +268,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
                 .filter(Boolean);
 
             if (membrosMatriculas.length !== teamData.members.length) {
-                showNotification('Informe a matrícula válida de todos os integrantes da equipe.', 'error');
+                showNotification('Informe a matrÃ­cula vÃ¡lida de todos os integrantes da equipe.', 'error');
                 return;
             }
 
@@ -299,10 +299,10 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             const teamsForVaga = Array.isArray(refreshedTeams)
                 ? refreshedTeams
                 : (refreshedTeams?.results || []);
-            const nextStatus = teamsForVaga.length >= getVagaCapacity(vaga) ? 'Ocupada' : 'Disponível';
+            const nextStatus = teamsForVaga.length >= getVagaCapacity(vaga) ? 'Ocupada' : 'DisponÃ­vel';
             await apiClient.updateVaga(vaga.id, { status: nextStatus });
 
-            showNotification('Candidatura registrada com status Em Análise.', 'success');
+            showNotification('Candidatura registrada com status Em AnÃ¡lise.', 'success');
 
             const optimisticTeam = {
                 ...createdTeam,
@@ -353,9 +353,9 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             }, 0);
 
             if (myTeamOnThisDay) {
-                if (myTeamOnThisDay.status === 'Em Análise' || myTeamOnThisDay.status === 'Pendente (Conflito)') {
+                if (myTeamOnThisDay.status === 'Em AnÃ¡lise' || myTeamOnThisDay.status === 'Pendente (Conflito)') {
                     return (
-                        <div className="mt-1 text-xs text-center bg-yellow-600/90 text-white rounded-md p-1 animate-fade-in">Em Análise</div>
+                        <div className="mt-1 text-xs text-center bg-yellow-600/90 text-white rounded-md p-1 animate-fade-in">Em AnÃ¡lise</div>
                     );
                 }
                 return (
@@ -380,7 +380,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
         if (firstAvailableVaga) {
             setModalContent({ type: 'register', vaga: firstAvailableVaga });
         } else {
-            showNotification('Nenhuma vaga disponível para este dia.', 'info');
+            showNotification('Nenhuma vaga disponÃ­vel para este dia.', 'info');
         }
     };
 
@@ -405,7 +405,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             {modalContent && (
                 <Modal size="5xl" onClose={() => setModalContent(null)}>{renderModalContent()}</Modal>
             )}
-            <h2 className="text-3xl font-bold mb-4 text-center text-blue-400">Escala e Vagas Disponíveis</h2>
+            <h2 className="text-3xl font-bold mb-4 text-center text-blue-400">Escala e Vagas DisponÃ­veis</h2>
 
             {loading ? (
                 <LoadingSpinner />
@@ -437,12 +437,12 @@ export const VagasCalendarView = ({ user, showNotification }) => {
 };
 export default VagasCalendarView;
 export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotification }) => {
-    const [team, setTeam] = useState([
+    const [team, setTeam] = useState([
     { rowId: 'member-0', nome: user?.nome || '', matricula: user?.matricula || '', departamento: user?.departamento || '', delegacia: user?.delegacia || '', telefone: user?.telefone || '', uid: user?.uid || '' },
-        { rowId: 'member-1', nome: '', matricula: '', departamento: '', delegacia: '' },
-        { rowId: 'member-2', nome: '', matricula: '', departamento: '', delegacia: '' },
-    ]);
-    const [vehicle, setVehicle] = useState('');
+        { rowId: 'member-1', nome: '', matricula: '', departamento: '', delegacia: '' },
+        { rowId: 'member-2', nome: '', matricula: '', departamento: '', delegacia: '' },
+    ]);
+    const [vehicle, setVehicle] = useState('');
     const [policiaisCatalog, setPoliciaisCatalog] = useState([]);
     const [delegaciasCatalog, setDelegaciasCatalog] = useState([]);
     const [singleDelegaciaRestriction, setSingleDelegaciaRestriction] = useState({ blocked: false, loading: false, message: '' });
@@ -474,7 +474,7 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
                     setDelegaciasCatalog(delegacias);
                 }
             } catch (error) {
-                console.error('Erro ao carregar catálogos para preenchimento automático da equipe:', error);
+                console.error('Erro ao carregar catÃ¡logos para preenchimento automÃ¡tico da equipe:', error);
             }
         };
 
@@ -530,7 +530,7 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
                 }
             } catch (error) {
                 if (!cancelled) {
-                    console.error('Erro ao validar restrição semanal de departamento com delegacia única:', error);
+                    console.error('Erro ao validar restriÃ§Ã£o semanal de departamento com delegacia Ãºnica:', error);
                     setSingleDelegaciaRestriction({ blocked: false, loading: false, message: '' });
                 }
             }
@@ -580,13 +580,13 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
             restoreMatriculaInputFocus(index);
         }
     };
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        const finalTeam = team.map(m => ({ ...m, matricula: formatMatricula(m.matricula) }));
-        if (finalTeam.some(m => !m.nome || normalizeMatriculaDigits(m.matricula).length !== 8 || !m.delegacia) || !vehicle || team[0].telefone.replaceAll(/\D/g, '').length < 10) {
-            showNotification("Preencha todos os campos da equipe, incluindo telefone válido do líder e placa da viatura.", "error");
-            return;
-        }
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const finalTeam = team.map(m => ({ ...m, matricula: formatMatricula(m.matricula) }));
+        if (finalTeam.some(m => !m.nome || normalizeMatriculaDigits(m.matricula).length !== 8 || !m.delegacia) || !vehicle || team[0].telefone.replaceAll(/\D/g, '').length < 10) {
+            showNotification("Preencha todos os campos da equipe, incluindo telefone vÃ¡lido do lÃ­der e placa da viatura.", "error");
+            return;
+        }
 
         const matriculas = finalTeam.map((member) => normalizeMatriculaDigits(member.matricula));
         const latestRestriction = vagaWeekId
@@ -608,62 +608,74 @@ export const RegistrationForm = ({ vaga, user, onSubmit, onCancel, showNotificat
             return;
         }
 
-        onSubmit(vaga, { members: finalTeam, vehicle, telefone: team[0].telefone });
-    };
-    return (
-        <form onSubmit={handleSubmit}>
-            <h2 className="text-2xl font-bold mb-4 text-gray-800">Registrar Equipe para Serviço</h2>
+        onSubmit(vaga, { members: finalTeam, vehicle, telefone: team[0].telefone });
+    };
+    return (
+        <form onSubmit={handleSubmit}>
+            <h2 className="text-2xl font-bold mb-4 text-gray-800">Registrar Equipe para Servico</h2>
             <p className="mb-6 text-gray-600">Dia: <span className="font-semibold">{(getVagaOperationalDateObject(vaga) || new Date()).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span></p>
             <div className="mb-4 min-h-[56px]">
                 {singleDelegaciaRestriction.loading && (
                     <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        Validando restrições semanais da equipe...
+                        Validando restricoes semanais da equipe...
                     </div>
                 )}
                 {singleDelegaciaRestriction.blocked && (
-                    const memberKey = member.rowId || `member-${index}`;
+                    <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
                         {singleDelegaciaRestriction.message}
-                    const fieldClassName = "w-full h-12 px-3 border rounded-md text-gray-800 bg-white";
                     </div>
                 )}
             </div>
-            {team.map((member, index) => {
-                     const memberKey = member.rowId || `member-${index}`;
+            {team.map((member, index) => {
+                const memberKey = member.rowId || `member-${index}`;
+                const phoneInputId = `team-leader-phone-${index}`;
+
+                return (
+                    <div key={memberKey} className="mb-6 p-4 border border-gray-300 rounded-lg bg-white">
+                        <h3 className="font-bold text-lg mb-2 text-gray-700">Componente {index + 1} {index === 0 ? '(Chefe da Equipe)' : ''}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="mb-1 block text-sm font-medium text-gray-700">Nome</label>
-                                <input type="text" placeholder="NOME COMPLETO" value={member.nome} onChange={(e) => handleMemberChange(index, 'nome', e.target.value)} className={`${fieldClassName} uppercase`} required />
+                                <input type="text" placeholder="NOME COMPLETO" value={member.nome} onChange={(e) => handleMemberChange(index, 'nome', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 uppercase" required />
                             </div>
                             <div>
-                                <label className="mb-1 block text-sm font-medium text-gray-700">Matrícula</label>
-                                <input id={`team-member-matricula-${index}`} type="text" placeholder="MATRÍCULA" value={member.matricula} onChange={(e) => handleMemberChange(index, 'matricula', e.target.value)} maxLength="8" className={fieldClassName} required />
-                                <small className="mt-1 block min-h-[18px] text-gray-500">Formato final: {displayMatricula(member.matricula)}</small>
+                                <label className="mb-1 block text-sm font-medium text-gray-700">Matricula</label>
+                                <input id={`team-member-matricula-${index}`} type="text" placeholder="MATRICULA" value={member.matricula} onChange={(e) => handleMemberChange(index, 'matricula', e.target.value)} maxLength="8" className="w-full p-2 border rounded-md text-gray-800" required />
+                                <small className="text-gray-500">Formato final: {displayMatricula(member.matricula)}</small>
                             </div>
                             <div>
                                 <label className="mb-1 block text-sm font-medium text-gray-700">Departamento</label>
-                                <select value={member.departamento} onChange={(e) => handleMemberChange(index, 'departamento', e.target.value)} className={fieldClassName} required><option value="">SELECIONE O DEPARTAMENTO</option>{Object.keys(DEPARTMENTS || {}).map(dep => <option key={dep} value={dep}>{dep}</option>)}</select>
+                                <select value={member.departamento} onChange={(e) => handleMemberChange(index, 'departamento', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 bg-white" required>
+                                    <option value="">SELECIONE O DEPARTAMENTO</option>
+                                    {Object.keys(DEPARTMENTS || {}).map((dep) => <option key={dep} value={dep}>{dep}</option>)}
+                                </select>
                             </div>
                             <div>
                                 <label className="mb-1 block text-sm font-medium text-gray-700">Delegacia</label>
-                                <select value={member.delegacia} onChange={(e) => handleMemberChange(index, 'delegacia', e.target.value)} className={fieldClassName} required disabled={!member.departamento}><option value="">SELECIONE A DELEGACIA</option>{member.departamento && (DEPARTMENTS[member.departamento] || []).map(del => <option key={del} value={del}>{del}</option>)}</select>
+                                <select value={member.delegacia} onChange={(e) => handleMemberChange(index, 'delegacia', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 bg-white" required disabled={!member.departamento}>
+                                    <option value="">SELECIONE A DELEGACIA</option>
+                                    {member.departamento && (DEPARTMENTS[member.departamento] || []).map((del) => <option key={del} value={del}>{del}</option>)}
+                                </select>
                             </div>
                             {index === 0 && (
                                 <div className="md:col-span-2">
                                     <label htmlFor={phoneInputId} className="mb-1 block text-sm font-medium text-gray-700">Telefone do Chefe da Equipe</label>
-                                    <input id={phoneInputId} type="tel" placeholder="(XX) XXXXX-XXXX" value={member.telefone} onChange={(e) => handleMemberChange(index, 'telefone', e.target.value)} maxLength="15" className={fieldClassName} required />
+                                    <input id={phoneInputId} type="tel" placeholder="(XX) XXXXX-XXXX" value={member.telefone} onChange={(e) => handleMemberChange(index, 'telefone', e.target.value)} maxLength="15" className="w-full p-2 border rounded-md text-gray-800" required />
                                 </div>
                             )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input type="text" placeholder="NOME COMPLETO" value={member.nome} onChange={(e) => handleMemberChange(index, 'nome', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 uppercase" required />
-                        <div><input id={`team-member-matricula-${index}`} type="text" placeholder="MATRÍCULA" value={member.matricula} onChange={(e) => handleMemberChange(index, 'matricula', e.target.value)} maxLength="8" className="w-full p-2 border rounded-md text-gray-800" required /><small className="text-gray-500">Formato final: {displayMatricula(member.matricula)}</small></div>
-                        <select value={member.departamento} onChange={(e) => handleMemberChange(index, 'departamento', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 bg-white" required><option value="">SELECIONE O DEPARTAMENTO</option>{Object.keys(DEPARTMENTS || {}).map(dep => <option key={dep} value={dep}>{dep}</option>)}</select>
-                        <select value={member.delegacia} onChange={(e) => handleMemberChange(index, 'delegacia', e.target.value)} className="w-full p-2 border rounded-md text-gray-800 bg-white" required disabled={!member.departamento}><option value="">SELECIONE A DELEGACIA</option>{member.departamento && (DEPARTMENTS[member.departamento] || []).map(del => <option key={del} value={del}>{del}</option>)}</select>
-                        {index === 0 && <div><label htmlFor={phoneInputId} className="block text-sm font-medium text-gray-700">Telefone do Chefe da Equipe</label><input id={phoneInputId} type="tel" placeholder="(XX) XXXXX-XXXX" value={member.telefone} onChange={(e) => handleMemberChange(index, 'telefone', e.target.value)} maxLength="15" className="w-full p-2 border rounded-md text-gray-800" required /></div>}
-                    </div>
-                </div>
+                        </div>
+                    </div>
                 );
             })}
-            <div className="mb-6 p-4 border border-gray-300 rounded-lg bg-white"><h3 className="font-bold text-lg mb-2 text-gray-700">Viatura</h3><input type="text" placeholder="PLACA (ABC-1234)" value={vehicle} onChange={(e) => setVehicle(formatPlaca(e.target.value))} maxLength="8" className="w-full p-2 border rounded-md text-gray-800 uppercase" required /></div>
-            <div className="flex justify-end space-x-4"><button type="button" onClick={onCancel} className="py-2 px-6 bg-gray-500 hover:bg-gray-600 text-white font-semibold rounded-lg transition">Cancelar</button><button type="submit" disabled={singleDelegaciaRestriction.loading || singleDelegaciaRestriction.blocked} className="py-2 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition">{singleDelegaciaRestriction.loading ? 'Validando...' : 'Confirmar Registro'}</button></div>
-        </form>
-    );
+            <div className="mb-6 p-4 border border-gray-300 rounded-lg bg-white">
+                <h3 className="font-bold text-lg mb-2 text-gray-700">Viatura</h3>
+                <input type="text" placeholder="PLACA (ABC-1234)" value={vehicle} onChange={(e) => setVehicle(formatPlaca(e.target.value))} maxLength="8" className="w-full p-2 border rounded-md text-gray-800 uppercase" required />
+            </div>
+            <div className="flex justify-end space-x-4">
+                <button type="button" onClick={onCancel} className="py-2 px-6 bg-gray-500 hover:bg-gray-600 text-white font-semibold rounded-lg transition">Cancelar</button>
+                <button type="submit" disabled={singleDelegaciaRestriction.loading || singleDelegaciaRestriction.blocked} className="py-2 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition">{singleDelegaciaRestriction.loading ? 'Validando...' : 'Confirmar Registro'}</button>
+            </div>
+        </form>
+    );
 };
+
