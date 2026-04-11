@@ -70,6 +70,8 @@ const fetchAllPages = async (fetcher, params = {}) => {
 };
 
 const normalizeMatriculaDigits = (value) => String(value || '').replaceAll(/\D/g, '');
+const TEAM_STATUS_EM_ANALISE = 'Em An\u00e1lise';
+const TEAM_STATUS_PENDENTE_CONFLITO = 'Pendente (Conflito)';
 
 const teamHasOfficer = (team, user) => {
     const userMatricula = normalizeMatriculaDigits(user?.matricula);
@@ -240,11 +242,11 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             ? await checkWeeklyLimit(memberMatriculas, resolvedWeekId)
             : { conflict: false };
 
-        let teamStatus = 'Em AnÃ¡lise';
+        let teamStatus = TEAM_STATUS_EM_ANALISE;
         let conflictDetails = null;
 
         if (validation.conflict) {
-            teamStatus = 'Pendente (Conflito)';
+            teamStatus = TEAM_STATUS_PENDENTE_CONFLITO;
             conflictDetails = {
                 officerName: validation.officerName,
                 officerMatricula: validation.officerMatricula,
@@ -302,7 +304,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             const nextStatus = teamsForVaga.length >= getVagaCapacity(vaga) ? 'Ocupada' : 'DisponÃ­vel';
             await apiClient.updateVaga(vaga.id, { status: nextStatus });
 
-            showNotification('Candidatura registrada com status Em AnÃ¡lise.', 'success');
+            showNotification(`Candidatura registrada com status ${TEAM_STATUS_EM_ANALISE}.`, 'success');
 
             const optimisticTeam = {
                 ...createdTeam,
@@ -353,9 +355,9 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             }, 0);
 
             if (myTeamOnThisDay) {
-                if (myTeamOnThisDay.status === 'Em AnÃ¡lise' || myTeamOnThisDay.status === 'Pendente (Conflito)') {
+                if (myTeamOnThisDay.status === TEAM_STATUS_EM_ANALISE || myTeamOnThisDay.status === TEAM_STATUS_PENDENTE_CONFLITO) {
                     return (
-                        <div className="mt-1 text-xs text-center bg-yellow-600/90 text-white rounded-md p-1 animate-fade-in">Em AnÃ¡lise</div>
+                        <div className="mt-1 text-xs text-center bg-yellow-600/90 text-white rounded-md p-1 animate-fade-in">{TEAM_STATUS_EM_ANALISE}</div>
                     );
                 }
                 return (
