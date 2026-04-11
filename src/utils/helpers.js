@@ -169,6 +169,14 @@ export const checkWeeklyLimit = async (memberMatriculas, weekId) => {
         return { conflict: false };
     }
 
+    const normalizedMemberMatriculas = memberMatriculas
+        .map((matricula) => String(matricula || '').replaceAll(/\D/g, ''))
+        .filter(Boolean);
+
+    if (normalizedMemberMatriculas.length === 0) {
+        return { conflict: false };
+    }
+
     const range = resolveWeekRange(weekId);
     if (!range) return { conflict: false };
 
@@ -196,7 +204,7 @@ export const checkWeeklyLimit = async (memberMatriculas, weekId) => {
 
     for (const team of teams) {
         const members = Array.isArray(team?.members) ? team.members : [];
-        const memberConflict = members.find((member) => memberMatriculas.includes(member?.matricula));
+        const memberConflict = members.find((member) => normalizedMemberMatriculas.includes(String(member?.matricula || '').replaceAll(/\D/g, '')));
         if (memberConflict?.matricula) {
             return {
                 conflict: true,
@@ -211,7 +219,7 @@ export const checkWeeklyLimit = async (memberMatriculas, weekId) => {
         const chefeFromMap = chefeId == null ? null : policiaisById.get(String(chefeId));
         const chefeMatricula = chefeMatriculaFromInfo || chefeFromMap?.matricula;
 
-        if (chefeMatricula && memberMatriculas.includes(chefeMatricula)) {
+        if (chefeMatricula && normalizedMemberMatriculas.includes(String(chefeMatricula || '').replaceAll(/\D/g, ''))) {
             return {
                 conflict: true,
                 officerName: team?.chefe_nome || chefeInfo?.nome || chefeFromMap?.nome || 'Desconhecido',

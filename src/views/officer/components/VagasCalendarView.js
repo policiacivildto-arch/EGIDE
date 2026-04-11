@@ -225,9 +225,18 @@ export const VagasCalendarView = ({ user, showNotification }) => {
     const handleRegister = async (vaga, teamData) => {
         const parsedVagaDate = getVagaDateObject(vaga);
         const resolvedWeekId = vaga.weekId || (parsedVagaDate ? getWeekInfo(parsedVagaDate).weekId : null);
+        const targetDayKey = getVagaDayKey(vaga);
+
+        if (targetDayKey && (myTeamsByOperationalDay[targetDayKey] || []).length > 0) {
+            showNotification(
+                'Voce ja esta escalado(a) hoje e nao pode se candidatar novamente para este dia.',
+                'error'
+            );
+            return;
+        }
 
         const isAlreadyLeader = resolvedWeekId
-            ? await checkLeaderWeeklyLimit(user.matricula, resolvedWeekId)
+            ? await checkLeaderWeeklyLimit(normalizeMatriculaDigits(user.matricula), resolvedWeekId)
             : false;
         if (isAlreadyLeader) {
             showNotification(
@@ -237,7 +246,7 @@ export const VagasCalendarView = ({ user, showNotification }) => {
             return;
         }
 
-        const memberMatriculas = teamData.members.map(m => m.matricula);
+        const memberMatriculas = teamData.members.map((m) => normalizeMatriculaDigits(m.matricula));
         const validation = resolvedWeekId
             ? await checkWeeklyLimit(memberMatriculas, resolvedWeekId)
             : { conflict: false };
