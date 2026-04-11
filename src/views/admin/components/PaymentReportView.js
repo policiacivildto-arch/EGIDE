@@ -287,15 +287,14 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         setConvoysForPeriod([]);
         try {
             const [teamsResponse, convoysResponse, vagasResponse] = await Promise.all([
-                apiClient.getTeams({
+                apiClient.getAllTeams({
                     'vaga__data__gte': startDate,
                     'vaga__data__lte': endDate,
                 }),
-                apiClient.getConvoys(),
-                apiClient.getVagas({
+                apiClient.getAllConvoys(),
+                apiClient.getAllVagas({
                     'data__gte': startDate,
                     'data__lte': endDate,
-                    page_size: 2000,
                 }),
             ]);
 
@@ -469,14 +468,11 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             if (teamIds.length === 0) return;
 
             try {
-                const response = await apiClient.getFrequencias({
+                const frequencias = await apiClient.getAllFrequencias({
                     equipe__in: teamIds.join(','),
                     data_operacao__gte: startDate,
                     data_operacao__lte: endDate,
-                    page_size: 2000,
                 });
-
-                const frequencias = Array.isArray(response) ? response : (response?.results || []);
                 hydrateAttendanceFromBackend(frequencyRows, frequencias);
             } catch (error) {
                 console.error('Falha ao carregar frequência registrada:', error);

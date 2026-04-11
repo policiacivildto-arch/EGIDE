@@ -125,19 +125,17 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
         setCostData(null);
         try {
             const [convoysResponse, teamsResponse, frequenciasResponse] = await Promise.all([
-                apiClient.getConvoys({
+                apiClient.getAllConvoys({
                     data__gte: startDate,
                     data__lte: endDate,
-                    page_size: 500,
                 }),
-                apiClient.getTeams({
+                apiClient.getAllTeams({
                     'vaga__data__gte': startDate,
                     'vaga__data__lte': endDate,
                 }),
-                apiClient.getFrequencias({
+                apiClient.getAllFrequencias({
                     data_operacao__gte: startDate,
                     data_operacao__lte: endDate,
-                    page_size: 2000,
                 }),
             ]);
 

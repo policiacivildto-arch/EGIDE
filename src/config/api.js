@@ -226,6 +226,28 @@ class DjangoApiClient {
     return this.request('GET', endpoint, null, options);
   }
 
+  async getAllPages(resource, params = {}, options = {}) {
+    const combinedResults = [];
+    let page = 1;
+
+    while (true) {
+      const response = await this.getList(resource, { ...params, page }, options);
+
+      if (Array.isArray(response)) {
+        return page === 1 ? response : [...combinedResults, ...response];
+      }
+
+      const pageResults = Array.isArray(response?.results) ? response.results : [];
+      combinedResults.push(...pageResults);
+
+      if (!response?.next) {
+        return combinedResults;
+      }
+
+      page += 1;
+    }
+  }
+
   async getDetail(resource, id, options = {}) {
     return this.request('GET', `/${resource}/${id}/`, null, options);
   }
@@ -251,6 +273,10 @@ class DjangoApiClient {
    */
   async getPoliciais(params = {}) {
     return this.getList('policiais', params);
+  }
+
+  async getAllPoliciais(params = {}) {
+    return this.getAllPages('policiais', params);
   }
 
   async getPolicial(id) {
@@ -391,6 +417,10 @@ class DjangoApiClient {
     return this.getList('vagas', params);
   }
 
+  async getAllVagas(params = {}) {
+    return this.getAllPages('vagas', params);
+  }
+
   async getVaga(id) {
     return this.getDetail('vagas', id);
   }
@@ -414,6 +444,10 @@ class DjangoApiClient {
     return this.getList('equipes', params);
   }
 
+  async getAllTeams(params = {}) {
+    return this.getAllPages('equipes', params);
+  }
+
   async getTeam(id) {
     return this.getDetail('equipes', id);
   }
@@ -435,6 +469,10 @@ class DjangoApiClient {
    */
   async getConvoys(params = {}) {
     return this.getList('comboios', params);
+  }
+
+  async getAllConvoys(params = {}) {
+    return this.getAllPages('comboios', params);
   }
 
   async getConvoy(id) {
@@ -481,6 +519,10 @@ class DjangoApiClient {
    */
   async getFrequencias(params = {}) {
     return this.getList('frequencias', params);
+  }
+
+  async getAllFrequencias(params = {}) {
+    return this.getAllPages('frequencias', params);
   }
 
   async registrarFrequenciasLote(registros = []) {
