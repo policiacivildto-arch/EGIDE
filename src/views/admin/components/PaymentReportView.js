@@ -238,7 +238,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
 
         const byTeamAndPolicial = new Map();
         frequencias.forEach((item) => {
-            const mapKey = `${item?.equipe}-${item?.policial}`;
+            const mapKey = `${item?.equipe}-${item?.policial}-${item?.data_operacao || ''}`;
             byTeamAndPolicial.set(mapKey, item);
         });
 
@@ -250,7 +250,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                 const policialId = getPolicialId(member);
                 if (!policialId) return;
 
-                const item = byTeamAndPolicial.get(`${attendanceTeamId}-${policialId}`);
+                const item = byTeamAndPolicial.get(`${attendanceTeamId}-${policialId}-${teamRow.dateKey}`);
                 if (!item) return;
 
                 const statusKey = getMemberStatusKey(teamRow.id, member);
