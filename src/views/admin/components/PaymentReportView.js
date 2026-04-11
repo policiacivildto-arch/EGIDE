@@ -237,9 +237,15 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         const nextSubstitutions = {};
 
         const byTeamAndPolicial = new Map();
+        const byTeamAndMatricula = new Map();
         frequencias.forEach((item) => {
             const mapKey = `${item?.equipe}-${item?.policial}-${item?.data_operacao || ''}`;
             byTeamAndPolicial.set(mapKey, item);
+
+            const matriculaKey = String(item?.policial_matricula || '').replaceAll(/\D/g, '');
+            if (matriculaKey) {
+                byTeamAndMatricula.set(`${item?.equipe}-${matriculaKey}-${item?.data_operacao || ''}`, item);
+            }
         });
 
         rows.forEach((teamRow) => {
@@ -248,9 +254,10 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
 
             teamRow.members.forEach((member) => {
                 const policialId = getPolicialId(member);
-                if (!policialId) return;
+                const memberMatricula = String(member?.matricula || '').replaceAll(/\D/g, '');
 
-                const item = byTeamAndPolicial.get(`${attendanceTeamId}-${policialId}-${teamRow.dateKey}`);
+                const item = byTeamAndPolicial.get(`${attendanceTeamId}-${policialId}-${teamRow.dateKey}`)
+                    || byTeamAndMatricula.get(`${attendanceTeamId}-${memberMatricula}-${teamRow.dateKey}`);
                 if (!item) return;
 
                 const statusKey = getMemberStatusKey(teamRow.id, member);
