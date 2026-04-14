@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-    Shield, Menu, X, LayoutDashboard, Plus, ClipboardList, CheckCircle, 
+    Menu, X, LayoutDashboard, Plus, ClipboardList, CheckCircle, 
     FileText, Target, BarChart, Users
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -316,6 +316,8 @@ export default function OperationsDashboard({ userData, showNotification }) {
                 
                 // Mapear campos do backend para o formato do frontend
                 const operacoesMapeadas = operacoesBackend.map(op => {
+                    const planoOperacional = op.plano_operacional || {};
+
                     const mapeada = {
                         ...op,
                         // Extrair data e hora se necessário
@@ -330,6 +332,16 @@ export default function OperationsDashboard({ userData, showNotification }) {
                         responsavel_alvos: op.departamento_solicitante_nome || `Dept ${op.departamento_solicitante}`,
                         total_equipes: op.total_equipes || 0,
                         delegacia_responsavel: op.local_concentracao || 'A definir',
+                        plano_operacional: planoOperacional,
+                        planoOperacional,
+                        numeroOperacao: planoOperacional.numeroPlano || op.id,
+                        nup: planoOperacional.nupOficioEmail || '',
+                        tipoMandado: planoOperacional.tipoMandado || '',
+                        localApresentacao: planoOperacional.localApresentacao || op.local_concentracao || 'A definir',
+                        diretor: planoOperacional.diretor || '',
+                        diretorDemandante: planoOperacional.diretorDemandante || '',
+                        departamentoDemandante: planoOperacional.departamentoDemandante || (op.departamento_solicitante_nome || `Dept ${op.departamento_solicitante}`),
+                        local: planoOperacional.ondeOcorrera || op.objetivo || '',
                     };
                     
                     console.log(`📋 Operação ${op.id}: ${op.nome} - Status: ${op.status}`);
@@ -767,19 +779,6 @@ export default function OperationsDashboard({ userData, showNotification }) {
             {renderSidebar()}
 
             <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-16'}`}>
-                {/* Header */}
-                <div className="bg-gradient-to-r from-cyan-600 to-teal-700 p-6 shadow-xl">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="text-3xl font-bold text-white flex items-center space-x-2">
-                                <Shield size={32} />
-                                <span>Sistema de OPERAÇÕES</span>
-                            </h1>
-                            <p className="text-cyan-100 mt-1">Gestão Operacional</p>
-                        </div>
-                    </div>
-                </div>
-
                 {/* Conteúdo Principal */}
                 <div className="p-6">
                     {(isDTO || isDepartamento) && activeView === 'dashboard' && (
@@ -825,7 +824,6 @@ export default function OperationsDashboard({ userData, showNotification }) {
                             planoForm={planoForm}
                             setPlanoForm={setPlanoForm}
                             setOperacoes={setOperations}
-                            operacoes={operations}
                             userDepartamento={userDepartamento}
                             isDTO={isDTO}
                         />

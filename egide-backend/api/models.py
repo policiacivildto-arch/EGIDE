@@ -296,6 +296,7 @@ class OperacaoPolicial(models.Model):
     
     # Planejamento
     local_concentracao = models.CharField(max_length=255, blank=True, null=True)
+    plano_operacional = models.JSONField(default=dict, blank=True)
     responsavel_operacao = models.ForeignKey(
         Policial, 
         on_delete=models.SET_NULL, 

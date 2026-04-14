@@ -798,7 +798,7 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
                                 <h4 className="text-lg font-semibold text-cyan-300 mb-3">Apoio Operacional</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-gray-300 mb-2">Quantidade de DPC (Delegado/Perito):</label>
+                                        <label className="block text-gray-300 mb-2">Quantidade de DPC (Delegado):</label>
                                         <input
                                             type="number"
                                             min="0"
@@ -824,7 +824,7 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
                                 <h4 className="text-lg font-semibold text-cyan-300 mb-3">Apoio Cartorário</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-gray-300 mb-2">Quantidade de DPC (Delegado/Perito):</label>
+                                        <label className="block text-gray-300 mb-2">Quantidade de DPC (Delegado):</label>
                                         <input
                                             type="number"
                                             min="0"
@@ -872,7 +872,7 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
                     <h3 className="text-xl font-bold text-white mb-4">7. Efetivo Interno Previsto (Seu Departamento)</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-gray-300 mb-2">Quantidade de DPC (Delegado/Perito):</label>
+                            <label className="block text-gray-300 mb-2">Quantidade de DPC (Delegado):</label>
                             <input
                                 type="number"
                                 min="0"

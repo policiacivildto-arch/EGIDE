@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { DEPARTMENTS } from '../../../constants/data';
 
@@ -8,48 +8,71 @@ export function PlanoForm({
     selectedOperationId,
     showNotification,
     setShowPlanoForm,
-    equipes,
-    alvos,
     setOperacoes,
-    operacoes,
     operacaoAtual
 }) {
+    const [isSaving, setIsSaving] = useState(false);
+
     // Preencher formulário automaticamente com dados da operação
     useEffect(() => {
-        if (operacaoAtual && !planoForm.dataOperacao) {
-            const dataHoje = new Date().toISOString().split('T')[0];
-            setPlanoForm({
-                ...planoForm,
-                dataOperacao: operacaoAtual.data_inicio || dataHoje,
-                horarioApresentacao: operacaoAtual.hora_inicio || '',
-                ondeOcorrera: operacaoAtual.objetivo || '',
-                delegacia: operacaoAtual.delegacia_responsavel || '',
-                departamentoDemandante: operacaoAtual.departamento_solicitante || operacaoAtual.orgao_solicitante || '',
-                localApresentacao: 'DTO - Departamento Técnico Operacional',
-                dataEmissao: dataHoje
-            });
-        }
-    }, [operacaoAtual]);
+        if (!operacaoAtual) return;
 
-    const handleSubmit = (e) => {
+        const dataHoje = new Date().toISOString().split('T')[0];
+        const planoSalvo = operacaoAtual.plano_operacional || operacaoAtual.planoOperacional || {};
+
+        setPlanoForm((prev) => ({
+            ...prev,
+            ...planoSalvo,
+            dataOperacao: planoSalvo.dataOperacao || operacaoAtual.data_inicio || dataHoje,
+            horarioApresentacao: planoSalvo.horarioApresentacao || operacaoAtual.hora_inicio || '',
+            ondeOcorrera: planoSalvo.ondeOcorrera || operacaoAtual.objetivo || '',
+            delegacia: planoSalvo.delegacia || operacaoAtual.delegacia_responsavel || '',
+            departamentoDemandante:
+                planoSalvo.departamentoDemandante
+                || operacaoAtual.departamento_solicitante
+                || operacaoAtual.orgao_solicitante
+                || '',
+            localApresentacao: planoSalvo.localApresentacao || 'DTO - Departamento Técnico Operacional',
+            dataEmissao: planoSalvo.dataEmissao || dataHoje,
+        }));
+    }, [operacaoAtual, selectedOperationId, setPlanoForm]);
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        
-        // Atualizar operação com o plano
-        setOperacoes(operacoes.map(op => {
-            if (op.id === selectedOperationId) {
+
+        setIsSaving(true);
+
+        try {
+            const djangoApi = (await import('../../../services/djangoApiAuth')).default;
+
+            const planoPayload = {
+                ...planoForm,
+                dataHoraCriacao: planoForm.dataHoraCriacao || new Date().toISOString(),
+                ultimaAtualizacao: new Date().toISOString(),
+            };
+
+            const operacaoAtualizada = await djangoApi.operacoes.update(selectedOperationId, {
+                plano_operacional: planoPayload,
+            });
+
+            setOperacoes((prev) => prev.map((op) => {
+                if (op.id !== selectedOperationId) return op;
+
                 return {
                     ...op,
-                    planoOperacional: {
-                        ...planoForm,
-                        dataHoraCriacao: new Date().toISOString()
-                    }
+                    ...operacaoAtualizada,
+                    plano_operacional: operacaoAtualizada.plano_operacional || planoPayload,
+                    planoOperacional: operacaoAtualizada.plano_operacional || planoPayload,
                 };
-            }
-            return op;
-        }));
-        
-        showNotification('Plano Operacional salvo com sucesso!', 'success');
-        setShowPlanoForm(false);
+            }));
+
+            showNotification('Plano Operacional salvo no backend com sucesso!', 'success');
+            setShowPlanoForm(false);
+        } catch (error) {
+            showNotification(`Erro ao salvar plano operacional: ${error.message}`, 'error');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -245,10 +268,11 @@ export function PlanoForm({
                     </button>
                     <button
                         type="submit"
+                        disabled={isSaving}
                         className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded text-white font-semibold flex items-center space-x-2"
                     >
                         <FileText size={18} />
-                        <span>✓ Salvar e Gerar Documento</span>
+                        <span>{isSaving ? 'Salvando...' : '✓ Salvar e Gerar Documento'}</span>
                     </button>
                 </div>
             </form>

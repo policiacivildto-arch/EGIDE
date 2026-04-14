@@ -38,20 +38,21 @@ export function gerarPlanoOperacional(operacao, equipes, alvos) {
 }
 
 function criarDocumentoWord(operacao, equipesPorDepartamento, alvos) {
+    const planoSalvo = operacao.plano_operacional || operacao.planoOperacional || {};
     const dataOperacao = new Date(operacao.data_hora_inicio).toLocaleDateString('pt-BR');
     const dataEmissao = new Date().toLocaleDateString('pt-BR');
-    const numeroOperacao = operacao.numeroOperacao || operacao.id;
+    const numeroOperacao = planoSalvo.numeroPlano || operacao.numeroOperacao || operacao.id;
     const anoOperacao = new Date(operacao.data_hora_inicio).getFullYear();
-    const horarioApresentacao = new Date(operacao.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const horarioApresentacao = planoSalvo.horarioApresentacao || new Date(operacao.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     // Extrair informações da operação
-    const departamentoDemandante = operacao.departamentoDemandante || 'DEPARTAMENTO TÉCNICO OPERACIONAL';
-    const nup = operacao.nup || '[NUP não informado]';
-    const tipoMandado = operacao.tipoMandado || 'mandados de prisão e busca e apreensão';
-    const localOperacao = operacao.local || operacao.bairros || '[Local não informado]';
-    const localApresentacao = operacao.localApresentacao || 'DTO - Departamento Técnico Operacional';
-    const diretor = operacao.diretor || 'DPC [Nome do Diretor]';
-    const diretorDemandante = operacao.diretorDemandante || diretor;
+    const departamentoDemandante = planoSalvo.departamentoDemandante || operacao.departamentoDemandante || 'DEPARTAMENTO TÉCNICO OPERACIONAL';
+    const nup = planoSalvo.nupOficioEmail || operacao.nup || '[NUP não informado]';
+    const tipoMandado = planoSalvo.tipoMandado || operacao.tipoMandado || 'mandados de prisão e busca e apreensão';
+    const localOperacao = planoSalvo.ondeOcorrera || operacao.local || operacao.bairros || '[Local não informado]';
+    const localApresentacao = planoSalvo.localApresentacao || operacao.localApresentacao || 'DTO - Departamento Técnico Operacional';
+    const diretor = planoSalvo.diretor || operacao.diretor || 'DPC [Nome do Diretor]';
+    const diretorDemandante = planoSalvo.diretorDemandante || operacao.diretorDemandante || diretor;
     
     // Departamentos envolvidos
     const departamentosEnvolvidos = Object.keys(equipesPorDepartamento).join(', ') || 'Departamentos Envolvidos';

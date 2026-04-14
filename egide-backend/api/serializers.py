@@ -493,7 +493,7 @@ class OperacaoPolicialSerializer(serializers.ModelSerializer):
             'status', 'aprovado_por', 'aprovado_por_nome', 'data_aprovacao', 
             'motivo_reprovacao', 'custo_planejado', 'custo_real', 
             'responsavel_custo', 'responsavel_custo_nome', 'criado_por', 
-            'criado_por_nome', 'criado_em', 'atualizado_em',
+            'criado_por_nome', 'criado_em', 'atualizado_em', 'plano_operacional',
             'alvos', 'equipes_operacao', 'resultados', 'aporte',
             'total_equipes', 'total_alvos', 'total_resultados'
         ]
@@ -532,7 +532,7 @@ class OperacaoPolicialListSerializer(serializers.ModelSerializer):
     class Meta:
         model = OperacaoPolicial
         fields = ['id', 'nome', 'departamento_solicitante_sigla', 'delegacia_solicitante_nome', 'tipo_operacao',
-                  'status', 'data_hora_inicio', 'data_hora_briefing', 
+                  'status', 'data_hora_inicio', 'data_hora_briefing', 'plano_operacional',
                   'responsavel_nome', 'total_equipes', 'criado_em']
         read_only_fields = ['criado_em']
     

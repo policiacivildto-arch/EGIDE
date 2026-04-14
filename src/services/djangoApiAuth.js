@@ -304,7 +304,7 @@ const operacoesApi = {
   getAll: () => apiRequest('/operacoes-policiais/'),
   get: (id) => apiRequest(`/operacoes-policiais/${id}/`),
   create: (data) => apiRequest('/operacoes-policiais/', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id, data) => apiRequest(`/operacoes-policiais/${id}/`, { method: 'PUT', body: JSON.stringify(data) }),
+  update: (id, data) => apiRequest(`/operacoes-policiais/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id) => apiRequest(`/operacoes-policiais/${id}/`, { method: 'DELETE' }),
 };
 

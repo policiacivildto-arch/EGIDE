@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClipboardList, AlertCircle, Users, Target, FileText, Plus, Download } from 'lucide-react';
+import { ClipboardList, AlertCircle, Users, Target, FileText, Download } from 'lucide-react';
 import { AlvoForm } from './AlvoForm';
 import { EquipeForm } from './EquipeForm';
 import { PlanoForm } from './PlanoForm';
@@ -30,7 +30,6 @@ export function PlanejamentoView({
     planoForm,
     setPlanoForm,
     setOperacoes,
-    operacoes,
     userDepartamento,
     isDTO
 }) {
@@ -219,10 +218,7 @@ export function PlanejamentoView({
                                         selectedOperationId={selectedOperationId}
                                         showNotification={showNotification}
                                         setShowPlanoForm={setShowPlanoForm}
-                                        equipes={equipes}
-                                        alvos={alvos}
                                         setOperacoes={setOperacoes}
-                                        operacoes={operacoes}
                                         operacaoAtual={operacaoAtual}
                                     />
                                 )}

@@ -9,18 +9,69 @@ export const AprovacaoDTO = ({ operations, showNotification, onAprovar, onRejeit
     const [motivoRejeicao, setMotivoRejeicao] = useState('');
     const [operacaoSelecionada, setOperacaoSelecionada] = useState(null);
     const [showRejeicaoModal, setShowRejeicaoModal] = useState(false);
+    const [filtroStatus, setFiltroStatus] = useState('aguardando');
 
     // Debug
     console.log('🔍 AprovacaoDTO - Total de operações recebidas:', operations.length);
     console.log('🔍 AprovacaoDTO - Operações:', operations);
 
-    // Filtrar operações aguardando aprovação
-    const operacoesAguardando = operations.filter(op => 
+    const isAguardando = (op) => (
         op.status_dto === 'Aguardando Análise DTO' || 
         op.status_dto === 'Pendente' ||
         op.status === 'Aguardando Análise DTO' ||
         op.status === 'Aguardando Aprovação'
     );
+
+    const isAprovada = (op) => (
+        op.status_dto === 'Aprovado DTO' ||
+        op.status === 'Aprovada pelo DTO' ||
+        op.status === 'Aprovado DTO'
+    );
+
+    const isRejeitada = (op) => (
+        op.status_dto === 'Rejeitado DTO' ||
+        op.status === 'Reprovada pelo DTO' ||
+        op.status === 'Rejeitado DTO'
+    );
+
+    // Filtrar operações por status
+    const operacoesAguardando = operations.filter(isAguardando);
+    const operacoesAprovadas = operations.filter(isAprovada);
+    const operacoesRejeitadas = operations.filter(isRejeitada);
+
+    const operacoesFiltradas =
+        filtroStatus === 'aprovadas'
+            ? operacoesAprovadas
+            : filtroStatus === 'rejeitadas'
+                ? operacoesRejeitadas
+                : operacoesAguardando;
+
+    const getStatusVisual = (operacao) => {
+        if (isAprovada(operacao)) {
+            return {
+                cardBorder: 'border-green-500/50 hover:border-green-500',
+                badgeClass: 'bg-green-900/50 text-green-400 border border-green-500',
+                badgeLabel: 'Aprovada',
+                icon: <CheckCircle size={14} className="mr-1" />,
+            };
+        }
+
+        if (isRejeitada(operacao)) {
+            return {
+                cardBorder: 'border-red-500/50 hover:border-red-500',
+                badgeClass: 'bg-red-900/50 text-red-400 border border-red-500',
+                badgeLabel: 'Rejeitada',
+                icon: <XCircle size={14} className="mr-1" />,
+            };
+        }
+
+        return {
+            cardBorder: 'border-yellow-500/50 hover:border-yellow-500',
+            badgeClass: 'bg-yellow-900/50 text-yellow-400 border border-yellow-500',
+            badgeLabel: 'Aguardando',
+            icon: <Clock size={14} className="mr-1" />,
+        };
+    };
 
     console.log('🔍 AprovacaoDTO - Operações aguardando:', operacoesAguardando.length);
     console.log('🔍 AprovacaoDTO - Detalhes:', operacoesAguardando);
@@ -63,7 +114,10 @@ export const AprovacaoDTO = ({ operations, showNotification, onAprovar, onRejeit
 
             {/* Estatísticas */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-yellow-900/30 border border-yellow-500 rounded-lg p-4">
+                <button
+                    onClick={() => setFiltroStatus('aguardando')}
+                    className={`text-left rounded-lg p-4 border transition-colors ${filtroStatus === 'aguardando' ? 'bg-yellow-900/40 border-yellow-400' : 'bg-yellow-900/30 border-yellow-500 hover:border-yellow-400'}`}
+                >
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-yellow-400 text-sm font-semibold">Aguardando Aprovação</p>
@@ -71,45 +125,66 @@ export const AprovacaoDTO = ({ operations, showNotification, onAprovar, onRejeit
                         </div>
                         <Clock size={40} className="text-yellow-400" />
                     </div>
-                </div>
+                </button>
 
-                <div className="bg-green-900/30 border border-green-500 rounded-lg p-4">
+                <button
+                    onClick={() => setFiltroStatus('aprovadas')}
+                    className={`text-left rounded-lg p-4 border transition-colors ${filtroStatus === 'aprovadas' ? 'bg-green-900/40 border-green-400' : 'bg-green-900/30 border-green-500 hover:border-green-400'}`}
+                >
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-green-400 text-sm font-semibold">Aprovadas</p>
                             <p className="text-3xl font-bold text-white">
-                                {operations.filter(op => op.status_dto === 'Aprovado DTO').length}
+                                {operacoesAprovadas.length}
                             </p>
                         </div>
                         <CheckCircle size={40} className="text-green-400" />
                     </div>
-                </div>
+                </button>
 
-                <div className="bg-red-900/30 border border-red-500 rounded-lg p-4">
+                <button
+                    onClick={() => setFiltroStatus('rejeitadas')}
+                    className={`text-left rounded-lg p-4 border transition-colors ${filtroStatus === 'rejeitadas' ? 'bg-red-900/40 border-red-400' : 'bg-red-900/30 border-red-500 hover:border-red-400'}`}
+                >
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-red-400 text-sm font-semibold">Rejeitadas</p>
                             <p className="text-3xl font-bold text-white">
-                                {operations.filter(op => op.status_dto === 'Rejeitado DTO').length}
+                                {operacoesRejeitadas.length}
                             </p>
                         </div>
                         <XCircle size={40} className="text-red-400" />
                     </div>
-                </div>
+                </button>
             </div>
 
-            {/* Lista de Operações Aguardando */}
-            {operacoesAguardando.length === 0 ? (
+            {/* Lista de Operações */}
+            {operacoesFiltradas.length === 0 ? (
                 <div className="bg-gray-800 rounded-lg p-8 text-center">
-                    <CheckCircle size={48} className="mx-auto text-green-400 mb-4" />
-                    <p className="text-gray-400 text-lg">Nenhuma operação aguardando aprovação</p>
+                    {filtroStatus === 'aprovadas' ? (
+                        <CheckCircle size={48} className="mx-auto text-green-400 mb-4" />
+                    ) : filtroStatus === 'rejeitadas' ? (
+                        <XCircle size={48} className="mx-auto text-red-400 mb-4" />
+                    ) : (
+                        <Clock size={48} className="mx-auto text-yellow-400 mb-4" />
+                    )}
+                    <p className="text-gray-400 text-lg">
+                        {filtroStatus === 'aprovadas'
+                            ? 'Nenhuma operação aprovada'
+                            : filtroStatus === 'rejeitadas'
+                                ? 'Nenhuma operação rejeitada'
+                                : 'Nenhuma operação aguardando aprovação'}
+                    </p>
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {operacoesAguardando.map((operacao) => (
-                        <div 
+                    {operacoesFiltradas.map((operacao) => {
+                        const statusVisual = getStatusVisual(operacao);
+
+                        return (
+                        <div
                             key={operacao.id} 
-                            className="bg-gray-800 border border-yellow-500/50 rounded-lg p-6 hover:border-yellow-500 transition-colors"
+                            className={`bg-gray-800 border rounded-lg p-6 transition-colors ${statusVisual.cardBorder}`}
                         >
                             <div className="flex items-start justify-between mb-4">
                                 <div className="flex-1">
@@ -144,9 +219,9 @@ export const AprovacaoDTO = ({ operations, showNotification, onAprovar, onRejeit
                                     </div>
                                 </div>
                                 <div className="ml-4">
-                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-900/50 text-yellow-400 border border-yellow-500">
-                                        <Clock size={14} className="mr-1" />
-                                        Aguardando
+                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusVisual.badgeClass}`}>
+                                        {statusVisual.icon}
+                                        {statusVisual.badgeLabel}
                                     </span>
                                 </div>
                             </div>
@@ -192,25 +267,26 @@ export const AprovacaoDTO = ({ operations, showNotification, onAprovar, onRejeit
                                 </div>
                             </div>
 
-                            {/* Botões de Ação */}
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => handleAprovar(operacao)}
-                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center"
-                                >
-                                    <CheckCircle size={20} className="mr-2" />
-                                    Aprovar Operação
-                                </button>
-                                <button
-                                    onClick={() => handleRejeitarClick(operacao)}
-                                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center"
-                                >
-                                    <XCircle size={20} className="mr-2" />
-                                    Rejeitar Operação
-                                </button>
-                            </div>
+                            {filtroStatus === 'aguardando' && (
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => handleAprovar(operacao)}
+                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center"
+                                    >
+                                        <CheckCircle size={20} className="mr-2" />
+                                        Aprovar Operação
+                                    </button>
+                                    <button
+                                        onClick={() => handleRejeitarClick(operacao)}
+                                        className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center"
+                                    >
+                                        <XCircle size={20} className="mr-2" />
+                                        Rejeitar Operação
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                    ))}
+                    )})}
                 </div>
             )}
 
