@@ -364,7 +364,6 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
             drawLine('Data de inicio', formatDate(formData.data_inicio));
             drawLine('Hora de inicio', formData.hora_inicio || 'Nao informado');
             drawLine('Hora de fim', formData.hora_fim || 'Nao informado');
-            drawLine('Status DTO', formData.status_dto || 'Aguardando Analise DTO');
 
             y += 3;
             drawTitle('2. Objetivo');
@@ -452,7 +451,7 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
     };
 
     return (
-        <div className="bg-gray-700 p-6 rounded-lg max-w-5xl mx-auto">
+        <div className="bg-gray-700 p-6 rounded-lg w-full">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center space-x-2">
                 <FileText size={28} />
                 <span>📋 Formulário — Cadastro de Operação Policial</span>
@@ -536,12 +535,6 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
                                 onChange={(e) => setFormData({ ...formData, hora_fim: e.target.value })}
                                 className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
                             />
-                        </div>
-                        <div>
-                            <label className="block text-gray-300 mb-2">Status DTO</label>
-                            <div className="w-full bg-gray-800 text-gray-200 rounded px-4 py-2 border border-gray-600">
-                                Aguardando Análise DTO
-                            </div>
                         </div>
                     </div>
                 </section>

@@ -775,26 +775,8 @@ export default function OperationsDashboard({ userData, showNotification }) {
                                 <Shield size={32} />
                                 <span>Sistema de OPERAÇÕES</span>
                             </h1>
-                            <p className="text-cyan-100 mt-1">
-                                {isPolicialOperacional 
-                                    ? 'Modo Operacional - Policial' 
-                                    : isDepartamento 
-                                    ? `Gestão Departamental - ${userDepartamento}`
-                                    : 'Gestão Operacional e Logística'}
-                            </p>
+                            <p className="text-cyan-100 mt-1">Gestão Operacional</p>
                         </div>
-                        {isDTO && (
-                            <div className="bg-white/20 px-4 py-2 rounded-lg">
-                                <p className="text-white font-semibold">Modo: DTO</p>
-                                <p className="text-cyan-100 text-sm">Controle Total</p>
-                            </div>
-                        )}
-                        {isDepartamento && (
-                            <div className="bg-white/20 px-4 py-2 rounded-lg">
-                                <p className="text-white font-semibold">{userDepartamento}</p>
-                                <p className="text-cyan-100 text-sm">Departamento</p>
-                            </div>
-                        )}
                     </div>
                 </div>
 
