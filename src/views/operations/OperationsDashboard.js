@@ -613,10 +613,12 @@ export default function OperationsDashboard({ userData, showNotification }) {
             
             setActiveViewAndSyncUrl('dashboard');
             await loadOperations(); // Recarregar operações do backend
+            return true;
             
         } catch (error) {
             console.error('❌ Erro ao criar operação:', error);
             showNotification('Erro ao criar operação: ' + error.message, 'error');
+            return false;
         }
     };
 

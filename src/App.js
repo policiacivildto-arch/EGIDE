@@ -178,7 +178,7 @@ export default function App() {
 
     const handleSelectSystem = (system) => {
         if (system === 'operacoes') {
-            navigate('/operacoes');
+            navigate('/operacoes?view=nova-demanda');
             return;
         }
         navigate('/egide');

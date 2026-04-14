@@ -1,27 +1,26 @@
 /**
  * Utilitário para cálculo de custos operacionais
- * Corrige o problema de arredondamento de horas
  */
 
 /**
  * Converte horário para minutos
  */
 function converterParaMinutos(valor) {
-  if (Object.prototype.toString.call(valor) === '[object Date]' && !isNaN(valor.getTime())) {
+  if (Object.prototype.toString.call(valor) === '[object Date]' && !Number.isNaN(valor.getTime())) {
     return valor.getHours() * 60 + valor.getMinutes();
   } else if (typeof valor === "string") {
     valor = valor.trim().replace('.', ':');
     const partes = valor.split(":");
     if (partes.length >= 2) {
-      const horas = parseInt(partes[0], 10);
-      const minutos = parseInt(partes[1], 10);
-      if (!isNaN(horas) && !isNaN(minutos)) {
+      const horas = Number.parseInt(partes[0], 10);
+      const minutos = Number.parseInt(partes[1], 10);
+      if (!Number.isNaN(horas) && !Number.isNaN(minutos)) {
         return horas * 60 + minutos;
       }
     }
   }
   console.warn(`Erro: Horário inválido detectado - ${valor}`);
-  return NaN;
+  return Number.NaN;
 }
 
 /**
@@ -29,7 +28,7 @@ function converterParaMinutos(valor) {
  */
 function obterDiaSemana(data) {
   const dias = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
-  if (Object.prototype.toString.call(data) === '[object Date]' && !isNaN(data.getTime())) {
+  if (Object.prototype.toString.call(data) === '[object Date]' && !Number.isNaN(data.getTime())) {
     return dias[data.getDay()];
   }
   if (typeof data === "number") {
@@ -39,11 +38,11 @@ function obterDiaSemana(data) {
   if (typeof data === "string") {
     const partes = data.split("/");
     if (partes.length === 3) {
-      const dia = parseInt(partes[0], 10);
-      const mes = parseInt(partes[1], 10) - 1;
-      const ano = parseInt(partes[2], 10);
+      const dia = Number.parseInt(partes[0], 10);
+      const mes = Number.parseInt(partes[1], 10) - 1;
+      const ano = Number.parseInt(partes[2], 10);
       const dataFormatada = new Date(ano, mes, dia);
-      if (!isNaN(dataFormatada.getTime())) {
+      if (!Number.isNaN(dataFormatada.getTime())) {
         return dias[dataFormatada.getDay()];
       }
     }
@@ -64,7 +63,7 @@ function verificarFeriado(data, listaFeriados = []) {
   
   if (typeof data === "string") {
     return feriados.includes(data);
-  } else if (Object.prototype.toString.call(data) === '[object Date]' && !isNaN(data.getTime())) {
+  } else if (Object.prototype.toString.call(data) === '[object Date]' && !Number.isNaN(data.getTime())) {
     const dataFormatada = data.getDate().toString().padStart(2, '0') + "/" +
                         (data.getMonth() + 1).toString().padStart(2, '0') + "/" +
                         data.getFullYear();
@@ -81,38 +80,37 @@ function calcularHorasTrabalhadas(horaInicio, horaFim) {
 }
 
 /**
- * 🔧 FUNÇÃO CORRIGIDA
- * Calcula o valor do trabalho de forma PROPORCIONAL aos minutos trabalhados
+ * Calcula o valor do trabalho com cobrança por hora inteira (arredondamento para cima)
  */
 function calcularValorTrabalho(horasTrabalhadas, horaInicio, cargo, classe, diaDaSemana, feriado) {
   const valores = {
     "OIP": {
-      "A": { dia: 34.42, noite: 44.75 },
-      "B": { dia: 34.42, noite: 44.75 },
-      "C": { dia: 34.42, noite: 44.75 },
-      "D": { dia: 34.42, noite: 44.75 }
+      "A": { dia: 36.15, noite: 47 },
+      "B": { dia: 36.15, noite: 47 },
+      "C": { dia: 36.15, noite: 47 },
+      "D": { dia: 36.15, noite: 47 }
     },
     "DPC": {
-      "Especial": { dia: 48.18, noite: 62.63 },
-      "A": { dia: 48.18, noite: 62.63 },
-      "B": { dia: 48.18, noite: 62.63 },
-      "C": { dia: 48.18, noite: 62.63 },
-      "D": { dia: 48.18, noite: 62.63 }
+      "Especial": { dia: 50.6, noite: 65.8 },
+      "A": { dia: 50.6, noite: 65.8 },
+      "B": { dia: 50.6, noite: 65.8 },
+      "C": { dia: 50.6, noite: 65.8 },
+      "D": { dia: 50.6, noite: 65.8 }
     },
     "INV": {
-      "A": { dia: 34.42, noite: 44.75 },
-      "B": { dia: 34.42, noite: 44.75 },
-      "C": { dia: 34.42, noite: 44.75 },
-      "D": { dia: 34.42, noite: 44.75 }
+      "A": { dia: 36.15, noite: 47 },
+      "B": { dia: 36.15, noite: 47 },
+      "C": { dia: 36.15, noite: 47 },
+      "D": { dia: 36.15, noite: 47 }
     },
     "DEL": {
-      "Especial": { dia: 48.18, noite: 62.63 }
+      "Especial": { dia: 50.6, noite: 65.8 }
     },
     "ESC": {
-      "A": { dia: 34.42, noite: 44.75 },
-      "B": { dia: 34.42, noite: 44.75 },
-      "C": { dia: 34.42, noite: 44.75 },
-      "D": { dia: 34.42, noite: 44.75 }
+      "A": { dia: 36.15, noite: 47 },
+      "B": { dia: 36.15, noite: 47 },
+      "C": { dia: 36.15, noite: 47 },
+      "D": { dia: 36.15, noite: 47 }
     }
   };
 
@@ -124,12 +122,9 @@ function calcularValorTrabalho(horasTrabalhadas, horaInicio, cargo, classe, diaD
   const valorHora = valores[cargo][classe];
   let totalPago = 0;
 
-  // 🔧 CORREÇÃO: Calcula de forma proporcional, não arredondando
-  const horasCompletas = Math.floor(horasTrabalhadas / 60);
-  const minutosRestantes = horasTrabalhadas % 60;
+  const horasInteiras = Math.ceil(horasTrabalhadas / 60);
 
-  // Processa horas completas
-  for (let i = 0; i < horasCompletas; i++) {
+  for (let i = 0; i < horasInteiras; i++) {
     const horaAtual = Math.floor((horaInicio / 60 + i) % 24);
 
     if (diaDaSemana === "sábado" || diaDaSemana === "domingo" || feriado) {
@@ -137,17 +132,6 @@ function calcularValorTrabalho(horasTrabalhadas, horaInicio, cargo, classe, diaD
     } else {
       totalPago += (horaAtual >= 6 && horaAtual < 24) ? valorHora.dia : valorHora.noite;
     }
-  }
-
-  // 🔧 CORREÇÃO: Adiciona os minutos restantes de forma proporcional
-  if (minutosRestantes > 0) {
-    const horaAtual = Math.floor((horaInicio / 60 + horasCompletas) % 24);
-    const valorHoraAtual = (diaDaSemana === "sábado" || diaDaSemana === "domingo" || feriado)
-      ? valorHora.noite
-      : (horaAtual >= 6 && horaAtual < 24) ? valorHora.dia : valorHora.noite;
-    
-    // Adiciona proporcionalmente os minutos restantes
-    totalPago += (minutosRestantes / 60) * valorHoraAtual;
   }
 
   return totalPago;
@@ -235,7 +219,7 @@ export function calculateShiftCost(usuario, data, horaEntrada, horaSaida, feriad
   const horaInicio = converterParaMinutos(horaEntrada);
   const horaFim = converterParaMinutos(horaSaida);
 
-  if (isNaN(horaInicio) || isNaN(horaFim)) {
+  if (Number.isNaN(horaInicio) || Number.isNaN(horaFim)) {
     console.warn(`Horário inválido. Entrada: '${horaEntrada}' | Saída: '${horaSaida}'`);
     return 0;
   }

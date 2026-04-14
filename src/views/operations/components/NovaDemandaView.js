@@ -1,5 +1,8 @@
 import React from 'react';
-import { FileText, Plus, Trash2 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import { Download, FileText, Plus, Trash2 } from 'lucide-react';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
+import { saveAs } from 'file-saver';
 import { DEPARTMENTS, AIS_OPTIONS } from '../../../constants/data';
 
 export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotification, userDepartamento }) {
@@ -41,33 +44,88 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
 
     // Função auxiliar: converter hora para minutos
     const converterParaMinutos = (valor) => {
-        if (!valor) return 0;
-        const partes = valor.toString().trim().replace('.', ':').split(':');
-        if (partes.length >= 2) {
-            const horas = parseInt(partes[0], 10);
-            const minutos = parseInt(partes[1], 10);
-            if (!isNaN(horas) && !isNaN(minutos)) {
-                return horas * 60 + minutos;
+        if (Object.prototype.toString.call(valor) === '[object Date]' && !Number.isNaN(valor.getTime())) {
+            return valor.getHours() * 60 + valor.getMinutes();
+        } else if (typeof valor === 'string') {
+            const valorNormalizado = valor.trim().replace('.', ':');
+            const partes = valorNormalizado.split(':');
+            if (partes.length >= 2) {
+                const horas = Number.parseInt(partes[0], 10);
+                const minutos = Number.parseInt(partes[1], 10);
+                if (!Number.isNaN(horas) && !Number.isNaN(minutos)) {
+                    return horas * 60 + minutos;
+                }
             }
         }
-        return 0;
+
+        console.warn(`Erro: Horário inválido detectado - ${valor}`);
+        return Number.NaN;
     };
 
     // Função auxiliar: obter dia da semana
-    const obterDiaSemana = (dataStr) => {
-        if (!dataStr) return null;
-        const dias = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
-        const data = new Date(dataStr + 'T00:00:00');
-        if (!isNaN(data.getTime())) {
+    const obterDiaSemana = (data) => {
+        const dias = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+        if (Object.prototype.toString.call(data) === '[object Date]' && !Number.isNaN(data.getTime())) {
             return dias[data.getDay()];
         }
+
+        if (typeof data === 'number') {
+            const dataFormatada = new Date((data - 25569) * 86400000);
+            return dias[dataFormatada.getDay()];
+        }
+
+        if (typeof data === 'string') {
+            const dataStr = data.trim();
+
+            const partesBr = dataStr.split('/');
+            if (partesBr.length === 3) {
+                const dia = Number.parseInt(partesBr[0], 10);
+                const mes = Number.parseInt(partesBr[1], 10) - 1;
+                const ano = Number.parseInt(partesBr[2], 10);
+                const dataFormatada = new Date(ano, mes, dia);
+                if (!Number.isNaN(dataFormatada.getTime())) {
+                    return dias[dataFormatada.getDay()];
+                }
+            }
+
+            // Mantém compatibilidade com data ISO do formulário (YYYY-MM-DD)
+            const dataIso = new Date(`${dataStr}T00:00:00`);
+            if (!Number.isNaN(dataIso.getTime())) {
+                return dias[dataIso.getDay()];
+            }
+        }
+
+        console.warn(`Erro: Data inválida detectada - ${data}`);
         return null;
     };
 
     // Função auxiliar: verificar feriado
-    const verificarFeriado = (dataStr) => {
-        const feriados = ["2025-04-18", "2025-04-21"]; // Adicionar mais feriados conforme necessário
-        return feriados.includes(dataStr);
+    const verificarFeriado = (data) => {
+        const feriados = new Set(['18/04/2025', '21/04/2025']);
+
+        if (typeof data === 'string') {
+            const dataStr = data.trim();
+            if (feriados.has(dataStr)) return true;
+
+            const dataIso = new Date(`${dataStr}T00:00:00`);
+            if (!Number.isNaN(dataIso.getTime())) {
+                const dataFormatada = dataIso.getDate().toString().padStart(2, '0') + '/' +
+                    (dataIso.getMonth() + 1).toString().padStart(2, '0') + '/' +
+                    dataIso.getFullYear();
+                return feriados.has(dataFormatada);
+            }
+            return false;
+        }
+
+        if (Object.prototype.toString.call(data) === '[object Date]' && !Number.isNaN(data.getTime())) {
+            const dataFormatada = data.getDate().toString().padStart(2, '0') + '/' +
+                (data.getMonth() + 1).toString().padStart(2, '0') + '/' +
+                data.getFullYear();
+            return feriados.has(dataFormatada);
+        }
+
+        return false;
     };
 
     // Função auxiliar: calcular horas trabalhadas
@@ -79,13 +137,13 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
     const calcularValorTrabalho = (horasTrabalhadas, horaInicio, cargo, classe, diaDaSemana, feriado) => {
         const valores = {
             "OIP": {
-                "A": { dia: 34.42, noite: 44.75 },
-                "B": { dia: 34.42, noite: 44.75 },
-                "C": { dia: 34.42, noite: 44.75 },
-                "D": { dia: 34.42, noite: 44.75 }
+                "A": { dia: 36.15, noite: 47 },
+                "B": { dia: 36.15, noite: 47 },
+                "C": { dia: 36.15, noite: 47 },
+                "D": { dia: 36.15, noite: 47 }
             },
             "DPC": {
-                "Especial": { dia: 48.18, noite: 62.63 }
+                "Especial": { dia: 50.6, noite: 65.8 }
             }
         };
 
@@ -114,6 +172,18 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
         // Obter horas e data
         const horaInicio = converterParaMinutos(formData.hora_inicio);
         const horaFim = converterParaMinutos(formData.hora_fim);
+
+        if (Number.isNaN(horaInicio) || Number.isNaN(horaFim)) {
+            return {
+                totalDPC: 0,
+                totalOIP: 0,
+                custoEstimado: 0,
+                valorUnitarioDPC: 0,
+                valorUnitarioOIP: 0,
+                horasTrabalhadas: 0,
+            };
+        }
+
         const diaDaSemana = obterDiaSemana(formData.data_inicio);
         const feriado = verificarFeriado(formData.data_inicio);
 
@@ -161,6 +231,226 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
 
     const { totalDPC, totalOIP, custoEstimado, valorUnitarioDPC, valorUnitarioOIP, horasTrabalhadas } = calcularProjecao();
 
+    const formatDate = (dateStr) => {
+        if (!dateStr) return 'Nao informado';
+        const parsed = new Date(`${dateStr}T00:00:00`);
+        if (Number.isNaN(parsed.getTime())) return dateStr;
+        return parsed.toLocaleDateString('pt-BR');
+    };
+
+    const formatList = (list) => {
+        if (!Array.isArray(list) || list.length === 0) return 'Nao informado';
+        return list.join(', ');
+    };
+
+    const numeroPorExtensoAteVinte = (valor) => {
+        const mapa = {
+            0: 'zero',
+            1: 'um',
+            2: 'dois',
+            3: 'tres',
+            4: 'quatro',
+            5: 'cinco',
+            6: 'seis',
+            7: 'sete',
+            8: 'oito',
+            9: 'nove',
+            10: 'dez',
+            11: 'onze',
+            12: 'doze',
+            13: 'treze',
+            14: 'quatorze',
+            15: 'quinze',
+            16: 'dezesseis',
+            17: 'dezessete',
+            18: 'dezoito',
+            19: 'dezenove',
+            20: 'vinte'
+        };
+        return mapa[valor] || String(valor);
+    };
+
+    const gerarDocumentoSolicitacaoWord = async () => {
+        const totalPoliciais = Number(totalOIP || 0) > 0
+            ? Number(totalOIP || 0)
+            : Number(totalDPC || 0) + Number(totalOIP || 0);
+        const qtdEquipes = Math.max(1, Math.ceil(totalPoliciais / 4));
+        const qtdEquipesExtenso = numeroPorExtensoAteVinte(qtdEquipes);
+        const dataOperacao = formatDate(formData.data_inicio);
+        const horarioApresentacao = `${formData.hora_inicio || '00:00'} às ${formData.hora_fim || '00:00'}`;
+        const localApresentacao = (formData.locais_briefing || []).find(Boolean) || 'local a definir';
+        const nomeOperacao = formData.nome || 'xxxx';
+
+        const texto = `Senhor(a) Diretor(a), Informamos a V. Exa. deflagração de Operação Policial que ocorrerá no dia ${dataOperacao}, razão pela qual solicitamos o envio de equipes operacionais de acordo com as especificações abaixo, às quais serão empregadas na operação ${nomeOperacao}.\n\n` +
+            `EQUIPES OPERACIONAIS SOLICITADAS\n${qtdEquipes} - ${qtdEquipesExtenso} equipes operacionais, em VTRs caracterizadas, compostas por 04 (quatro) policiais, devendo o efetivo se apresentar trajando fardamento completo, conforme Portaria Normativa 004/2024 – GAB/PCCE.\n\n` +
+            `APRESENTAÇÃO\nA apresentação será às ${horarioApresentacao}, no local ${localApresentacao}.`;
+
+        const doc = new Document({
+            sections: [
+                {
+                    properties: {},
+                    children: texto.split('\n\n').map((paragrafo) =>
+                        new Paragraph({
+                            children: [new TextRun(paragrafo)],
+                            spacing: { after: 220 },
+                        })
+                    ),
+                },
+            ],
+        });
+
+        const blob = await Packer.toBlob(doc);
+        const safeName = (formData.nome || 'operacao').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const dateSuffix = formData.data_inicio || new Date().toISOString().slice(0, 10);
+
+        saveAs(blob, `Solicitacao_Equipes_${safeName}_${dateSuffix}.docx`);
+    };
+
+    const handleSubmitComDocumento = async (e) => {
+        const sucesso = await handleSubmit(e);
+        if (!sucesso) return;
+
+        await gerarDocumentoSolicitacaoWord();
+        showNotification('Documento Word da solicitação gerado com sucesso!', 'success');
+    };
+
+    const gerarPdfDemanda = () => {
+        try {
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const maxTextWidth = 180;
+            let y = 18;
+
+            const ensureSpace = (requiredHeight = 8) => {
+                if (y + requiredHeight > pageHeight - 14) {
+                    pdf.addPage();
+                    y = 18;
+                }
+            };
+
+            const drawTitle = (title) => {
+                ensureSpace(10);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(12);
+                pdf.text(title, 14, y);
+                y += 6;
+            };
+
+            const drawLine = (label, value) => {
+                const content = `${label}: ${value || 'Nao informado'}`;
+                const lines = pdf.splitTextToSize(content, maxTextWidth);
+                ensureSpace(lines.length * 5 + 1);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(10);
+                pdf.text(lines, 14, y);
+                y += lines.length * 5;
+            };
+
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(16);
+            pdf.text('Cadastro de Operacao Policial - Nova Demanda', 14, y);
+            y += 7;
+
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(10);
+            pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, y);
+            y += 8;
+
+            drawTitle('1. Dados Gerais');
+            drawLine('Nome da operacao', formData.nome);
+            drawLine('Orgao solicitante', formData.orgao_solicitante);
+            drawLine('Delegacia responsavel', formData.delegacia_responsavel);
+            drawLine('Departamento do usuario', userDepartamento || 'Nao informado');
+            drawLine('Data de inicio', formatDate(formData.data_inicio));
+            drawLine('Hora de inicio', formData.hora_inicio || 'Nao informado');
+            drawLine('Hora de fim', formData.hora_fim || 'Nao informado');
+            drawLine('Status DTO', formData.status_dto || 'Aguardando Analise DTO');
+
+            y += 3;
+            drawTitle('2. Objetivo');
+            drawLine('Descricao', formData.objetivo || 'Nao informado');
+
+            y += 3;
+            drawTitle('3. Locais de Briefing');
+            drawLine('Locais', formatList(formData.locais_briefing));
+
+            y += 3;
+            drawTitle('4. Caracteristicas da Operacao');
+            drawLine('Tipos penais', formatList(formData.tipos_penais));
+            drawLine('Tipos penais - outros', formData.tipo_penal_outros || 'Nao informado');
+            drawLine('Modalidade - Busca e apreensao', formData.modalidades?.busca_apreensao ?? 0);
+            drawLine('Modalidade - Prisao preventiva', formData.modalidades?.prisao_preventiva ?? 0);
+            drawLine('Modalidade - Prisao temporaria', formData.modalidades?.prisao_temporaria ?? 0);
+            drawLine('Modalidade - Sequestro de bens', formData.modalidades?.sequestro_bens ?? 0);
+            drawLine('Modalidade - outros', formData.modalidade_outros || 'Nao informado');
+            drawLine('AIS de cumprimento', formatList(formData.ais_locais));
+            drawLine('Faccoes', formatList(formData.faccoes));
+            drawLine('Faccoes - outros', formData.faccao_outros || 'Nao informado');
+            drawLine('Alvos sensiveis', formatList(formData.alvos_sensiveis));
+            drawLine('Alvos sensiveis - outros', formData.alvos_sensiveis_outros || 'Nao informado');
+            drawLine('Apoio de outros departamentos', formData.apoio_outros_departamentos || 'Nao informado');
+
+            y += 3;
+            drawTitle('5. Apoio Operacional');
+            drawLine('Precisa de apoio operacional', formData.precisa_apoio_operacional ? 'Sim' : 'Nao');
+            drawLine('Apoio operacional DPC', formData.precisa_apoio_operacional ? (formData.apoio_operacional_dpc ?? 0) : 0);
+            drawLine('Apoio operacional OIP', formData.precisa_apoio_operacional ? (formData.apoio_operacional_oip ?? 0) : 0);
+            drawLine('Apoio cartorario DPC', formData.precisa_apoio_operacional ? (formData.apoio_cartorario_dpc ?? 0) : 0);
+            drawLine('Apoio cartorario OIP', formData.precisa_apoio_operacional ? (formData.apoio_cartorario_oip ?? 0) : 0);
+
+            y += 3;
+            drawTitle('6. Apoio de Outros Orgaos');
+            drawLine('Orgaos de apoio', formatList(formData.orgaos_apoio));
+
+            y += 3;
+            drawTitle('7. Efetivo Interno Previsto');
+            drawLine('Efetivo interno DPC', formData.efetivo_interno_dpc ?? 0);
+            drawLine('Efetivo interno OIP', formData.efetivo_interno_oip ?? 0);
+
+            y += 3;
+            drawTitle('8. Projecao de Efetivo e Custos');
+            drawLine('Total de DPCs previstos', totalDPC);
+            drawLine('Total de OIPs previstos', totalOIP);
+            drawLine('Horas trabalhadas (min)', horasTrabalhadas);
+            drawLine('Valor unitario DPC', `R$ ${Number(valorUnitarioDPC || 0).toFixed(2)}`);
+            drawLine('Valor unitario OIP', `R$ ${Number(valorUnitarioOIP || 0).toFixed(2)}`);
+            drawLine('Custo estimado da operacao', `R$ ${Number(custoEstimado || 0).toFixed(2)}`);
+
+            const totalPoliciais = Number(totalOIP || 0) > 0
+                ? Number(totalOIP || 0)
+                : Number(totalDPC || 0) + Number(totalOIP || 0);
+            const qtdEquipes = Math.max(1, Math.ceil(totalPoliciais / 4));
+            const qtdEquipesExtenso = numeroPorExtensoAteVinte(qtdEquipes);
+            const dataOperacao = formatDate(formData.data_inicio);
+            const localApresentacao = (formData.locais_briefing || []).find(Boolean) || 'local a definir';
+
+            y += 4;
+            drawTitle('9. Minuta de Solicitacao de Equipes');
+            const oficioParagrafos = [
+                `Senhor(a) Diretor(a), Informamos a V. Exa. deflagracao de Operacao Policial que ocorrera no dia ${dataOperacao}, razao pela qual solicitamos o envio de equipes operacionais de acordo com as especificacoes abaixo, as quais serao empregadas na operacao ${formData.nome || 'XXXX'}.`,
+                `EQUIPES OPERACIONAIS SOLICITADAS: ${qtdEquipes} (${qtdEquipesExtenso}) equipes operacionais, em VTRs caracterizadas, compostas por 04 (quatro) policiais, devendo o efetivo se apresentar trajando fardamento completo, conforme Portaria Normativa 004/2024 - GAB/PCCE.`,
+                `APRESENTACAO: As equipes deverao se apresentar em ${localApresentacao}, no dia ${dataOperacao}, para briefing operacional e posterior emprego na operacao.`
+            ];
+
+            oficioParagrafos.forEach((paragrafo) => {
+                const lines = pdf.splitTextToSize(paragrafo, maxTextWidth);
+                ensureSpace(lines.length * 5 + 2);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(10);
+                pdf.text(lines, 14, y);
+                y += lines.length * 5 + 2;
+            });
+
+            const safeName = (formData.nome || 'demanda').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const dateSuffix = formData.data_inicio || new Date().toISOString().slice(0, 10);
+            pdf.save(`Nova_Demanda_${safeName}_${dateSuffix}.pdf`);
+            showNotification('PDF da Nova Demanda gerado com sucesso!', 'success');
+        } catch (error) {
+            console.error('Erro ao gerar PDF da Nova Demanda:', error);
+            showNotification('Nao foi possivel gerar o PDF da Nova Demanda.', 'error');
+        }
+    };
+
     return (
         <div className="bg-gray-700 p-6 rounded-lg max-w-5xl mx-auto">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center space-x-2">
@@ -168,7 +458,7 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
                 <span>📋 Formulário — Cadastro de Operação Policial</span>
             </h2>
 
-            <form onSubmit={handleSubmit} className="space-y-8">
+            <form onSubmit={handleSubmitComDocumento} className="space-y-8">
                 {/* 1. Dados Gerais */}
                 <section className="bg-gray-600 p-6 rounded-lg">
                     <h3 className="text-xl font-bold text-white mb-4">1. Dados Gerais</h3>
@@ -249,16 +539,9 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
                         </div>
                         <div>
                             <label className="block text-gray-300 mb-2">Status DTO</label>
-                            <select
-                                value={formData.status_dto}
-                                onChange={(e) => setFormData({ ...formData, status_dto: e.target.value })}
-                                className="w-full bg-gray-700 text-white rounded px-4 py-2 border border-gray-500"
-                            >
-                                <option value="Aguardando Análise DTO">Aguardando Análise DTO</option>
-                                <option value="Em Análise">Em Análise</option>
-                                <option value="Aprovada">Aprovada</option>
-                                <option value="Rejeitada">Rejeitada</option>
-                            </select>
+                            <div className="w-full bg-gray-800 text-gray-200 rounded px-4 py-2 border border-gray-600">
+                                Aguardando Análise DTO
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -669,7 +952,15 @@ export function NovaDemandaView({ formData, setFormData, handleSubmit, showNotif
                 </section>
 
                 {/* Botões */}
-                <div className="flex justify-end space-x-4">
+                <div className="flex flex-wrap justify-end gap-3">
+                    <button
+                        type="button"
+                        onClick={gerarPdfDemanda}
+                        className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg text-white font-semibold flex items-center space-x-2"
+                    >
+                        <Download size={18} />
+                        <span>Baixar PDF</span>
+                    </button>
                     <button
                         type="submit"
                         className="bg-cyan-600 hover:bg-cyan-700 px-6 py-3 rounded-lg text-white font-semibold"
