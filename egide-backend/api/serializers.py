@@ -185,38 +185,84 @@ class EquipeSerializer(serializers.ModelSerializer):
             resolved.append(self._resolve_or_create_policial(matricula, nome, delegacia))
         return resolved
 
-    def _user_can_bypass_single_delegacia_weekly_limit(self):
+    def _get_request_profile(self):
         request = self.context.get('request')
         user = getattr(request, 'user', None)
 
         if not user or not user.is_authenticated:
-            return False
+            return None
 
         try:
-            perfil = user.policial.perfil
+            return user.policial.perfil
         except Exception:
+            return None
+
+    def _user_is_admin(self):
+        perfil = self._get_request_profile()
+        return bool(perfil and perfil.is_admin)
+
+    def _user_can_bypass_single_delegacia_weekly_limit(self):
+        perfil = self._get_request_profile()
+        return bool(perfil and (perfil.is_admin or perfil.is_coordenador))
+
+    def _department_requires_weekly_limit(self, departamento):
+        if not departamento:
             return False
 
-        return perfil.is_admin or perfil.is_coordenador
+        if str(getattr(departamento, 'sigla', '')).upper() == 'DHPP':
+            return True
 
-    def _validate_single_delegacia_weekly_limit(self, vaga, membros, instance=None):
+        return departamento.delegacias.filter(ativo=True).count() == 1
+
+    def _validate_day_shift_admin_only(self, vaga):
+        if not vaga:
+            return
+
+        if str(getattr(vaga, 'turno', '')).lower() != 'day':
+            return
+
+        if self._user_is_admin():
+            return
+
+        raise serializers.ValidationError(
+            'Vagas diurnas de 12 horas só podem ser preenchidas por administrador.'
+        )
+
+    def _build_unique_candidates(self, membros, chefe=None):
+        candidatos = []
+        if chefe:
+            candidatos.append(chefe)
+        if membros:
+            candidatos.extend(list(membros))
+
+        vistos = set()
+        unicos = []
+        for policial in candidatos:
+            if not policial or policial.id in vistos:
+                continue
+            vistos.add(policial.id)
+            unicos.append(policial)
+        return unicos
+
+    def _validate_single_delegacia_weekly_limit(self, vaga, membros, chefe=None, instance=None):
         if self._user_can_bypass_single_delegacia_weekly_limit():
             return
 
-        if not vaga or not vaga.data or not membros:
+        if not vaga or not vaga.data:
+            return
+
+        unicos = self._build_unique_candidates(membros, chefe=chefe)
+        if not unicos:
             return
 
         week_start = vaga.data - timedelta(days=vaga.data.weekday())
         week_end = week_start + timedelta(days=6)
 
-        for policial in membros:
+        for policial in unicos:
             delegacia = getattr(policial, 'delegacia', None)
             departamento = getattr(delegacia, 'departamento', None)
 
-            if not departamento:
-                continue
-
-            if departamento.delegacias.filter(ativo=True).count() != 1:
+            if not self._department_requires_weekly_limit(departamento):
                 continue
 
             equipes_semana = Equipe.objects.filter(
@@ -284,9 +330,12 @@ class EquipeSerializer(serializers.ModelSerializer):
         membros_matriculas = validated_data.pop('membros_matriculas', None)
         membros_nomes = validated_data.pop('membros_nomes', {}) or {}
         chefe_matricula = self._normalize_matricula(validated_data.pop('chefe_matricula', ''))
+        vaga = validated_data.get('vaga')
+
+        self._validate_day_shift_admin_only(vaga)
 
         if membros_matriculas:
-            delegacia = validated_data.get('vaga').delegacia if validated_data.get('vaga') else None
+            delegacia = vaga.delegacia if vaga else None
             membros = self._resolve_membros_by_matricula(membros_matriculas, membros_nomes, delegacia)
 
         if not validated_data.get('chefe'):
@@ -296,11 +345,15 @@ class EquipeSerializer(serializers.ModelSerializer):
                 validated_data['chefe'] = membros[0]
 
         self._validate_daily_unique_allocation(
-            validated_data.get('vaga'),
+            vaga,
             membros,
             chefe=validated_data.get('chefe'),
         )
-        self._validate_single_delegacia_weekly_limit(validated_data.get('vaga'), membros)
+        self._validate_single_delegacia_weekly_limit(
+            vaga,
+            membros,
+            chefe=validated_data.get('chefe'),
+        )
 
         instance = super().create(validated_data)
         if membros is not None:
@@ -320,6 +373,7 @@ class EquipeSerializer(serializers.ModelSerializer):
             membros = self._resolve_membros_by_matricula(membros_matriculas, membros_nomes, delegacia)
 
         vaga = validated_data.get('vaga', instance.vaga)
+        self._validate_day_shift_admin_only(vaga)
         membros_efetivos = membros if membros is not None else list(instance.membros.all())
 
         if not validated_data.get('chefe') and chefe_matricula and membros:
@@ -327,7 +381,12 @@ class EquipeSerializer(serializers.ModelSerializer):
 
         chefe_efetivo = validated_data.get('chefe', instance.chefe)
         self._validate_daily_unique_allocation(vaga, membros_efetivos, chefe=chefe_efetivo, instance=instance)
-        self._validate_single_delegacia_weekly_limit(vaga, membros_efetivos, instance=instance)
+        self._validate_single_delegacia_weekly_limit(
+            vaga,
+            membros_efetivos,
+            chefe=chefe_efetivo,
+            instance=instance,
+        )
 
         updated = super().update(instance, validated_data)
         if membros is not None:

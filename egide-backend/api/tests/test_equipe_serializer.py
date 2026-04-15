@@ -33,6 +33,19 @@ class EquipeSerializerWeeklyLimitTests(TestCase):
             departamento=self.departamento_multi,
         )
 
+        self.departamento_dhpp = Departamento.objects.create(
+            nome='Departamento de Homicídios e Proteção à Pessoa',
+            sigla='DHPP',
+        )
+        self.delegacia_dhpp_a = Delegacia.objects.create(
+            nome='DHPP A',
+            departamento=self.departamento_dhpp,
+        )
+        self.delegacia_dhpp_b = Delegacia.objects.create(
+            nome='DHPP B',
+            departamento=self.departamento_dhpp,
+        )
+
         self.policial_user = User.objects.create_user(
             username='policial',
             email='policial@example.com',
@@ -77,6 +90,21 @@ class EquipeSerializerWeeklyLimitTests(TestCase):
             email='policial.multi.corp@example.com',
         )
         PerfilPolicial.objects.create(policial=self.policial_multi, tipo='policial')
+
+        self.policial_dhpp_user = User.objects.create_user(
+            username='policial_dhpp',
+            email='policial.dhpp@example.com',
+        )
+        self.policial_dhpp = Policial.objects.create(
+            usuario=self.policial_dhpp_user,
+            matricula='22334455',
+            nome='Policial DHPP',
+            classe='Praça',
+            cargo='Policial Civil',
+            delegacia=self.delegacia_dhpp_a,
+            email='policial.dhpp.corp@example.com',
+        )
+        PerfilPolicial.objects.create(policial=self.policial_dhpp, tipo='policial')
 
     def _build_serializer(self, user, data):
         request = SimpleNamespace(user=user)
@@ -157,3 +185,123 @@ class EquipeSerializerWeeklyLimitTests(TestCase):
         equipe = serializer.save()
 
         self.assertEqual(equipe.membros.count(), 1)
+
+    def test_bloqueia_segunda_candidatura_na_mesma_semana_para_dhpp_mesmo_com_multiplas_delegacias(self):
+        vaga_inicial = self._create_vaga(self.delegacia_dhpp_a, '2026-03-23', 'night')
+        vaga_segunda = self._create_vaga(self.delegacia_dhpp_b, '2026-03-25', 'night')
+
+        equipe_existente = Equipe.objects.create(vaga=vaga_inicial, chefe=self.policial_dhpp, status='Em Análise')
+        equipe_existente.membros.add(self.policial_dhpp)
+
+        serializer = self._build_serializer(
+            self.policial_dhpp_user,
+            {
+                'vaga': vaga_segunda.id,
+                'chefe': self.policial_dhpp.id,
+                'membros': [self.policial_dhpp.id],
+                'status': 'Em Análise',
+            },
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        with self.assertRaises(serializers.ValidationError) as exc:
+            serializer.save()
+
+        self.assertIn('só pode se candidatar uma vez por semana', str(exc.exception))
+
+    def test_bloqueia_preenchimento_de_vaga_diurna_por_nao_admin(self):
+        vaga_diurna = self._create_vaga(self.delegacia_multi_a, '2026-03-24', 'day')
+
+        serializer = self._build_serializer(
+            self.policial_multi_user,
+            {
+                'vaga': vaga_diurna.id,
+                'chefe': self.policial_multi.id,
+                'membros': [self.policial_multi.id],
+                'status': 'Em Análise',
+            },
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        with self.assertRaises(serializers.ValidationError) as exc:
+            serializer.save()
+
+        self.assertIn('Vagas diurnas de 12 horas só podem ser preenchidas por administrador', str(exc.exception))
+
+    def test_bloqueia_segunda_candidatura_semanal_quando_policial_foi_apenas_chefe(self):
+        vaga_dia_16 = self._create_vaga(self.delegacia_dhpp_a, '2026-03-16', 'night')
+        vaga_dia_17 = self._create_vaga(self.delegacia_dhpp_b, '2026-03-17', 'night')
+
+        policial_apoio = Policial.objects.create(
+            usuario=User.objects.create_user(username='apoio_dhpp', email='apoio.dhpp@example.com'),
+            matricula='33445566',
+            nome='Policial Apoio DHPP',
+            classe='Praça',
+            cargo='Policial Civil',
+            delegacia=self.delegacia_dhpp_a,
+            email='apoio.dhpp.corp@example.com',
+        )
+        PerfilPolicial.objects.create(policial=policial_apoio, tipo='policial')
+
+        equipe_existente = Equipe.objects.create(vaga=vaga_dia_16, chefe=self.policial_dhpp, status='Em Análise')
+        equipe_existente.membros.add(policial_apoio)
+
+        serializer = self._build_serializer(
+            self.policial_dhpp_user,
+            {
+                'vaga': vaga_dia_17.id,
+                'chefe': self.policial_dhpp.id,
+                'membros': [policial_apoio.id],
+                'status': 'Em Análise',
+            },
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        with self.assertRaises(serializers.ValidationError) as exc:
+            serializer.save()
+
+        self.assertIn('só pode se candidatar uma vez por semana', str(exc.exception))
+
+    def test_permite_preenchimento_de_vaga_diurna_por_admin(self):
+        vaga_diurna = self._create_vaga(self.delegacia_multi_a, '2026-03-24', 'day')
+
+        serializer = self._build_serializer(
+            self.admin_user,
+            {
+                'vaga': vaga_diurna.id,
+                'chefe': self.policial_multi.id,
+                'membros': [self.policial_multi.id],
+                'status': 'Aprovada',
+            },
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        equipe = serializer.save()
+
+        self.assertEqual(equipe.chefe, self.policial_multi)
+        self.assertEqual(equipe.vaga, vaga_diurna)
+
+    def test_bloqueia_segunda_candidatura_quando_policial_esta_apenas_como_chefe(self):
+        vaga_inicial = self._create_vaga(self.delegacia_unica, '2026-03-16', 'night')
+        vaga_segunda = self._create_vaga(self.delegacia_unica, '2026-03-17', 'night')
+
+        outro_membro = self.policial_multi
+
+        equipe_existente = Equipe.objects.create(vaga=vaga_inicial, chefe=self.policial, status='Em Análise')
+        equipe_existente.membros.add(outro_membro)
+
+        serializer = self._build_serializer(
+            self.policial_user,
+            {
+                'vaga': vaga_segunda.id,
+                'chefe': self.policial.id,
+                'membros': [outro_membro.id],
+                'status': 'Em Análise',
+            },
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        with self.assertRaises(serializers.ValidationError) as exc:
+            serializer.save()
+
+        self.assertIn('só pode se candidatar uma vez por semana', str(exc.exception))
