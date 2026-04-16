@@ -261,6 +261,7 @@ export const ORGANOGRAMA = {
         "Delegacia de Polícia Civil de Repressão às Ações Criminosas Organizadas do Interior Sul"
     ],
     "ASJ": ["Assessoria Jurídica"],
+    "ASCOI": ["ASCOI - Assessoria de Controle Interno"],
     "COGEP": [], 
     "COTIC": [], 
     "COLOG": ["COLOG"], 
@@ -546,7 +547,8 @@ export const DEPARTMENTS = {
     "COAFI": ["COAFI"],
     "CIOPAER": ["CIOPAER"],
     "ASCON": ["ASCON"],
-    "COREG": ["COREG"]
+    "COREG": ["COREG"],
+    "ASCOI": ["ASCOI - Assessoria de Controle Interno"]
 };
 
 addNucleoOperacionalOption(DEPARTMENTS);

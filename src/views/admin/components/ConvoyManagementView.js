@@ -43,11 +43,6 @@ const getTeamOperationDateStringForPdf = (team) => {
     const parsed = parseDateSafe(rawDate);
     if (!parsed || Number.isNaN(parsed.getTime())) return '';
 
-    const shiftType = String(team?.vaga_info?.turno || team?.vagaShiftType || '').toLowerCase();
-    if (shiftType === 'night') {
-        parsed.setDate(parsed.getDate() - 1);
-    }
-
     return formatLocalDate(parsed);
 };
 
@@ -327,13 +322,6 @@ export const ConvoyManagementView = ({ teams, convoys, weekId, showNotification,
 
         const parsedDate = parseDateSafe(rawDate);
         if (!parsedDate || Number.isNaN(parsedDate.getTime())) return null;
-
-        const shiftType = String(team?.vaga_info?.turno || team?.vagaShiftType || '').toLowerCase();
-        if (shiftType === 'night') {
-            const operationalDate = new Date(parsedDate);
-            operationalDate.setDate(operationalDate.getDate() - 1);
-            return operationalDate;
-        }
 
         return parsedDate;
     };

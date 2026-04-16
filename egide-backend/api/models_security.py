@@ -51,6 +51,7 @@ class PerfilDepartamento(models.Model):
         ('no_dpi_norte', 'N.O DPI NORTE - DPI NORTE'),
         ('no_depatri', 'N.O DEPATRI - DEPATRI'),
         ('no_dra', 'N.O DRA - DRA'),
+        ('ascoi', 'ASCOI - Assessoria de Controle Interno'),
     ]
 
     # Núcleos operacionais são lotações internas e herdam o departamento-mãe.
