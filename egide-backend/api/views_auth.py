@@ -18,12 +18,38 @@ from django.utils.text import slugify
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from urllib.parse import urlencode
+import re
 import logging
 from api.models_security import LogAuditoria, PerfilDepartamento, PerfilDelegacia
 from api.models import Delegacia, Policial, Departamento
 
 
 logger = logging.getLogger(__name__)
+MATRICULA_PATTERN = re.compile(r'^\d{7}[\dX]$')
+
+
+def _normalize_matricula(value):
+    raw = str(value or '').strip().upper()
+    return ''.join(ch for ch in raw if ch.isdigit() or ch == 'X')
+
+
+def _is_console_email_backend():
+    backend = str(getattr(settings, 'EMAIL_BACKEND', '') or '')
+    return backend == 'django.core.mail.backends.console.EmailBackend'
+
+
+def _build_password_reset_payload(user):
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+
+    frontend_url = str(getattr(settings, 'FRONTEND_URL', '') or '').rstrip('/')
+    reset_path = str(getattr(settings, 'RESET_PASSWORD_PATH', '/reset-password') or '/reset-password')
+    if not reset_path.startswith('/'):
+        reset_path = f'/{reset_path}'
+
+    query = urlencode({'uid': uid, 'token': token})
+    reset_link = f'{frontend_url}{reset_path}?{query}' if frontend_url else ''
+    return uid, token, reset_link
 
 
 def _normalize_text(value):
@@ -196,7 +222,7 @@ def register_view(request):
     email = (request.data.get('email') or '').strip().lower()
     password = request.data.get('password') or ''
     nome = (request.data.get('nome') or '').strip()
-    matricula = ''.join(filter(str.isdigit, str(request.data.get('matricula') or '')))
+    matricula = _normalize_matricula(request.data.get('matricula'))
     telefone = request.data.get('telefone') or ''
     cargo_front = (request.data.get('cargo') or '').strip().upper()
     classe_front = (request.data.get('classe') or '').strip()
@@ -220,8 +246,11 @@ def register_view(request):
     if len(password) < 6:
         return Response({'error': 'A senha deve ter no mínimo 6 caracteres'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if len(matricula) != 8:
-        return Response({'error': 'Matrícula deve ter 8 dígitos'}, status=status.HTTP_400_BAD_REQUEST)
+    if not MATRICULA_PATTERN.fullmatch(matricula):
+        return Response(
+            {'error': 'Matrícula inválida. Use 8 caracteres (7 números e o último pode ser X).'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     # Se o frontend não enviar username, usa o email como base.
     # Isso evita colisões comuns de prefixo do email (ex.: joao@gmail e joao@pcce).
@@ -418,16 +447,7 @@ def password_reset_view(request):
 
     user = User.objects.filter(email__iexact=email).first()
     if user:
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = default_token_generator.make_token(user)
-
-        frontend_url = str(getattr(settings, 'FRONTEND_URL', '') or '').rstrip('/')
-        reset_path = str(getattr(settings, 'RESET_PASSWORD_PATH', '/reset-password') or '/reset-password')
-        if not reset_path.startswith('/'):
-            reset_path = f'/{reset_path}'
-
-        query = urlencode({'uid': uid, 'token': token})
-        reset_link = f'{frontend_url}{reset_path}?{query}' if frontend_url else ''
+        uid, token, reset_link = _build_password_reset_payload(user)
 
         subject = 'Redefinição de senha - EGIDE'
         if reset_link:
@@ -449,6 +469,15 @@ def password_reset_view(request):
                 f'Se você não solicitou essa alteração, ignore este email.'
             )
 
+        if settings.DEBUG or _is_console_email_backend():
+            return Response({
+                'message': 'Link de redefinição gerado com sucesso.',
+                'reset_link': reset_link,
+                'uid': uid,
+                'token': token,
+                'delivery': 'debug',
+            })
+
         try:
             send_mail(
                 subject=subject,
@@ -458,12 +487,15 @@ def password_reset_view(request):
                 fail_silently=False,
             )
         except Exception:
-            # Não expõe falha interna ao cliente para evitar enumeração de contas
-            # e impedir timeout no frontend por indisponibilidade do provedor SMTP.
             logger.exception('Falha ao enviar email de redefinição para %s', email)
+            return Response(
+                {'error': 'Não foi possível enviar o email de redefinição no momento.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         return Response({
             'message': 'Se o email existir, um link de redefinição foi enviado.',
+            'delivery': 'email',
         })
 
     return Response({'message': 'Se o email existir, um link de redefinição foi enviado.'})

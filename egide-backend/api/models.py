@@ -2,6 +2,12 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator
 
+
+MATRICULA_VALIDATOR = RegexValidator(
+    r'^\d{7}[\dX]$',
+    'Matrícula deve ter 8 caracteres (7 números e o último pode ser X)'
+)
+
 class Departamento(models.Model):
     """Departamentos da Polícia Civil (Delegacia de Polícia, Departamento Especializado, etc)"""
     nome = models.CharField(max_length=255, unique=True)
@@ -57,7 +63,7 @@ class Policial(models.Model):
     matricula = models.CharField(
         max_length=8,
         unique=True,
-        validators=[RegexValidator(r'^\d{8}$', 'Matrícula deve ter 8 dígitos')]
+        validators=[MATRICULA_VALIDATOR]
     )
     nome = models.CharField(max_length=255)
     classe = models.CharField(max_length=20, choices=CLASSES)
