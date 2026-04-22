@@ -22,15 +22,11 @@ export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
         try {
             const response = await apiClient.requestPasswordReset(trimmedEmail);
 
-            if (response?.reset_link) {
-                showNotification("Link de redefinição gerado com sucesso.", "success");
-                if (typeof window !== 'undefined' && window.location) {
-                    window.location.assign(response.reset_link);
-                }
-                return;
+            if (response?.delivery === 'email' || response?.delivery === 'debug' || response?.message) {
+                showNotification("Se o email existir, enviamos um link para redefinição de senha. Verifique sua caixa de entrada.", "success");
+            } else {
+                showNotification("Solicitação enviada. Verifique seu email para redefinir a senha.", "success");
             }
-
-            showNotification("Email de redefinição de senha enviado! Verifique sua caixa de entrada.", "success");
             setAuthScreen('login');
         } catch (error) {
             console.error("Erro ao redefinir senha:", error);
