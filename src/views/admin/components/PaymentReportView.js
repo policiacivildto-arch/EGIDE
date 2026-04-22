@@ -6,6 +6,7 @@ import { apiClient } from '../../../config/api';
 import { 
     displayMatricula 
 } from '../../../utils/helpers'
+import { calculateShiftCost } from '../../../utils/calculateCost';
 import { LoadingSpinner } from '../../../components/ui/Shared';
 import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -52,6 +53,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     const [substitutions, setSubstitutions] = useState({});
     const [substituteSelectorOpen, setSubstituteSelectorOpen] = useState({});
     const [substituteSearchTerms, setSubstituteSearchTerms] = useState({});
+    const [holidayDateStrings, setHolidayDateStrings] = useState([]);
 
     // Notifica AdminDashboard quando as datas mudam para sincronizar com OperationCostView
     useEffect(() => {
@@ -110,6 +112,63 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         if (status === 'substituto') return 'Substituto';
         return 'Pendente';
     };
+
+    const getMemberStatusKey = (teamId, member) => `${teamId}-${member?.id || member?.uid || member?.matricula || member?.nome}`;
+
+    const formatCurrencyBRL = (value) =>
+        Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    const normalizeMatriculaKey = (value) => String(value || '').trim().toUpperCase().replaceAll(/[^0-9X]/g, '');
+    const normalizeNameKey = (value) => String(value || '')
+        .normalize('NFD')
+        .replaceAll(/[\u0300-\u036f]/g, '')
+        .replaceAll(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+
+    const usersById = useMemo(() => {
+        const map = new Map();
+        allUsers.forEach((u) => {
+            if (u?.id !== undefined && u?.id !== null) {
+                map.set(String(u.id), u);
+            }
+        });
+        return map;
+    }, [allUsers]);
+
+    const usersByMatricula = useMemo(() => {
+        const map = new Map();
+        allUsers.forEach((u) => {
+            const key = normalizeMatriculaKey(u?.matricula);
+            if (key) map.set(key, u);
+        });
+        return map;
+    }, [allUsers]);
+
+    const usersByName = useMemo(() => {
+        const map = new Map();
+        allUsers.forEach((u) => {
+            const key = normalizeNameKey(getUserName(u));
+            if (key) map.set(key, u);
+        });
+        return map;
+    }, [allUsers]);
+
+    const resolvedHolidayList = useMemo(() => {
+        const unique = new Set();
+
+        holidayDateStrings.forEach((item) => {
+            const dateObj = parseDateSafe(item);
+            if (!dateObj || Number.isNaN(dateObj.getTime())) return;
+
+            const dia = String(dateObj.getDate()).padStart(2, '0');
+            const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const ano = dateObj.getFullYear();
+            unique.add(`${dia}/${mes}/${ano}`);
+        });
+
+        return [...unique];
+    }, [holidayDateStrings]);
 
     const isGenericDepartmentLabel = useCallback((value) => {
         const normalized = String(value || '').trim().toUpperCase();
@@ -286,7 +345,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         setServices([]);
         setConvoysForPeriod([]);
         try {
-            const [teamsResponse, convoysResponse, vagasResponse] = await Promise.all([
+            const [teamsResponse, convoysResponse, vagasResponse, holidaysResponse] = await Promise.all([
                 apiClient.getAllTeams({
                     'vaga__data__gte': startDate,
                     'vaga__data__lte': endDate,
@@ -295,6 +354,10 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                 apiClient.getAllVagas({
                     'data__gte': startDate,
                     'data__lte': endDate,
+                }),
+                apiClient.getHolidays({
+                    data__gte: startDate,
+                    data__lte: endDate,
                 }),
             ]);
 
@@ -307,6 +370,9 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             const fetchedVagas = Array.isArray(vagasResponse)
                 ? vagasResponse
                 : (vagasResponse?.results || []);
+            const holidayRows = Array.isArray(holidaysResponse)
+                ? holidaysResponse
+                : (holidaysResponse?.results || []);
 
             const vagaMap = fetchedVagas.reduce((acc, vaga) => {
                 const key = String(vaga?.id || '').trim();
@@ -327,15 +393,69 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             setServices(fetchedServices);
             setConvoysForPeriod(filteredConvoys);
             setVagaDelegaciaById(vagaMap);
+            setHolidayDateStrings(holidayRows.map((item) => item?.data).filter(Boolean));
 
         } catch (error) {
             console.error("Erro ao buscar serviços:", error);
             showNotification("Falha ao carregar relatório.", "error");
             setVagaDelegaciaById({});
+            setHolidayDateStrings([]);
         } finally {
             setLoading(false);
         }
     }, [startDate, endDate, showNotification]);
+
+    const resolveUserForMember = useCallback((member) => {
+        if (!member) return null;
+
+        if (member?.id !== undefined && member?.id !== null) {
+            const byId = usersById.get(String(member.id));
+            if (byId) return byId;
+        }
+
+        const matKey = normalizeMatriculaKey(member?.matricula);
+        if (matKey && usersByMatricula.has(matKey)) {
+            return usersByMatricula.get(matKey);
+        }
+
+        const nameKey = normalizeNameKey(getUserName(member));
+        if (nameKey && usersByName.has(nameKey)) {
+            return usersByName.get(nameKey);
+        }
+
+        return null;
+    }, [usersById, usersByMatricula, usersByName]);
+
+    const calculateMemberCostByStatus = useCallback((teamRow, member) => {
+        const key = getMemberStatusKey(teamRow.id, member);
+        const status = attendanceStatus[key] || 'pendente';
+
+        if (status === 'falta') {
+            return 0;
+        }
+
+        let effectiveUser = resolveUserForMember(member);
+
+        if (status === 'substituto') {
+            const substituteId = substitutions[key]?.id;
+            if (substituteId !== undefined && substituteId !== null) {
+                const byId = usersById.get(String(substituteId));
+                if (byId) effectiveUser = byId;
+            }
+        }
+
+        if (!effectiveUser?.cargo || !effectiveUser?.classe) {
+            return 0;
+        }
+
+        return calculateShiftCost(
+            effectiveUser,
+            teamRow.dateObj,
+            teamRow.startTime,
+            teamRow.endTime,
+            resolvedHolidayList,
+        );
+    }, [attendanceStatus, substitutions, usersById, resolveUserForMember, resolvedHolidayList]);
 
     useEffect(() => {
         if (startDate && endDate) {
@@ -456,6 +576,21 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         return [...teamRows, ...supervisionRows].sort((a, b) => b.dateObj - a.dateObj);
     }, [allUsers, convoysByDate, convoysForPeriod, resolveTeamName, services]);
 
+    const totalCostByTeam = useMemo(() => {
+        const map = {};
+        frequencyRows.forEach((teamRow) => {
+            const total = (teamRow.members || []).reduce((acc, member) => {
+                return acc + calculateMemberCostByStatus(teamRow, member);
+            }, 0);
+            map[teamRow.id] = total;
+        });
+        return map;
+    }, [frequencyRows, calculateMemberCostByStatus]);
+
+    const grandTotalCost = useMemo(() => {
+        return Object.values(totalCostByTeam).reduce((acc, value) => acc + Number(value || 0), 0);
+    }, [totalCostByTeam]);
+
     useEffect(() => {
         const loadPersistedAttendance = async () => {
             if (frequencyRows.length === 0) {
@@ -485,8 +620,6 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     const toggleTeamExpand = (teamId) => {
         setExpandedTeams((prev) => ({ ...prev, [teamId]: !prev[teamId] }));
     };
-
-    const getMemberStatusKey = (teamId, member) => `${teamId}-${member?.id || member?.uid || member?.matricula || member?.nome}`;
 
     const setMemberStatus = async (teamRow, member, status) => {
         const key = getMemberStatusKey(teamRow.id, member);
@@ -589,6 +722,8 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                         'Matrícula': displayMatricula(member?.matricula || ''),
                         'Status': statusLabel,
                         'Substituto Por': substitute ? `${substitute.nome} (${displayMatricula(substitute.matricula)})` : '',
+                        'Custo (R$)': Number(calculateMemberCostByStatus(teamRow, member) || 0),
+                        'Custo Equipe (R$)': Number(totalCostByTeam[teamRow.id] || 0),
                     };
                 });
             } else {
@@ -598,8 +733,26 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                     'Matrícula': '',
                     'Status': 'N/A',
                     'Substituto Por': '',
+                    'Custo (R$)': 0,
+                    'Custo Equipe (R$)': Number(totalCostByTeam[teamRow.id] || 0),
                 }];
             }
+        });
+
+        exportData.push({
+            'Data': '',
+            'Equipe': '',
+            'Comboio': '',
+            'Área': '',
+            'Telefone': '',
+            'Hora Início': '',
+            'Hora Fim': '',
+            'Integrante': 'TOTAL GERAL',
+            'Matrícula': '',
+            'Status': '',
+            'Substituto Por': '',
+            'Custo (R$)': Number(grandTotalCost || 0),
+            'Custo Equipe (R$)': '',
         });
 
         const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -617,6 +770,8 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             { wch: 12 },  // Matrícula
             { wch: 15 },  // Status
             { wch: 30 },  // Substituto Por
+            { wch: 14 },  // Custo (R$)
+            { wch: 16 },  // Custo Equipe (R$)
         ];
 
         const workbook = XLSX.utils.book_new();
@@ -630,6 +785,14 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     return (
         <div>
             <h3 className="text-2xl font-bold mb-4">Frequência Operacional (Atualizada v2)</h3>
+            <div className="mb-4 flex flex-wrap gap-3 items-center">
+                <div className="px-4 py-2 rounded-lg bg-emerald-900/40 border border-emerald-700 text-emerald-100 text-sm">
+                    Custo total estimado: <strong>{formatCurrencyBRL(grandTotalCost)}</strong>
+                </div>
+                <div className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 text-xs">
+                    Regras aplicadas: OIP (A-D) dia/noite e DPC Especial dia/noite; fim de semana/feriado = valor noturno.
+                </div>
+            </div>
             <div className="bg-gray-800 p-4 rounded-lg mb-6 flex items-end space-x-4">
                 <div><label htmlFor="payment-report-start-date" className="block text-sm font-bold mb-1">Data de Início</label><input id="payment-report-start-date" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md" /></div>
                 <div><label htmlFor="payment-report-end-date" className="block text-sm font-bold mb-1">Data de Fim</label><input id="payment-report-end-date" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-2 bg-gray-700 rounded-md" /></div>
@@ -652,11 +815,12 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                             <th className="px-4 py-2">Área</th>
                             <th className="px-4 py-2">Telefone</th>
                             <th className="px-4 py-2">Integrantes</th>
+                            <th className="px-4 py-2">Custo Equipe</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan="6"><LoadingSpinner /></td></tr>
+                            <tr><td colSpan="7"><LoadingSpinner /></td></tr>
                         ) : frequencyRows.length > 0 ? (
                             frequencyRows.map(teamRow => {
                                 const isExpanded = Boolean(expandedTeams[teamRow.id]);
@@ -680,11 +844,12 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                                     </button>
                                                 </div>
                                             </td>
+                                            <td className="px-4 py-2 font-semibold text-emerald-300">{formatCurrencyBRL(totalCostByTeam[teamRow.id])}</td>
                                         </tr>
 
                                         {isExpanded && (
                                             <tr className="bg-gray-900/40 border-b border-gray-700">
-                                                <td colSpan="6" className="px-4 py-3">
+                                                <td colSpan="7" className="px-4 py-3">
                                                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                                                         <div className="text-xs text-gray-400">
                                                             Janela para registrar presença/substituição: {windowLabel} {canMarkActions ? '✅ permitido' : '🔒 fora do horário - ações bloqueadas'}
@@ -709,6 +874,9 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                                                                     Substituído por: {substitute.nome} ({displayMatricula(substitute.matricula)})
                                                                                 </div>
                                                                             )}
+                                                                            <div className="text-xs text-emerald-300 mt-1">
+                                                                                Custo estimado: {formatCurrencyBRL(calculateMemberCostByStatus(teamRow, member))}
+                                                                            </div>
                                                                         </div>
                                                                         <div className="flex items-center gap-2">
                                                                             <span className={`px-2 py-1 rounded text-xs font-bold ${getStatusBadgeClass(status)}`}>
@@ -771,7 +939,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                                 );
                             })
                         ) : (
-                            <tr><td colSpan="6" className="text-center p-4 text-gray-500">Nenhuma equipe encontrada para o período selecionado.</td></tr>
+                            <tr><td colSpan="7" className="text-center p-4 text-gray-500">Nenhuma equipe encontrada para o período selecionado.</td></tr>
                         )}
                     </tbody>
                 </table>
