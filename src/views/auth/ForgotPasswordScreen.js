@@ -24,7 +24,9 @@ export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
 
             if (response?.reset_link) {
                 showNotification("Link de redefinição gerado com sucesso.", "success");
-                globalThis.location.assign(response.reset_link);
+                if (typeof window !== 'undefined' && window.location) {
+                    window.location.assign(response.reset_link);
+                }
                 return;
             }
 
