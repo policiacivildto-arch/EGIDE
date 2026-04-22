@@ -7,6 +7,46 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_DJAN
 const API_TIMEOUT = 30000; // 30 segundos
 const CONVOY_REPORTS_STORAGE_KEY = 'egide_convoy_reports_local';
 
+const PREFERRED_ERROR_KEYS = ['detail', 'error', 'message', 'msg'];
+
+const getApiErrorMessage = (error, fallbackMessage) => {
+  if (!error || typeof error !== 'object') {
+    return fallbackMessage;
+  }
+
+  if (Array.isArray(error.non_field_errors) && error.non_field_errors.length > 0) {
+    return error.non_field_errors[0] || fallbackMessage;
+  }
+
+  for (const key of PREFERRED_ERROR_KEYS) {
+    const value = error[key];
+    if (Array.isArray(value) && value.length > 0) {
+      return String(value[0]);
+    }
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+  }
+
+  const keys = Object.keys(error);
+  if (!keys.length) {
+    return fallbackMessage;
+  }
+
+  const firstKey = keys[0];
+  const firstValue = error[firstKey];
+  if (Array.isArray(firstValue)) {
+    const firstArrayValue = firstValue[0];
+    return firstArrayValue ? `${firstKey}: ${firstArrayValue}` : fallbackMessage;
+  }
+
+  if (firstValue !== null && firstValue !== undefined && String(firstValue).trim()) {
+    return `${firstKey}: ${firstValue}`;
+  }
+
+  return fallbackMessage;
+};
+
 /**
  * Classe para gerenciar requisições à API Django
  */
@@ -109,20 +149,8 @@ class DjangoApiClient {
           this.clearAuthStorage();
         }
 
-        // Trata erros de validação que vêm em formato de objeto
-        let errorMsg = error.detail || `Erro HTTP ${response.status}`;
-        if (error.non_field_errors && Array.isArray(error.non_field_errors)) {
-          errorMsg = error.non_field_errors[0] || errorMsg;
-        } else if (typeof error === 'object' && Object.keys(error).length > 0) {
-          // Se tem campos específicos, mostra o primeiro
-          const firstKey = Object.keys(error)[0];
-          const firstValue = error[firstKey];
-          if (Array.isArray(firstValue)) {
-            errorMsg = `${firstKey}: ${firstValue[0]}`;
-          } else {
-            errorMsg = `${firstKey}: ${firstValue}`;
-          }
-        }
+        // Trata erros de validação/negócio retornados como objeto JSON.
+        const errorMsg = getApiErrorMessage(error, `Erro HTTP ${response.status}`);
         const requestError = new Error(errorMsg);
         requestError.status = response.status;
         throw requestError;
