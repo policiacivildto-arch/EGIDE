@@ -1,13 +1,13 @@
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { apiClient } from '../../config/api';
 import { Mail } from 'lucide-react';
 import { AuthLayout, LoadingSpinner } from '../../App'; 
 
 export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
-
-
+    const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -22,11 +22,14 @@ export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
         try {
             const response = await apiClient.requestPasswordReset(trimmedEmail);
 
-            if (response?.delivery === 'email' || response?.delivery === 'debug' || response?.message) {
-                showNotification("Se o email existir, enviamos um link para redefinição de senha. Verifique sua caixa de entrada.", "success");
-            } else {
-                showNotification("Solicitação enviada. Verifique seu email para redefinir a senha.", "success");
+            // Em modo debug/fallback (dev), seguimos fluxo automático sem depender do e-mail externo.
+            if (response?.delivery === 'debug' && response?.token) {
+                showNotification('Link de redefinição gerado. Redirecionando...', 'success');
+                navigate(`/reset-password?token=${encodeURIComponent(response.token)}`);
+                return;
             }
+
+            showNotification("E-mail enviado com sucesso.", "success");
             setAuthScreen('login');
         } catch (error) {
             console.error("Erro ao redefinir senha:", error);

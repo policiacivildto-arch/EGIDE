@@ -1,12 +1,32 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator
+from django.utils import timezone
 
 
 MATRICULA_VALIDATOR = RegexValidator(
     r'^\d{7}[\dX]$',
     'Matrícula deve ter 8 caracteres (7 números e o último pode ser X)'
 )
+
+
+class PasswordResetToken(models.Model):
+    """Token temporário para redefinição de senha de usuário."""
+
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_tokens')
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    used_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Token de Redefinição de Senha'
+        verbose_name_plural = 'Tokens de Redefinição de Senha'
+
+    @property
+    def is_valid(self):
+        return self.used_at is None and self.expires_at > timezone.now()
 
 class Departamento(models.Model):
     """Departamentos da Polícia Civil (Delegacia de Polícia, Departamento Especializado, etc)"""

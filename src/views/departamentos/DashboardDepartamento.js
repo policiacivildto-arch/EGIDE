@@ -204,7 +204,22 @@ export default function DashboardDepartamento({ userData, showNotification }) {
                 throw new Error('Nenhuma delegacia encontrada para criar vagas.');
             }
 
-            const delegaciaId = delegacias[0].id;
+            // Prioriza a delegacia vinculada ao usuário logado.
+            let delegaciaId = Number(userData?.delegacia_id) || null;
+
+            // Para perfil de departamento sem delegacia fixa, tenta escolher uma delegacia do mesmo departamento.
+            if (!delegaciaId) {
+                const departamentoKey = String(userDepartamento || '').trim().toUpperCase();
+                const delegaciasDoDepartamento = departamentoKey
+                    ? delegacias.filter((item) => String(item?.departamento_nome || '').trim().toUpperCase().includes(departamentoKey))
+                    : [];
+
+                delegaciaId = delegaciasDoDepartamento[0]?.id || delegacias[0]?.id || null;
+            }
+
+            if (!delegaciaId) {
+                throw new Error('Não foi possível determinar a delegacia para criar vagas.');
+            }
             const weekStart = toIsoLocalDate(currentWeek.weekDays[0]);
             const weekEnd = toIsoLocalDate(currentWeek.weekDays[6]);
 
@@ -266,9 +281,29 @@ export default function DashboardDepartamento({ userData, showNotification }) {
             );
 
             showNotification("Vagas da semana geradas com sucesso!", "success");
+
+            // Recarrega vagas da semana após geração para refletir os novos registros imediatamente.
+            const vagasAtualizadasResponse = await apiClient.getVagas({
+                delegacia: delegaciaId,
+                data__gte: weekStart,
+                data__lte: weekEnd,
+            });
+            const vagasAtualizadas = Array.isArray(vagasAtualizadasResponse)
+                ? vagasAtualizadasResponse
+                : (vagasAtualizadasResponse?.results || []);
+
+            setVagas(vagasAtualizadas.map((vaga) => ({
+                ...vaga,
+                date: vaga?.data || vaga?.date,
+                shiftType: vaga?.turno || vaga?.shiftType,
+            })));
         } catch (error) {
             console.error("Erro ao gerar vagas:", error);
-            showNotification("Falha ao gerar vagas.", "error");
+            const backendMessage = String(error?.message || '').trim();
+            showNotification(
+                backendMessage ? `Falha ao gerar vagas: ${backendMessage}` : "Falha ao gerar vagas.",
+                "error"
+            );
         }
     };
 
@@ -359,6 +394,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
 DashboardDepartamento.propTypes = {
     userData: PropTypes.shape({
         departamento: PropTypes.string,
+        delegacia_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     }),
     showNotification: PropTypes.func,
 };

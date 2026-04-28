@@ -201,10 +201,12 @@ SIMPLE_JWT = {
 }
 
 # Configuração de email (recuperação de senha)
-if DEBUG:
-    EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-else:
-    EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+# Sempre respeita o valor do .env. Fallback: console em dev, smtp em produção.
+_default_email_backend = (
+    'django.core.mail.backends.console.EmailBackend' if DEBUG
+    else 'django.core.mail.backends.smtp.EmailBackend'
+)
+EMAIL_BACKEND = config('EMAIL_BACKEND', default=_default_email_backend)
 
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
@@ -214,6 +216,7 @@ EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'nao-responda@egide.local')
+PASSWORD_RESET_TOKEN_EXPIRY_MINUTES = config('PASSWORD_RESET_TOKEN_EXPIRY_MINUTES', default=15, cast=int)
 
 # Expostos para uso nas views de autenticação
 FRONTEND_URL = frontend_url

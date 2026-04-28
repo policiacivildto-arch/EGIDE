@@ -295,9 +295,8 @@ class DjangoApiClient {
     return this.request('POST', '/auth/password-reset/', { email });
   }
 
-  async confirmPasswordReset(uid, token, newPassword) {
+  async confirmPasswordReset(token, newPassword) {
     return this.request('POST', '/auth/password-reset-confirm/', {
-      uid,
       token,
       new_password: newPassword,
     });

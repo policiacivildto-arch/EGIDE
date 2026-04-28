@@ -1,11 +1,15 @@
 from unittest.mock import patch
+from datetime import timedelta
+import hashlib
+import secrets
 
 from django.contrib.auth.models import User
-from django.core.mail import send_mail
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from django.utils.crypto import get_random_string
 from rest_framework import status
 from rest_framework.test import APIClient
+from api.models import PasswordResetToken
 
 
 class PasswordResetViewTests(TestCase):
@@ -25,7 +29,7 @@ class PasswordResetViewTests(TestCase):
         RESET_PASSWORD_PATH='/reset-password',
         EMAIL_BACKEND='django.core.mail.backends.console.EmailBackend',
     )
-    def test_password_reset_retorna_link_em_debug(self):
+    def test_password_reset_retorna_link_em_debug_e_salva_token(self):
         response = self.client.post(
             '/api/auth/password-reset/',
             {'email': self.user.email},
@@ -35,9 +39,12 @@ class PasswordResetViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data.get('delivery'), 'debug')
         self.assertIn('reset_link', response.data)
-        self.assertIn('uid', response.data)
         self.assertIn('token', response.data)
         self.assertIn('/reset-password?', response.data['reset_link'])
+
+        self.assertEqual(PasswordResetToken.objects.filter(usuario=self.user).count(), 1)
+        token_obj = PasswordResetToken.objects.get(usuario=self.user)
+        self.assertGreater(token_obj.expires_at, timezone.now())
 
     @override_settings(
         DEBUG=False,
@@ -66,3 +73,61 @@ class PasswordResetViewTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('message', response.data)
+        self.assertEqual(PasswordResetToken.objects.count(), 0)
+
+    @override_settings(
+        DEBUG=True,
+        FRONTEND_URL='http://localhost:3000',
+        RESET_PASSWORD_PATH='/reset-password',
+        EMAIL_BACKEND='django.core.mail.backends.console.EmailBackend',
+    )
+    def test_password_reset_confirm_redefine_senha_e_invalida_token(self):
+        request_response = self.client.post(
+            '/api/auth/password-reset/',
+            {'email': self.user.email},
+            format='json',
+        )
+        self.assertEqual(request_response.status_code, status.HTTP_200_OK)
+        token = request_response.data.get('token')
+        self.assertTrue(token)
+
+        new_password = 'NovaSenha123'
+        response = self.client.post(
+            '/api/auth/password-reset-confirm/',
+            {'token': token, 'new_password': new_password},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data.get('message'), 'Senha redefinida com sucesso')
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(new_password))
+
+        token_obj = PasswordResetToken.objects.get(usuario=self.user)
+        self.assertIsNotNone(token_obj.used_at)
+
+        reused_response = self.client.post(
+            '/api/auth/password-reset-confirm/',
+            {'token': token, 'new_password': 'OutraSenha123'},
+            format='json',
+        )
+        self.assertEqual(reused_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(reused_response.data.get('error'), 'Token inválido ou expirado')
+
+    def test_password_reset_confirm_token_expirado_retorna_erro(self):
+        raw_token = secrets.token_urlsafe(32)
+        PasswordResetToken.objects.create(
+            usuario=self.user,
+            token_hash=hashlib.sha256(raw_token.encode('utf-8')).hexdigest(),
+            expires_at=timezone.now() - timedelta(minutes=1),
+        )
+
+        response = self.client.post(
+            '/api/auth/password-reset-confirm/',
+            {'token': raw_token, 'new_password': 'NovaSenha123'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('error'), 'Token inválido ou expirado')

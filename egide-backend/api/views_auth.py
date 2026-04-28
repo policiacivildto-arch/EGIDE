@@ -9,23 +9,25 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.text import slugify
-from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from urllib.parse import urlencode
+from datetime import timedelta
+import hashlib
+import secrets
 import re
 import logging
 from api.models_security import LogAuditoria, PerfilDepartamento, PerfilDelegacia
-from api.models import Delegacia, Policial, Departamento
+from api.models import Delegacia, Policial, Departamento, PasswordResetToken
 
 
 logger = logging.getLogger(__name__)
 MATRICULA_PATTERN = re.compile(r'^\d{7}[\dX]$')
+PASSWORD_RESET_SUCCESS_MESSAGE = 'E-mail enviado com sucesso.'
 
 
 def _normalize_matricula(value):
@@ -38,18 +40,65 @@ def _is_console_email_backend():
     return backend == 'django.core.mail.backends.console.EmailBackend'
 
 
-def _build_password_reset_payload(user):
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
-    token = default_token_generator.make_token(user)
+def _is_smtp_configured():
+    backend = str(getattr(settings, 'EMAIL_BACKEND', '') or '')
+    if backend != 'django.core.mail.backends.smtp.EmailBackend':
+        return False
 
+    host_user = str(getattr(settings, 'EMAIL_HOST_USER', '') or '').strip().lower()
+    host_password = str(getattr(settings, 'EMAIL_HOST_PASSWORD', '') or '').strip().lower()
+
+    placeholder_fragments = {'seu_email', 'sua_senha', 'senha_de_app', 'example.com'}
+    has_placeholder_user = any(fragment in host_user for fragment in placeholder_fragments)
+    has_placeholder_password = any(fragment in host_password for fragment in placeholder_fragments)
+
+    return bool(host_user and host_password and not has_placeholder_user and not has_placeholder_password)
+
+
+def _get_password_reset_expiry_minutes():
+    raw_value = getattr(settings, 'PASSWORD_RESET_TOKEN_EXPIRY_MINUTES', 15)
+    try:
+        minutes = int(raw_value)
+    except (TypeError, ValueError):
+        return 15
+    return minutes if minutes > 0 else 15
+
+
+def _hash_reset_token(token):
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def _build_password_reset_link(token, request=None):
     frontend_url = str(getattr(settings, 'FRONTEND_URL', '') or '').rstrip('/')
+    if not frontend_url and request is not None:
+        frontend_url = str(request.headers.get('Origin') or '').rstrip('/')
+
     reset_path = str(getattr(settings, 'RESET_PASSWORD_PATH', '/reset-password') or '/reset-password')
     if not reset_path.startswith('/'):
         reset_path = f'/{reset_path}'
 
-    query = urlencode({'uid': uid, 'token': token})
-    reset_link = f'{frontend_url}{reset_path}?{query}' if frontend_url else ''
-    return uid, token, reset_link
+    query = urlencode({'token': token})
+    return f'{frontend_url}{reset_path}?{query}' if frontend_url else ''
+
+
+def _create_password_reset_token(user):
+    now = timezone.now()
+    PasswordResetToken.objects.filter(
+        usuario=user,
+        used_at__isnull=True,
+        expires_at__gt=now,
+    ).update(used_at=now)
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = _hash_reset_token(raw_token)
+    expiry_minutes = _get_password_reset_expiry_minutes()
+
+    PasswordResetToken.objects.create(
+        usuario=user,
+        token_hash=token_hash,
+        expires_at=now + timedelta(minutes=expiry_minutes),
+    )
+    return raw_token
 
 
 def _normalize_text(value):
@@ -476,7 +525,9 @@ def password_reset_view(request):
 
     user = User.objects.filter(email__iexact=email).first()
     if user:
-        uid, token, reset_link = _build_password_reset_payload(user)
+        raw_token = _create_password_reset_token(user)
+        reset_link = _build_password_reset_link(raw_token, request=request)
+        expiry_minutes = _get_password_reset_expiry_minutes()
 
         subject = 'Redefinição de senha - EGIDE'
         if reset_link:
@@ -485,6 +536,7 @@ def password_reset_view(request):
                 f'Recebemos uma solicitação para redefinir sua senha no EGIDE.\n'
                 f'Acesse o link abaixo para continuar:\n\n'
                 f'{reset_link}\n\n'
+                f'Este link expira em {expiry_minutes} minutos.\n\n'
                 f'Se você não solicitou essa alteração, ignore este email.'
             )
         else:
@@ -492,18 +544,18 @@ def password_reset_view(request):
             message = (
                 f'Olá {user.first_name or user.username},\n\n'
                 f'Recebemos uma solicitação para redefinir sua senha no EGIDE.\n'
-                f'Use os dados abaixo para concluir a redefinição:\n\n'
-                f'uid: {uid}\n'
-                f'token: {token}\n\n'
+                f'Use o token abaixo para concluir a redefinição:\n\n'
+                f'token: {raw_token}\n\n'
+                f'Este token expira em {expiry_minutes} minutos.\n\n'
                 f'Se você não solicitou essa alteração, ignore este email.'
             )
 
-        if settings.DEBUG or _is_console_email_backend():
+        if _is_console_email_backend() or (settings.DEBUG and not _is_smtp_configured()):
             return Response({
-                'message': 'Link de redefinição gerado com sucesso.',
+                'message': PASSWORD_RESET_SUCCESS_MESSAGE,
                 'reset_link': reset_link,
-                'uid': uid,
-                'token': token,
+                'token': raw_token,
+                'expires_in_minutes': expiry_minutes,
                 'delivery': 'debug',
             })
 
@@ -517,17 +569,25 @@ def password_reset_view(request):
             )
         except Exception:
             logger.exception('Falha ao enviar email de redefinição para %s', email)
+            if settings.DEBUG:
+                return Response({
+                    'message': PASSWORD_RESET_SUCCESS_MESSAGE,
+                    'reset_link': reset_link,
+                    'token': raw_token,
+                    'expires_in_minutes': expiry_minutes,
+                    'delivery': 'debug',
+                })
             return Response(
                 {'error': 'Não foi possível enviar o email de redefinição no momento.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         return Response({
-            'message': 'Se o email existir, um link de redefinição foi enviado.',
+            'message': PASSWORD_RESET_SUCCESS_MESSAGE,
             'delivery': 'email',
         })
 
-    return Response({'message': 'Se o email existir, um link de redefinição foi enviado.'})
+    return Response({'message': PASSWORD_RESET_SUCCESS_MESSAGE})
 
 
 @api_view(['POST'])
@@ -537,13 +597,8 @@ def password_reset_confirm_view(request):
     Confirma redefinição de senha.
 
     POST /api/auth/password-reset-confirm/
-    Body: {
-      "uid": "...",            # opcional se token vier como "uid:token"
-      "token": "...",
-      "new_password": "..."
-    }
+    Body: { "token": "...", "new_password": "..." }
     """
-    uid = str(request.data.get('uid') or '').strip()
     token = str(request.data.get('token') or '').strip()
     new_password = str(request.data.get('new_password') or '')
 
@@ -553,23 +608,24 @@ def password_reset_confirm_view(request):
     if len(new_password) < 6:
         return Response({'error': 'A senha deve ter no mínimo 6 caracteres'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not uid and ':' in token:
-        uid, token = token.split(':', 1)
-
-    if not uid:
-        return Response({'error': 'uid ausente para confirmação de senha'}, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        user_id = force_str(urlsafe_base64_decode(uid))
-        user = User.objects.get(pk=user_id)
-    except Exception:
-        return Response({'error': 'Link de redefinição inválido'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if not default_token_generator.check_token(user, token):
+    token_hash = _hash_reset_token(token)
+    password_reset = PasswordResetToken.objects.filter(token_hash=token_hash).select_related('usuario').first()
+    if not password_reset:
         return Response({'error': 'Token inválido ou expirado'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not password_reset.is_valid:
+        if password_reset.used_at is None:
+            password_reset.used_at = timezone.now()
+            password_reset.save(update_fields=['used_at'])
+        return Response({'error': 'Token inválido ou expirado'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = password_reset.usuario
 
     user.set_password(new_password)
     user.save(update_fields=['password'])
+
+    password_reset.used_at = timezone.now()
+    password_reset.save(update_fields=['used_at'])
 
     LogAuditoria.registrar(
         acao='alterar_senha',

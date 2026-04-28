@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import PropTypes from 'prop-types';
 import { KeyRound } from 'lucide-react';
 import { apiClient } from '../../config/api';
 import { AuthLayout, LoadingSpinner } from '../../App';
@@ -8,14 +9,14 @@ export const ResetPasswordScreen = ({ showNotification }) => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
 
-    const uid = useMemo(() => (searchParams.get('uid') || '').trim(), [searchParams]);
     const token = useMemo(() => (searchParams.get('token') || '').trim(), [searchParams]);
 
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const isLinkValid = Boolean(uid && token);
+    const isLinkValid = Boolean(token);
+    const shouldShowResetForm = isLinkValid;
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -37,12 +38,12 @@ export const ResetPasswordScreen = ({ showNotification }) => {
 
         setIsLoading(true);
         try {
-            await apiClient.confirmPasswordReset(uid, token, password);
+            await apiClient.confirmPasswordReset(token, password);
             showNotification('Senha redefinida com sucesso! Faça login novamente.', 'success');
             navigate('/login', { replace: true });
         } catch (error) {
             console.error('Erro ao confirmar redefinição de senha:', error);
-            showNotification('Não foi possível redefinir a senha. Verifique se o link ainda é válido.', 'error');
+            showNotification(error?.message || 'Token inválido ou expirado', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -54,15 +55,12 @@ export const ResetPasswordScreen = ({ showNotification }) => {
                 Defina sua nova senha para concluir a recuperação da conta.
             </p>
 
-            {!isLinkValid ? (
-                <div className="text-center text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg p-4">
-                    Link inválido ou incompleto. Solicite uma nova redefinição de senha.
-                </div>
-            ) : (
+            {shouldShowResetForm ? (
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Nova Senha</label>
+                        <label htmlFor="reset-password-new" className="block text-sm font-medium text-gray-300 mb-1">Nova Senha</label>
                         <input
+                            id="reset-password-new"
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
@@ -73,8 +71,9 @@ export const ResetPasswordScreen = ({ showNotification }) => {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Confirmar Nova Senha</label>
+                        <label htmlFor="reset-password-confirm" className="block text-sm font-medium text-gray-300 mb-1">Confirmar Nova Senha</label>
                         <input
+                            id="reset-password-confirm"
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
@@ -92,7 +91,15 @@ export const ResetPasswordScreen = ({ showNotification }) => {
                         {isLoading ? <LoadingSpinner /> : <><KeyRound size={20} /><span>Salvar Nova Senha</span></>}
                     </button>
                 </form>
+            ) : (
+                <div className="text-center text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg p-4">
+                    Link inválido ou incompleto. Solicite uma nova redefinição de senha.
+                </div>
             )}
         </AuthLayout>
     );
+};
+
+ResetPasswordScreen.propTypes = {
+    showNotification: PropTypes.func.isRequired,
 };
