@@ -93,10 +93,35 @@ def _resolve_delegacia(delegacias_qs, delegacia_name, departamento_obj=None):
     return None
 
 
-def _is_pre_registered_user(user):
+def _is_pre_registered_user(user, matricula=None):
     if not user:
         return False
-    return user.username.startswith('precad_') and user.email.endswith('@precad.egide.local')
+
+    username = str(getattr(user, 'username', '') or '').strip().lower()
+    email = str(getattr(user, 'email', '') or '').strip().lower()
+
+    # Contas placeholder criadas automaticamente pelo fluxo de equipes.
+    if username.startswith('precad_') and email.endswith('@precad.egide.local'):
+        return True
+
+    # Contas semeadas por importacao de base historica (ex.: policial_30009959).
+    # Permite que o primeiro cadastro web reivindique a conta existente.
+    normalized = _normalize_matricula(matricula) if matricula else ''
+    if not normalized:
+        return False
+
+    if username in {f'policial_{normalized}', f'u_{normalized}'}:
+        expected_email = f'policial.{normalized}@pcce.local'
+        if email == expected_email:
+            return True
+
+        try:
+            if user.has_usable_password() and user.check_password('front'):
+                return True
+        except Exception:
+            return False
+
+    return False
 
 
 def _get_user_department_id(user):
@@ -259,7 +284,11 @@ def register_view(request):
 
     # Garante username único sem bloquear registro quando apenas o prefixo colide.
     existing_policial = Policial.objects.select_related('usuario').filter(matricula=matricula).first()
-    pre_registered_user = existing_policial.usuario if existing_policial and _is_pre_registered_user(existing_policial.usuario) else None
+    pre_registered_user = (
+        existing_policial.usuario
+        if existing_policial and _is_pre_registered_user(existing_policial.usuario, matricula)
+        else None
+    )
 
     if User.objects.filter(username=username).exclude(id=pre_registered_user.id if pre_registered_user else None).exists():
         username_base = username
@@ -590,28 +619,41 @@ def login_view(request):
     
     # Tenta autenticar com username ou email
     user = authenticate(username=username_or_email, password=password)
+
+    email_matches = None
+    if '@' in username_or_email:
+        email_matches = User.objects.filter(email__iexact=username_or_email)
+        if email_matches.count() > 1:
+            LogAuditoria.registrar(
+                acao='login_falhou',
+                descricao=f'Tentativa de login com email duplicado: {username_or_email}',
+                nivel='warning',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            return Response(
+                {'error': 'Email duplicado em múltiplas contas. Faça login com o username e contate o suporte.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     
-    # Se falhar, tenta buscar por email e autenticar com username
+    # Se falhar, tenta buscar por email único e autenticar com username
     if user is None and '@' in username_or_email:
-        from django.contrib.auth import get_user_model
-        user_model = get_user_model()
         try:
-            user_obj = user_model.objects.get(email=username_or_email)
+            user_obj = email_matches.first() if email_matches is not None else None
+            if user_obj is None:
+                raise User.DoesNotExist
             user = authenticate(username=user_obj.username, password=password)
             print(f'🔍 DEBUG Login - Tentou com email, username encontrado: {user_obj.username}')
-        except user_model.DoesNotExist:
+        except User.DoesNotExist:
             print('🔍 DEBUG Login - Email não encontrado')
 
     # Fallback final: valida senha diretamente no usuário localizado.
     # Isso evita falhas intermitentes de backend de autenticação em alguns ambientes.
     if user is None:
-        from django.contrib.auth import get_user_model
-        user_model = get_user_model()
         candidate = None
         if '@' in username_or_email:
-            candidate = user_model.objects.filter(email__iexact=username_or_email).first()
+            candidate = email_matches.first() if email_matches is not None else None
         else:
-            candidate = user_model.objects.filter(username__iexact=username_or_email).first()
+            candidate = User.objects.filter(username__iexact=username_or_email).first()
 
         if candidate and candidate.check_password(password) and candidate.is_active:
             user = candidate

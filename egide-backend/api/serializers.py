@@ -198,12 +198,17 @@ class EquipeSerializer(serializers.ModelSerializer):
             return None
 
     def _user_is_admin(self):
-        perfil = self._get_request_profile()
-        return bool(perfil and perfil.is_admin)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        # Use is_staff (Django's native admin flag) instead of non-existent perfil.is_admin
+        return bool(user and user.is_authenticated and user.is_staff)
 
     def _user_can_bypass_single_delegacia_weekly_limit(self):
-        perfil = self._get_request_profile()
-        return bool(perfil and (perfil.is_admin or perfil.is_coordenador))
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        # Allow staff/admin or superuser to bypass the limit
+        return bool(user and user.is_authenticated and (user.is_staff or user.is_superuser))
+
 
     def _department_requires_weekly_limit(self, departamento):
         if not departamento:

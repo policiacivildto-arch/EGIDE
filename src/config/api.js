@@ -9,6 +9,45 @@ const CONVOY_REPORTS_STORAGE_KEY = 'egide_convoy_reports_local';
 
 const PREFERRED_ERROR_KEYS = ['detail', 'error', 'message', 'msg'];
 
+const pickArrayOrStringValue = (value) => {
+  if (Array.isArray(value) && value.length > 0) {
+    return String(value[0]);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return value;
+  }
+  return null;
+};
+
+const buildHttpError = (status, error) => {
+  const message = getApiErrorMessage(error, `Erro HTTP ${status}`);
+  const requestError = new Error(message);
+  requestError.status = status;
+  return requestError;
+};
+
+const shouldAttachAuthToken = ({ token, isAuthLoginEndpoint, isAuthRefreshEndpoint, isAuthRegisterEndpoint }) => {
+  return Boolean(token && !isAuthLoginEndpoint && !isAuthRefreshEndpoint && !isAuthRegisterEndpoint);
+};
+
+const shouldTryTokenRefresh = ({ status, options, isAuthLoginEndpoint, isAuthRefreshEndpoint, hasRefreshToken }) => {
+  return Boolean(
+    status === 401
+    && !options._retry
+    && !isAuthLoginEndpoint
+    && !isAuthRefreshEndpoint
+    && hasRefreshToken
+  );
+};
+
+const parseJsonResponse = async (response) => {
+  const contentType = response.headers.get('content-type');
+  if (contentType?.includes('application/json')) {
+    return response.json();
+  }
+  return { success: true };
+};
+
 const getApiErrorMessage = (error, fallbackMessage) => {
   if (!error || typeof error !== 'object') {
     return fallbackMessage;
@@ -19,12 +58,9 @@ const getApiErrorMessage = (error, fallbackMessage) => {
   }
 
   for (const key of PREFERRED_ERROR_KEYS) {
-    const value = error[key];
-    if (Array.isArray(value) && value.length > 0) {
-      return String(value[0]);
-    }
-    if (typeof value === 'string' && value.trim()) {
-      return value;
+    const extracted = pickArrayOrStringValue(error[key]);
+    if (extracted) {
+      return extracted;
     }
   }
 
@@ -92,6 +128,47 @@ class DjangoApiClient {
     localStorage.removeItem('user_data');
   }
 
+  _shouldLogErrors(options = {}) {
+    return !options?.suppressErrorLog;
+  }
+
+  async _handleRequestErrorResponse(response, error, requestContext) {
+    const {
+      method,
+      endpoint,
+      data,
+      options,
+      isAuthLoginEndpoint,
+      isAuthRefreshEndpoint,
+      hasRefreshToken,
+    } = requestContext;
+
+    if (this._shouldLogErrors(options)) {
+      console.error(`Erro completo (${response.status}):`, error);
+    }
+
+    if (shouldTryTokenRefresh({
+      status: response.status,
+      options,
+      isAuthLoginEndpoint,
+      isAuthRefreshEndpoint,
+      hasRefreshToken,
+    })) {
+      try {
+        await this.refreshToken();
+        return await this.request(method, endpoint, data, { ...options, _retry: true });
+      } catch (refreshError) {
+        console.error('Falha ao renovar token:', refreshError);
+      }
+    }
+
+    if (response.status === 401) {
+      this.clearAuthStorage();
+    }
+
+    throw buildHttpError(response.status, error);
+  }
+
   /**
    * Faz uma requisição HTTP à API Django
    */
@@ -107,7 +184,7 @@ class DjangoApiClient {
     };
 
     // Adiciona token JWT se disponível
-    if (this.token && !isAuthLoginEndpoint && !isAuthRefreshEndpoint && !isAuthRegisterEndpoint) {
+    if (shouldAttachAuthToken({ token: this.token, isAuthLoginEndpoint, isAuthRefreshEndpoint, isAuthRegisterEndpoint })) {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
@@ -131,39 +208,20 @@ class DjangoApiClient {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        if (!options.suppressErrorLog) {
-          console.error(`Erro completo (${response.status}):`, error);
-        }
-
-        // Se o token expirou, tenta refresh uma vez e repete a requisição
-        if (response.status === 401 && !options._retry && !isAuthLoginEndpoint && !isAuthRefreshEndpoint && hasRefreshToken) {
-          try {
-            await this.refreshToken();
-            return await this.request(method, endpoint, data, { ...options, _retry: true });
-          } catch (refreshError) {
-            console.error('Falha ao renovar token:', refreshError);
-          }
-        }
-
-        if (response.status === 401) {
-          this.clearAuthStorage();
-        }
-
-        // Trata erros de validação/negócio retornados como objeto JSON.
-        const errorMsg = getApiErrorMessage(error, `Erro HTTP ${response.status}`);
-        const requestError = new Error(errorMsg);
-        requestError.status = response.status;
-        throw requestError;
+        return await this._handleRequestErrorResponse(response, error, {
+          method,
+          endpoint,
+          data,
+          options,
+          isAuthLoginEndpoint,
+          isAuthRefreshEndpoint,
+          hasRefreshToken,
+        });
       }
 
-      // Alguns endpoints não retornam JSON (ex: DELETE)
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        return await response.json();
-      }
-      return { success: true };
+      return await parseJsonResponse(response);
     } catch (error) {
-      if (!options.suppressErrorLog) {
+      if (this._shouldLogErrors(options)) {
         console.error(`Erro na requisição ${method} ${endpoint}:`, error);
       }
       throw error;
@@ -570,6 +628,7 @@ class DjangoApiClient {
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
+      console.warn('Não foi possível ler relatórios locais de comboio:', error);
       return [];
     }
   }
@@ -607,8 +666,13 @@ class DjangoApiClient {
     }
 
     if (params.convoy_ids) {
-      const ids = String(params.convoy_ids).split(',').map((id) => Number(id)).filter((id) => !Number.isNaN(id));
-      filtered = filtered.filter((report) => ids.includes(Number(report.convoyId)));
+      const ids = new Set(
+        String(params.convoy_ids)
+          .split(',')
+          .map(Number)
+          .filter((id) => !Number.isNaN(id))
+      );
+      filtered = filtered.filter((report) => ids.has(Number(report.convoyId)));
     }
     return filtered;
   }

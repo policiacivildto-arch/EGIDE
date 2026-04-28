@@ -217,6 +217,7 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
             // 3. Calcula o custo para cada operação
             let grandTotalCost = 0;
             const operationsDetails = [];
+            const processedSupervisorsByDate = new Map();
             for (const convoy of convoys) {
                 let currentOperationCost = 0;
                 let supervisionCost = 0;
@@ -234,6 +235,10 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                 if (convoyDateObj && !Number.isNaN(convoyDateObj?.getTime())) {
                     convoyBaseDate = convoyDateObj;
                 }
+
+                const convoyDateKey = toIsoDateKey(convoyBaseDate) || `convoy-${convoy.id}`;
+                const processedSupervisorsForDate = processedSupervisorsByDate.get(convoyDateKey) || new Set();
+                processedSupervisorsByDate.set(convoyDateKey, processedSupervisorsForDate);
 
                 const addCostForUser = (userDetails, date, startTime, endTime) => {
                     if (!userDetails?.cargo || !userDetails?.classe) return;
@@ -274,35 +279,50 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                     return null;
                 };
 
+                const getSupervisorIdentityKey = (userDetails, fallbackId, fallbackName) => {
+                    const matriculaKey = normalizeMatricula(userDetails?.matricula);
+                    if (matriculaKey) return `mat:${matriculaKey}`;
+                    if (userDetails?.id !== undefined && userDetails?.id !== null) {
+                        return `id:${userDetails.id}`;
+                    }
+                    const fallbackIdKey = String(fallbackId || '').trim();
+                    if (fallbackIdKey) return `raw:${fallbackIdKey}`;
+                    const nameKey = normalizeName(userDetails?.nome || fallbackName);
+                    if (nameKey) return `name:${nameKey}`;
+                    return '';
+                };
+
+                const addSupervisorEntry = (userDetails, fallbackId, fallbackName) => {
+                    if (!userDetails && !fallbackName && !fallbackId) return 0;
+
+                    const supervisorKey = getSupervisorIdentityKey(userDetails, fallbackId, fallbackName);
+                    if (supervisorKey && processedSupervisorsForDate.has(supervisorKey)) {
+                        return 0;
+                    }
+
+                    if (supervisorKey) {
+                        processedSupervisorsForDate.add(supervisorKey);
+                    }
+
+                    const userCost = addCostForUser(userDetails, convoyBaseDate, operationStartTime, operationEndTime) || 0;
+                    addEntry({
+                        date: convoyBaseDate,
+                        equipe: 'DTO',
+                        policial: userDetails?.nome || fallbackName || String(fallbackId || 'N/A'),
+                        matricula: userDetails?.matricula || '',
+                        inicio: operationStartTime,
+                        fim: operationEndTime,
+                        cost: userCost,
+                    });
+
+                    return userCost;
+                };
+
                 const dpcUser = resolveSupervisor(convoy?.dpc, convoy?.dpc_nome);
                 const oipUser = resolveSupervisor(convoy?.oip, convoy?.oip_nome);
-                const dpcCost = addCostForUser(dpcUser, convoyBaseDate, operationStartTime, operationEndTime) || 0;
-                const oipCost = addCostForUser(oipUser, convoyBaseDate, operationStartTime, operationEndTime) || 0;
+                const dpcCost = addSupervisorEntry(dpcUser, convoy?.dpc, convoy?.dpc_nome);
+                const oipCost = addSupervisorEntry(oipUser, convoy?.oip, convoy?.oip_nome);
                 supervisionCost += dpcCost + oipCost;
-
-                if (dpcUser || convoy?.dpc_nome || convoy?.dpc) {
-                    addEntry({
-                        date: convoyBaseDate,
-                        equipe: 'DTO',
-                        policial: dpcUser?.nome || convoy?.dpc_nome || String(convoy?.dpc || 'N/A'),
-                        matricula: dpcUser?.matricula || '',
-                        inicio: operationStartTime,
-                        fim: operationEndTime,
-                        cost: dpcCost,
-                    });
-                }
-
-                if (oipUser || convoy?.oip_nome || convoy?.oip) {
-                    addEntry({
-                        date: convoyBaseDate,
-                        equipe: 'DTO',
-                        policial: oipUser?.nome || convoy?.oip_nome || String(convoy?.oip || 'N/A'),
-                        matricula: oipUser?.matricula || '',
-                        inicio: operationStartTime,
-                        fim: operationEndTime,
-                        cost: oipCost,
-                    });
-                }
                 
                 const teamIds = resolveTeamIdsForConvoy(convoy);
                 for (const teamId of teamIds) {

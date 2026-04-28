@@ -154,6 +154,41 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         return map;
     }, [allUsers]);
 
+    const resolveSupervisorUser = useCallback((idField, nameField) => {
+        if (idField !== undefined && idField !== null && usersById.has(String(idField))) {
+            return usersById.get(String(idField));
+        }
+
+        const idAsNameKey = normalizeNameKey(idField);
+        if (idAsNameKey && usersByName.has(idAsNameKey)) {
+            return usersByName.get(idAsNameKey);
+        }
+
+        const nameKey = normalizeNameKey(nameField);
+        if (nameKey && usersByName.has(nameKey)) {
+            return usersByName.get(nameKey);
+        }
+
+        return null;
+    }, [usersById, usersByName]);
+
+    const getSupervisorIdentityKey = useCallback((user, fallbackId, fallbackName) => {
+        const matriculaKey = normalizeMatriculaKey(user?.matricula);
+        if (matriculaKey) return `mat:${matriculaKey}`;
+
+        if (user?.id !== undefined && user?.id !== null) {
+            return `id:${user.id}`;
+        }
+
+        const fallbackIdKey = String(fallbackId || '').trim();
+        if (fallbackIdKey) return `raw:${fallbackIdKey}`;
+
+        const nameKey = normalizeNameKey(user?.nome || fallbackName);
+        if (nameKey) return `name:${nameKey}`;
+
+        return '';
+    }, []);
+
     const resolvedHolidayList = useMemo(() => {
         const unique = new Set();
 
@@ -471,6 +506,12 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             if (!dateObj || Number.isNaN(dateObj.getTime())) return;
             const dateKey = toLocalISODate(dateObj);
             const existing = map.get(dateKey) || [];
+
+            const convoyId = String(convoy?.id || '').trim();
+            if (convoyId && existing.some((item) => String(item?.id || '').trim() === convoyId)) {
+                return;
+            }
+
             map.set(dateKey, [...existing, convoy]);
         });
         return map;
@@ -503,6 +544,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                     equipeIdForAttendance: service.id,
                     dateObj,
                     dateKey,
+                    shiftType: turno,
                     teamName: resolveTeamName(service),
                     comboio: convoysOnDate.length > 0
                         ? `Formado (${convoysOnDate.length})`
@@ -519,62 +561,121 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             })
             .filter(Boolean);
 
-        const teamIdsByDate = new Map();
+        // Alguns ambientes podem retornar a mesma equipe mais de uma vez no mesmo dia.
+        // Mantemos apenas uma linha por combinação data + equipe para evitar duplicidade no relatório.
+        const dedupedTeamRows = [];
+        const seenTeamRows = new Set();
+
         teamRows.forEach((row) => {
+            const teamIdKey = String(row?.equipeIdForAttendance ?? row?.id ?? '').trim();
+            const dedupeKey = `${row?.dateKey || ''}::${teamIdKey}`;
+            if (!teamIdKey || !row?.dateKey) {
+                dedupedTeamRows.push(row);
+                return;
+            }
+
+            if (seenTeamRows.has(dedupeKey)) {
+                return;
+            }
+
+            seenTeamRows.add(dedupeKey);
+            dedupedTeamRows.push(row);
+        });
+
+        const teamIdsByDate = new Map();
+        const dateHasNightTeam = new Map();
+        dedupedTeamRows.forEach((row) => {
             if (!row?.dateKey) return;
             const existing = teamIdsByDate.get(row.dateKey) || [];
             teamIdsByDate.set(row.dateKey, [...existing, row.id]);
+
+            const isNightShift = String(row?.shiftType || '').toLowerCase() === 'night';
+            if (isNightShift) {
+                dateHasNightTeam.set(row.dateKey, true);
+            }
         });
 
-        const supervisionRows = [];
+        const convoysGroupedByDate = new Map();
         convoysForPeriod.forEach((convoy) => {
             const convoyDate = convoy?.data || convoy?.date;
             const dateObj = parseDateSafe(convoyDate);
             if (!dateObj || Number.isNaN(dateObj.getTime())) return;
 
             const dateKey = toLocalISODate(dateObj);
+            const existing = convoysGroupedByDate.get(dateKey) || [];
+
+            const convoyId = String(convoy?.id || '').trim();
+            if (convoyId && existing.some((item) => String(item?.id || '').trim() === convoyId)) {
+                return;
+            }
+
+            convoysGroupedByDate.set(dateKey, [...existing, convoy]);
+        });
+
+        const supervisionRows = [];
+        convoysGroupedByDate.forEach((convoysOnDate, dateKey) => {
+            // Requisito operacional: exibir a supervisão apenas em dias com vaga/equipe noturna.
+            if (!dateHasNightTeam.get(dateKey)) return;
+
             const attendanceTeamId = (teamIdsByDate.get(dateKey) || [])[0] || null;
             if (!attendanceTeamId) return;
 
-            const supervisorMembers = [];
-            const dpcUser = allUsers.find((u) => String(u?.id) === String(convoy?.dpc));
-            if (dpcUser || convoy?.dpc_nome || convoy?.dpc) {
-                supervisorMembers.push({
-                    id: dpcUser?.id || convoy?.dpc,
-                    nome: dpcUser?.nome || convoy?.dpc_nome || 'DPC',
-                    matricula: dpcUser?.matricula || '',
-                });
-            }
+            const dateObj = parseDateSafe(dateKey);
+            if (!dateObj || Number.isNaN(dateObj.getTime())) return;
 
-            const oipUser = allUsers.find((u) => String(u?.id) === String(convoy?.oip));
-            if (oipUser || convoy?.oip_nome || convoy?.oip) {
-                supervisorMembers.push({
-                    id: oipUser?.id || convoy?.oip,
-                    nome: oipUser?.nome || convoy?.oip_nome || 'OIP',
-                    matricula: oipUser?.matricula || '',
-                });
-            }
+            const supervisorMembers = [];
+            const seenSupervisors = new Set();
+
+            convoysOnDate.forEach((convoy) => {
+                const dpcUser = resolveSupervisorUser(convoy?.dpc, convoy?.dpc_nome);
+                const dpcKey = getSupervisorIdentityKey(dpcUser, convoy?.dpc, convoy?.dpc_nome);
+                if ((dpcUser || convoy?.dpc_nome || convoy?.dpc) && dpcKey && !seenSupervisors.has(dpcKey)) {
+                    seenSupervisors.add(dpcKey);
+                    supervisorMembers.push({
+                        id: dpcUser?.id || convoy?.dpc,
+                        nome: dpcUser?.nome || convoy?.dpc_nome || 'DPC',
+                        matricula: dpcUser?.matricula || '',
+                    });
+                }
+
+                const oipUser = resolveSupervisorUser(convoy?.oip, convoy?.oip_nome);
+                const oipKey = getSupervisorIdentityKey(oipUser, convoy?.oip, convoy?.oip_nome);
+                if ((oipUser || convoy?.oip_nome || convoy?.oip) && oipKey && !seenSupervisors.has(oipKey)) {
+                    seenSupervisors.add(oipKey);
+                    supervisorMembers.push({
+                        id: oipUser?.id || convoy?.oip,
+                        nome: oipUser?.nome || convoy?.oip_nome || 'OIP',
+                        matricula: oipUser?.matricula || '',
+                    });
+                }
+            });
 
             if (supervisorMembers.length === 0) return;
 
+            const firstConvoy = convoysOnDate[0];
+            const aisValues = [...new Set(convoysOnDate.map((convoy) => convoy?.ais).filter(Boolean))];
+            const bairroValues = [...new Set(convoysOnDate.flatMap((convoy) => (
+                Array.isArray(convoy?.bairros) ? convoy.bairros : [convoy?.bairros]
+            )).filter(Boolean))];
+
             supervisionRows.push({
-                id: `sup-${convoy.id}`,
+                id: `sup-${dateKey}`,
                 equipeIdForAttendance: attendanceTeamId,
                 dateObj,
                 dateKey,
                 teamName: 'Supervisão do Dia (DTO)',
-                comboio: 'Supervisão',
-                area: `AIS ${convoy?.ais || 'N/A'} - ${convoy?.bairros || 'N/A'}`,
+                comboio: convoysOnDate.length > 1 ? `Supervisão (${convoysOnDate.length} comboios)` : 'Supervisão',
+                area: `AIS ${aisValues.join(', ') || 'N/A'} - ${bairroValues.join(', ') || 'N/A'}`,
                 phone: 'N/A',
                 startTime: '08:00',
                 endTime: '20:00',
                 members: supervisorMembers,
-                rawService: convoy,
+                rawService: firstConvoy,
             });
         });
 
-        return [...teamRows, ...supervisionRows].sort((a, b) => b.dateObj - a.dateObj);
-    }, [allUsers, convoysByDate, convoysForPeriod, resolveTeamName, services]);
+        return [...dedupedTeamRows, ...supervisionRows].sort((a, b) => b.dateObj - a.dateObj);
+    }, [convoysByDate, convoysForPeriod, getSupervisorIdentityKey, resolveSupervisorUser, resolveTeamName, services]);
 
     const totalCostByTeam = useMemo(() => {
         const map = {};
@@ -739,7 +840,29 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             }
         });
 
-        exportData.push({
+        const dedupedExportData = [];
+        const seenExportRows = new Set();
+
+        exportData.forEach((row) => {
+            const dedupeKey = [
+                row?.Data,
+                row?.Equipe,
+                row?.Comboio,
+                row?.['Hora Início'],
+                row?.['Hora Fim'],
+                row?.Integrante,
+                row?.Matrícula,
+            ].map((value) => String(value || '').trim()).join('||');
+
+            if (!dedupeKey || seenExportRows.has(dedupeKey)) {
+                return;
+            }
+
+            seenExportRows.add(dedupeKey);
+            dedupedExportData.push(row);
+        });
+
+        dedupedExportData.push({
             'Data': '',
             'Equipe': '',
             'Comboio': '',
@@ -755,7 +878,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             'Custo Equipe (R$)': '',
         });
 
-        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const worksheet = XLSX.utils.json_to_sheet(dedupedExportData);
         
         // Ajustar largura de colunas
         worksheet['!cols'] = [
