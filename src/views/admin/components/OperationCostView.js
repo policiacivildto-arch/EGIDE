@@ -83,7 +83,17 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
 
     const parseDateValue = (raw) => {
         if (!raw) return null;
-        if (typeof raw === 'string') return new Date(raw);
+        if (typeof raw === 'string') {
+            const trimmed = raw.trim();
+            const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+            if (dateOnlyMatch) {
+                const year = Number(dateOnlyMatch[1]);
+                const month = Number(dateOnlyMatch[2]);
+                const day = Number(dateOnlyMatch[3]);
+                return new Date(year, month - 1, day, 0, 0, 0, 0);
+            }
+            return new Date(trimmed);
+        }
         if (typeof raw === 'number') return new Date(raw);
         if (raw?.seconds) return new Date(raw.seconds * 1000);
         return null;
@@ -91,7 +101,28 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
 
     const toIsoDateKey = (date) => {
         if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-        return date.toISOString().split('T')[0];
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const buildConvoyIdentityKey = (convoy) => {
+        const rawId = String(convoy?.id || '').trim();
+        if (rawId) return `id:${rawId}`;
+
+        const dateObj = parseDateValue(convoy?.data || convoy?.date);
+        const dateKey = toIsoDateKey(dateObj);
+        const dpcKey = String(convoy?.dpc || convoy?.dpc_nome || '').trim().toUpperCase();
+        const oipKey = String(convoy?.oip || convoy?.oip_nome || '').trim().toUpperCase();
+        const aisKey = String(convoy?.ais || '').trim().toUpperCase();
+        const bairrosKey = (Array.isArray(convoy?.bairros) ? convoy.bairros : [convoy?.bairros])
+            .filter(Boolean)
+            .map((value) => String(value).trim().toUpperCase())
+            .sort()
+            .join('|');
+
+        return `raw:${dateKey}::${dpcKey}::${oipKey}::${aisKey}::${bairrosKey}`;
     };
 
     const getTeamIdsFromConvoy = (convoy) => {
@@ -101,11 +132,86 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
         return [];
     };
 
+    const getConvoyRuntimeKey = (convoy) => {
+        const rawId = String(convoy?.id || '').trim();
+        if (rawId) return `id:${rawId}`;
+        return buildConvoyIdentityKey(convoy);
+    };
+
     const getConvoyDept = (convoy) => convoy?.departamento || convoy?.departamento_nome || '';
 
     const formatMatricula = (value) => {
         if (!value) return 'N/A';
         return String(value);
+    };
+
+    const normalizeTextKey = (value) => String(value || '').trim().toUpperCase();
+
+    const getOperationMergeKey = (operation) => {
+        const dateKey = toIsoDateKey(operation?.date instanceof Date ? operation.date : parseDateValue(operation?.date));
+        const aisKey = normalizeTextKey(operation?.ais);
+        const bairrosKey = normalizeTextKey(operation?.bairros);
+        const startKey = normalizeTime(operation?.horarioEntrada);
+        const endKey = normalizeTime(operation?.horarioSaida);
+        return `${dateKey}::${aisKey}::${bairrosKey}::${startKey}::${endKey}`;
+    };
+
+    const getEntryMergeKey = (entry) => {
+        const dateKey = toIsoDateKey(entry?.date instanceof Date ? entry.date : parseDateValue(entry?.date));
+        const equipeKey = normalizeTextKey(entry?.equipe);
+        const policialKey = normalizeTextKey(entry?.policial);
+        const matriculaKey = normalizeMatricula(entry?.matricula);
+        const inicioKey = normalizeTime(entry?.inicio);
+        const fimKey = normalizeTime(entry?.fim);
+        const situacaoKey = normalizeTextKey(entry?.situacao);
+        const substitutoKey = normalizeTextKey(entry?.substituto);
+        return `${dateKey}::${equipeKey}::${policialKey}::${matriculaKey}::${inicioKey}::${fimKey}::${situacaoKey}::${substitutoKey}`;
+    };
+
+    const consolidateOperations = (operations) => {
+        const mergedByKey = new Map();
+
+        operations.forEach((operation) => {
+            const mergeKey = getOperationMergeKey(operation);
+            const current = mergedByKey.get(mergeKey);
+
+            if (!current) {
+                const dedupedEntries = [];
+                const seenEntryKeys = new Set();
+                (Array.isArray(operation?.entries) ? operation.entries : []).forEach((entry) => {
+                    const entryKey = getEntryMergeKey(entry);
+                    if (!entryKey || seenEntryKeys.has(entryKey)) return;
+                    seenEntryKeys.add(entryKey);
+                    dedupedEntries.push(entry);
+                });
+
+                mergedByKey.set(mergeKey, {
+                    ...operation,
+                    entries: dedupedEntries,
+                    _entryKeys: seenEntryKeys,
+                });
+                return;
+            }
+
+            current.cost += Number(operation?.cost || 0);
+            current.teamCost += Number(operation?.teamCost || 0);
+            current.supervisionCost += Number(operation?.supervisionCost || 0);
+            current.scheduleConfirmed = Boolean(current.scheduleConfirmed || operation?.scheduleConfirmed);
+            current.scheduleConfirmedAt = current.scheduleConfirmedAt || operation?.scheduleConfirmedAt || null;
+
+            const incomingEntries = Array.isArray(operation?.entries) ? operation.entries : [];
+            incomingEntries.forEach((entry) => {
+                const entryKey = getEntryMergeKey(entry);
+                if (!entryKey || current._entryKeys.has(entryKey)) return;
+                current._entryKeys.add(entryKey);
+                current.entries.push(entry);
+            });
+        });
+
+        return Array.from(mergedByKey.values()).map((operation) => {
+            const { _entryKeys, ...clean } = operation;
+            return clean;
+        });
     };
 
     const getDefaultScheduleFromTeam = (team) => {
@@ -146,15 +252,24 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                 ? teamsResponse
                 : (teamsResponse?.results || []);
 
-            const convoys = allConvoys.filter((convoy) => {
+            const filteredConvoys = allConvoys.filter((convoy) => {
                 const convoyDate = convoy?.data || convoy?.date;
                 if (!convoyDate) return false;
                 const parsedConvoyDate = parseDateValue(convoyDate);
                 if (!parsedConvoyDate || Number.isNaN(parsedConvoyDate.getTime())) return false;
-                const isoDate = parsedConvoyDate.toISOString().split('T')[0];
+                const isoDate = toIsoDateKey(parsedConvoyDate);
                 const inRange = isoDate >= startDate && isoDate <= endDate;
                 const deptOk = !departamento || getConvoyDept(convoy) === departamento;
                 return inRange && deptOk;
+            });
+
+            const convoys = [];
+            const seenConvoys = new Set();
+            filteredConvoys.forEach((convoy) => {
+                const identityKey = buildConvoyIdentityKey(convoy);
+                if (!identityKey || seenConvoys.has(identityKey)) return;
+                seenConvoys.add(identityKey);
+                convoys.push(convoy);
             });
 
             const teamMap = new Map();
@@ -169,28 +284,68 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                 if (!dateKey) return;
 
                 const existingTeams = teamsByDate.get(dateKey) || [];
-                teamsByDate.set(dateKey, [...existingTeams, String(team.id)]);
+                const teamIdKey = String(team.id);
+                if (!existingTeams.includes(teamIdKey)) {
+                    teamsByDate.set(dateKey, [...existingTeams, teamIdKey]);
+                }
             });
 
-            const resolveTeamIdsForConvoy = (convoy) => {
-                const explicitTeamIds = getTeamIdsFromConvoy(convoy).map((id) => String(id));
-                if (explicitTeamIds.length > 0) return explicitTeamIds;
+            const assignedFallbackTeamsByDate = new Map();
+            const teamIdsByConvoyKey = new Map();
+
+            convoys.forEach((convoy) => {
+                const convoyKey = getConvoyRuntimeKey(convoy);
+                const explicitTeamIds = [...new Set(getTeamIdsFromConvoy(convoy).map(String).filter(Boolean))];
 
                 const convoyDateRaw = convoy?.data || convoy?.date;
                 const convoyDateObj = parseDateValue(convoyDateRaw);
                 const dateKey = toIsoDateKey(convoyDateObj);
-                if (!dateKey) return [];
 
-                return teamsByDate.get(dateKey) || [];
+                if (!dateKey) {
+                    teamIdsByConvoyKey.set(convoyKey, explicitTeamIds);
+                    return;
+                }
+
+                const assignedTeams = assignedFallbackTeamsByDate.get(dateKey) || new Set();
+                let resolvedTeamIds = explicitTeamIds;
+
+                if (explicitTeamIds.length > 0) {
+                    // Mesmo com teamIds explícitos, evita duplicar a mesma equipe no mesmo dia.
+                    resolvedTeamIds = explicitTeamIds.filter((teamId) => !assignedTeams.has(String(teamId)));
+                } else {
+                    const teamsOnDate = teamsByDate.get(dateKey) || [];
+                    resolvedTeamIds = teamsOnDate.filter((teamId) => !assignedTeams.has(String(teamId)));
+                }
+
+                resolvedTeamIds.forEach((teamId) => assignedTeams.add(String(teamId)));
+                assignedFallbackTeamsByDate.set(dateKey, assignedTeams);
+                teamIdsByConvoyKey.set(convoyKey, resolvedTeamIds);
+            });
+
+            const resolveTeamIdsForConvoy = (convoy) => {
+                const convoyKey = getConvoyRuntimeKey(convoy);
+                const mapped = teamIdsByConvoyKey.get(convoyKey);
+                if (Array.isArray(mapped)) return mapped;
+                return [...new Set(getTeamIdsFromConvoy(convoy).map(String).filter(Boolean))];
             };
 
-            // Mapa de frequência: equipe_id -> Map(policial_id -> registro)
+            // Mapa de frequência por equipe+policial+data e equipe+matrícula+data.
             const frequencias = Array.isArray(frequenciasResponse) ? frequenciasResponse : (frequenciasResponse?.results || []);
-            const frequencyMap = new Map();
+            const frequencyByTeamPolicialDate = new Map();
+            const frequencyByTeamMatriculaDate = new Map();
             for (const freq of frequencias) {
                 const equipeId = String(freq.equipe);
-                if (!frequencyMap.has(equipeId)) frequencyMap.set(equipeId, new Map());
-                frequencyMap.get(equipeId).set(String(freq.policial), freq);
+                const policialId = String(freq.policial || '');
+                const dateKey = String(freq.data_operacao || '');
+                const matriculaKey = normalizeMatricula(freq.policial_matricula);
+
+                if (equipeId && policialId && dateKey) {
+                    frequencyByTeamPolicialDate.set(`${equipeId}::${policialId}::${dateKey}`, freq);
+                }
+
+                if (equipeId && matriculaKey && dateKey) {
+                    frequencyByTeamMatriculaDate.set(`${equipeId}::${matriculaKey}::${dateKey}`, freq);
+                }
             }
 
             const scheduleDraft = {};
@@ -347,18 +502,39 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                     }
 
                     const seenMatriculas = new Set();
-                    const equipeFreqs = frequencyMap.get(String(team.id));
+                    const teamDateKey = toIsoDateKey(date);
                     for (const member of teamMembers) {
                         const mat = member?.matricula;
                         const key = normalizeMatricula(mat);
                         if (!key || seenMatriculas.has(key) || processedMatriculas.has(key)) continue;
 
                         const userDetails = userMatriculaMap.get(String(mat)) || userMatriculaMap.get(key);
-                        const policialId = userDetails?.id !== undefined ? String(userDetails.id) : null;
-                        const freqRecord = equipeFreqs && policialId ? equipeFreqs.get(policialId) : null;
+                        const memberPolicialId = member?.id !== undefined && member?.id !== null
+                            ? String(member.id)
+                            : null;
+                        const userPolicialId = userDetails?.id !== undefined && userDetails?.id !== null
+                            ? String(userDetails.id)
+                            : null;
 
-                        // Pula quem faltou
-                        if (freqRecord && freqRecord.status === 'falta') continue;
+                        let freqRecord = null;
+                        if (teamDateKey) {
+                            if (memberPolicialId) {
+                                freqRecord = frequencyByTeamPolicialDate.get(`${team.id}::${memberPolicialId}::${teamDateKey}`) || null;
+                            }
+
+                            if (!freqRecord && userPolicialId) {
+                                freqRecord = frequencyByTeamPolicialDate.get(`${team.id}::${userPolicialId}::${teamDateKey}`) || null;
+                            }
+
+                            if (!freqRecord && key) {
+                                freqRecord = frequencyByTeamMatriculaDate.get(`${team.id}::${key}::${teamDateKey}`) || null;
+                            }
+                        }
+
+                        // Somente policiais com presença registrada aparecem no RDO.
+                        if (!freqRecord || !['presente', 'substituto'].includes(String(freqRecord.status || '').toLowerCase())) {
+                            continue;
+                        }
 
                         seenMatriculas.add(key);
 
@@ -367,7 +543,7 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
 
                         let effectiveName = plannedName;
                         let effectiveMatricula = plannedMatricula;
-                        let freqSituacao = freqRecord?.status || 'pendente';
+                        let freqSituacao = String(freqRecord?.status || 'pendente').toLowerCase();
                         let substitutoStr = '';
 
                         if (freqRecord?.status === 'substituto' && freqRecord.substituto) {
@@ -520,11 +696,12 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                 return;
             }
             
-            const sortedOperations = [...operationsDetails].sort((a, b) => a.date - b.date);
+            const consolidatedOperations = consolidateOperations(operationsDetails);
+            const sortedOperations = [...consolidatedOperations].sort((a, b) => a.date - b.date);
             setCostData({
                 totalCost: grandTotalCost,
                 operations: sortedOperations,
-                totalOperations: operationsDetails.length
+                totalOperations: consolidatedOperations.length
             });
 
             const pendingConfirmations = operationsDetails.filter((op) => !op.scheduleConfirmed).length;
@@ -1109,4 +1286,6 @@ OperationCostView.propTypes = {
     allUsers: PropTypes.array,
     holidays: PropTypes.array,
     departamento: PropTypes.string,
+    sharedStartDate: PropTypes.string,
+    sharedEndDate: PropTypes.string,
 };

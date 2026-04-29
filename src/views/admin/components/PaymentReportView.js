@@ -12,15 +12,15 @@ import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export const PaymentReportView = ({ allUsers = [], showNotification, departamento, onDatesChange }) => {
-    const toLocalISODate = (dateObj) => {
+    const toLocalISODate = useCallback((dateObj) => {
         if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return '';
         const y = dateObj.getFullYear();
         const m = String(dateObj.getMonth() + 1).padStart(2, '0');
         const d = String(dateObj.getDate()).padStart(2, '0');
         return `${y}-${m}-${d}`;
-    };
+    }, []);
 
-    const parseDateSafe = (value) => {
+    const parseDateSafe = useCallback((value) => {
         if (!value) return null;
 
         if (typeof value === 'string') {
@@ -39,7 +39,25 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
 
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime()) ? null : parsed;
-    };
+    }, []);
+
+    const buildConvoyIdentityKey = useCallback((convoy, fallbackDateKey = '') => {
+        const rawId = String(convoy?.id || '').trim();
+        if (rawId) return `id:${rawId}`;
+
+        const dateObj = parseDateSafe(convoy?.data || convoy?.date);
+        const dateKey = fallbackDateKey || (dateObj ? toLocalISODate(dateObj) : '');
+        const dpcKey = String(convoy?.dpc || convoy?.dpc_nome || '').trim().toUpperCase();
+        const oipKey = String(convoy?.oip || convoy?.oip_nome || '').trim().toUpperCase();
+        const aisKey = String(convoy?.ais || '').trim().toUpperCase();
+        const bairrosKey = (Array.isArray(convoy?.bairros) ? convoy.bairros : [convoy?.bairros])
+            .filter(Boolean)
+            .map((value) => String(value).trim().toUpperCase())
+            .sort()
+            .join('|');
+
+        return `raw:${dateKey}::${dpcKey}::${oipKey}::${aisKey}::${bairrosKey}`;
+    }, [parseDateSafe, toLocalISODate]);
 
     const today = toLocalISODate(new Date());
     const [startDate, setStartDate] = useState(today);
@@ -203,7 +221,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         });
 
         return [...unique];
-    }, [holidayDateStrings]);
+    }, [holidayDateStrings, parseDateSafe]);
 
     const isGenericDepartmentLabel = useCallback((value) => {
         const normalized = String(value || '').trim().toUpperCase();
@@ -319,7 +337,12 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         if (registros.length === 0) return;
 
         try {
-            await apiClient.registrarFrequenciasLote(registros);
+            const response = await apiClient.registrarFrequenciasLote(registros);
+            const erros = Array.isArray(response?.erros) ? response.erros : [];
+            if (erros.length > 0) {
+                const primeiraMensagem = String(erros[0]?.erro || 'Falha ao salvar parte das frequências.');
+                showNotification(`Atenção: ${primeiraMensagem}`, 'warning');
+            }
         } catch (error) {
             console.error('Falha ao persistir frequência no backend:', error);
             showNotification('Falha ao salvar frequência no servidor.', 'error');
@@ -425,8 +448,22 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                 return isoDate >= startDate && isoDate <= endDate;
             });
 
+            const dedupedConvoys = [];
+            const seenConvoys = new Set();
+            filteredConvoys.forEach((convoy) => {
+                const convoyDateObj = parseDateSafe(convoy?.data || convoy?.date);
+                const dateKey = convoyDateObj ? toLocalISODate(convoyDateObj) : '';
+                const identityKey = buildConvoyIdentityKey(convoy, dateKey);
+                if (!identityKey || seenConvoys.has(identityKey)) {
+                    return;
+                }
+
+                seenConvoys.add(identityKey);
+                dedupedConvoys.push(convoy);
+            });
+
             setServices(fetchedServices);
-            setConvoysForPeriod(filteredConvoys);
+            setConvoysForPeriod(dedupedConvoys);
             setVagaDelegaciaById(vagaMap);
             setHolidayDateStrings(holidayRows.map((item) => item?.data).filter(Boolean));
 
@@ -438,7 +475,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         } finally {
             setLoading(false);
         }
-    }, [startDate, endDate, showNotification]);
+    }, [buildConvoyIdentityKey, endDate, showNotification, startDate, toLocalISODate, parseDateSafe]);
 
     const resolveUserForMember = useCallback((member) => {
         if (!member) return null;
@@ -507,15 +544,15 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             const dateKey = toLocalISODate(dateObj);
             const existing = map.get(dateKey) || [];
 
-            const convoyId = String(convoy?.id || '').trim();
-            if (convoyId && existing.some((item) => String(item?.id || '').trim() === convoyId)) {
+            const identityKey = buildConvoyIdentityKey(convoy, dateKey);
+            if (existing.some((item) => buildConvoyIdentityKey(item, dateKey) === identityKey)) {
                 return;
             }
 
             map.set(dateKey, [...existing, convoy]);
         });
         return map;
-    }, [convoysForPeriod]);
+    }, [buildConvoyIdentityKey, convoysForPeriod, parseDateSafe, toLocalISODate]);
 
     const frequencyRows = useMemo(() => {
         const teamRows = services
@@ -583,11 +620,15 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         });
 
         const teamIdsByDate = new Map();
+        const teamRowsByDate = new Map();
         const dateHasNightTeam = new Map();
         dedupedTeamRows.forEach((row) => {
             if (!row?.dateKey) return;
             const existing = teamIdsByDate.get(row.dateKey) || [];
             teamIdsByDate.set(row.dateKey, [...existing, row.id]);
+
+            const existingRows = teamRowsByDate.get(row.dateKey) || [];
+            teamRowsByDate.set(row.dateKey, [...existingRows, row]);
 
             const isNightShift = String(row?.shiftType || '').toLowerCase() === 'night';
             if (isNightShift) {
@@ -604,8 +645,8 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             const dateKey = toLocalISODate(dateObj);
             const existing = convoysGroupedByDate.get(dateKey) || [];
 
-            const convoyId = String(convoy?.id || '').trim();
-            if (convoyId && existing.some((item) => String(item?.id || '').trim() === convoyId)) {
+            const identityKey = buildConvoyIdentityKey(convoy, dateKey);
+            if (existing.some((item) => buildConvoyIdentityKey(item, dateKey) === identityKey)) {
                 return;
             }
 
@@ -617,8 +658,12 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             // Requisito operacional: exibir a supervisão apenas em dias com vaga/equipe noturna.
             if (!dateHasNightTeam.get(dateKey)) return;
 
-            const attendanceTeamId = (teamIdsByDate.get(dateKey) || [])[0] || null;
-            if (!attendanceTeamId) return;
+            const teamRowsOnDate = teamRowsByDate.get(dateKey) || [];
+            const referenceTeamRow = teamRowsOnDate.find((row) => String(row?.shiftType || '').toLowerCase() === 'night')
+                || teamRowsOnDate[0]
+                || null;
+            const attendanceTeamId = referenceTeamRow?.equipeIdForAttendance || referenceTeamRow?.id || null;
+            if (!attendanceTeamId || !referenceTeamRow) return;
 
             const dateObj = parseDateSafe(dateKey);
             if (!dateObj || Number.isNaN(dateObj.getTime())) return;
@@ -667,15 +712,16 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                 comboio: convoysOnDate.length > 1 ? `Supervisão (${convoysOnDate.length} comboios)` : 'Supervisão',
                 area: `AIS ${aisValues.join(', ') || 'N/A'} - ${bairroValues.join(', ') || 'N/A'}`,
                 phone: 'N/A',
-                startTime: '08:00',
-                endTime: '20:00',
+                // Vincula a janela de confirmação ao horário real da equipe do dia.
+                startTime: referenceTeamRow.startTime,
+                endTime: referenceTeamRow.endTime,
                 members: supervisorMembers,
                 rawService: firstConvoy,
             });
         });
 
         return [...dedupedTeamRows, ...supervisionRows].sort((a, b) => b.dateObj - a.dateObj);
-    }, [convoysByDate, convoysForPeriod, getSupervisorIdentityKey, resolveSupervisorUser, resolveTeamName, services]);
+    }, [buildConvoyIdentityKey, convoysByDate, convoysForPeriod, getSupervisorIdentityKey, parseDateSafe, resolveSupervisorUser, resolveTeamName, services, toLocalISODate]);
 
     const totalCostByTeam = useMemo(() => {
         const map = {};
