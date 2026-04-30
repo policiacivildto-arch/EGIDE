@@ -545,7 +545,14 @@ def password_reset_view(request):
             recipient_email = email_input
 
     if user and recipient_email:
-        raw_token = _create_password_reset_token(user)
+        try:
+            raw_token = _create_password_reset_token(user)
+        except Exception:
+            logger.exception('Falha ao criar token de redefinição para %s', recipient_email)
+            return Response(
+                {'error': 'Não foi possível processar a solicitação no momento. Tente novamente mais tarde.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         reset_link = _build_password_reset_link(raw_token, request=request)
         expiry_minutes = _get_password_reset_expiry_minutes()
 

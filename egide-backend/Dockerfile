@@ -20,14 +20,12 @@ COPY . .
 # Criar pasta para arquivos estáticos
 RUN mkdir -p /app/staticfiles
 
-# Coletar arquivos estáticos
+# Coletar arquivos estáticos (não requer DB)
 RUN python manage.py collectstatic --noinput || true
-
-# Executar migrações
-RUN python manage.py migrate --noinput || true
 
 # Expor porta (Railway injeta PORT automaticamente)
 EXPOSE 8000
 
-# Iniciar Gunicorn (porta dinâmica do Railway)
-CMD ["sh", "-c", "gunicorn egide_backend.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 4"]
+# Executar migrações em runtime (DATABASE_URL disponível apenas neste momento)
+# e iniciar Gunicorn em seguida
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn egide_backend.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 4"]
