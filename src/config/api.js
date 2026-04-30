@@ -291,8 +291,8 @@ class DjangoApiClient {
     });
   }
 
-  async requestPasswordReset(email) {
-    return this.request('POST', '/auth/password-reset/', { email });
+  async requestPasswordReset(matricula) {
+    return this.request('POST', '/auth/password-reset/', { matricula });
   }
 
   async confirmPasswordReset(token, newPassword) {
