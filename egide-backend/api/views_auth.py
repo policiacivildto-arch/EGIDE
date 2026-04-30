@@ -591,9 +591,10 @@ def password_reset_view(request):
 
             if not _is_smtp_configured():
                 logger.warning(
-                    'SMTP não configurado. Link de redefinição para %s gerado mas não enviado: %s '
-                    '(expira em %d min)',
-                    recipient_email, reset_link, expiry_minutes,
+                    'SMTP não configurado. Redefinição de senha solicitada para %s, '
+                    'mas o e-mail não pôde ser enviado. Configure as variáveis '
+                    'EMAIL_HOST_USER e EMAIL_HOST_PASSWORD.',
+                    recipient_email,
                 )
                 return Response({
                     'message': PASSWORD_RESET_SUCCESS_MESSAGE,
