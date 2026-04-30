@@ -589,6 +589,18 @@ def password_reset_view(request):
             if _is_console_email_backend() or (settings.DEBUG and not _is_smtp_configured()):
                 return _password_reset_debug_response(reset_link, raw_token, expiry_minutes)
 
+            if not _is_smtp_configured():
+                logger.warning(
+                    'SMTP não configurado. Redefinição de senha solicitada para %s, '
+                    'mas o e-mail não pôde ser enviado. Configure as variáveis '
+                    'EMAIL_HOST_USER e EMAIL_HOST_PASSWORD.',
+                    recipient_email,
+                )
+                return Response({
+                    'message': PASSWORD_RESET_SUCCESS_MESSAGE,
+                    'delivery': 'log',
+                })
+
             send_mail(
                 subject='Redefinição de senha - EGIDE',
                 message=_build_password_reset_message(user, reset_link, raw_token, expiry_minutes),

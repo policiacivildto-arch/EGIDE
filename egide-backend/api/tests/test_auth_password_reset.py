@@ -85,6 +85,8 @@ class PasswordResetViewTests(TestCase):
         FRONTEND_URL='https://egide.app',
         RESET_PASSWORD_PATH='/reset-password',
         EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
+        EMAIL_HOST_USER='notificacoes@egide.app',
+        EMAIL_HOST_PASSWORD='senha_valida_de_app',
     )
     @patch('api.views_auth.send_mail', side_effect=Exception('smtp indisponivel'))
     def test_password_reset_retorna_503_quando_envio_falha(self, mocked_send_mail):
@@ -103,6 +105,8 @@ class PasswordResetViewTests(TestCase):
         FRONTEND_URL='https://egide.app',
         RESET_PASSWORD_PATH='/reset-password',
         EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
+        EMAIL_HOST_USER='notificacoes@egide.app',
+        EMAIL_HOST_PASSWORD='senha_valida_de_app',
     )
     @patch('api.views_auth._create_password_reset_token', side_effect=Exception('relation api_passwordresettoken does not exist'))
     def test_password_reset_retorna_503_quando_fluxo_interno_falha(self, mocked_create_token):
@@ -186,3 +190,29 @@ class PasswordResetViewTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data.get('error'), 'Token inválido ou expirado')
+
+    @override_settings(
+        DEBUG=False,
+        FRONTEND_URL='https://egide.app',
+        RESET_PASSWORD_PATH='/reset-password',
+        EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
+        EMAIL_HOST_USER='',
+        EMAIL_HOST_PASSWORD='',
+    )
+    def test_password_reset_smtp_nao_configurado_retorna_sucesso_com_log(self):
+        """
+        Em produção, se as credenciais SMTP não estiverem configuradas o endpoint
+        deve retornar HTTP 200 com delivery='log' (sem expor o token) e registrar
+        o link nos logs para que o administrador possa repassá-lo manualmente.
+        """
+        response = self.client.post(
+            '/api/auth/password-reset/',
+            {'matricula': self.policial.matricula},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data.get('delivery'), 'log')
+        self.assertNotIn('token', response.data)
+        self.assertNotIn('reset_link', response.data)
+        self.assertEqual(PasswordResetToken.objects.filter(usuario=self.user).count(), 1)
