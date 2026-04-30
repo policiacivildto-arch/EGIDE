@@ -156,12 +156,13 @@ class Vaga(models.Model):
     posicoes_disponiveis = models.IntegerField(default=1)
     descricao = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, default='Disponível')  # Disponível, Ocupada, Cancelada
+    restrito_adm_cadastra = models.BooleanField(default=False)  # Somente ADM pode cadastrar equipe nesta vaga
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['data', 'turno']
-        unique_together = ('data', 'turno', 'delegacia')
+        unique_together = ('data', 'turno', 'delegacia', 'restrito_adm_cadastra')
 
     def __str__(self):
         return f"Vaga {self.delegacia.nome} - {self.data} ({self.turno})"

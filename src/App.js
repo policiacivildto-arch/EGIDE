@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 // Configurações e Utilitários
@@ -39,6 +39,7 @@ export default function App() {
     const [loading, setLoading] = useState(true);
     const [notification, setNotification] = useState({ message: '', type: '' });
     const [profileModal, setProfileModal] = useState(null);
+    const hasCheckedAuthRef = useRef(false);
 
     const resolveAuthScreen = (screen) => {
         if (screen === 'signup') {
@@ -143,6 +144,8 @@ export default function App() {
     };
 
     useEffect(() => {
+        if (hasCheckedAuthRef.current) return;
+        hasCheckedAuthRef.current = true;
         checkAuth();
     }, []);
 

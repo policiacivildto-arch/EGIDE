@@ -35,7 +35,7 @@ from .utils_pagamento import calcular_pagamento_backend
 
 class PagamentoViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Pagamentos"""
-    queryset = Pagamento.objects.all()
+    queryset = Pagamento.objects.select_related('policial').all()
     serializer_class = PagamentoSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['policial', 'data_operacao']
@@ -57,7 +57,7 @@ class DepartamentoViewSet(viewsets.ModelViewSet):
 
 class DelegaciaViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Delegacias"""
-    queryset = Delegacia.objects.all()
+    queryset = Delegacia.objects.select_related('departamento').all()
     serializer_class = DelegaciaSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -69,7 +69,7 @@ class DelegaciaViewSet(viewsets.ModelViewSet):
 
 class PolicialViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Policiais"""
-    queryset = Policial.objects.all()
+    queryset = Policial.objects.select_related('usuario', 'delegacia').all()
     serializer_class = PolicialSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -88,7 +88,7 @@ class PolicialViewSet(viewsets.ModelViewSet):
 
 class ViaturaViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Viaturas"""
-    queryset = Viatura.objects.all()
+    queryset = Viatura.objects.select_related('delegacia').all()
     serializer_class = ViaturaSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -100,7 +100,7 @@ class ViaturaViewSet(viewsets.ModelViewSet):
 
 class VagaViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Vagas"""
-    queryset = Vaga.objects.all()
+    queryset = Vaga.objects.select_related('delegacia').all()
     serializer_class = VagaSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -143,7 +143,7 @@ class VagaViewSet(viewsets.ModelViewSet):
 
 class EquipeViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Equipes"""
-    queryset = Equipe.objects.all()
+    queryset = Equipe.objects.select_related('vaga', 'chefe', 'viatura').prefetch_related('membros').all()
     serializer_class = EquipeSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -198,7 +198,7 @@ class EquipeViewSet(viewsets.ModelViewSet):
 
 class OperacaoViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Operações"""
-    queryset = Operacao.objects.all()
+    queryset = Operacao.objects.select_related('equipe', 'equipe__chefe').all()
     serializer_class = OperacaoSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -219,7 +219,7 @@ class OperacaoViewSet(viewsets.ModelViewSet):
 
 class ComboioViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar comboios"""
-    queryset = Comboio.objects.all()
+    queryset = Comboio.objects.select_related('dpc', 'oip').prefetch_related('operacoes').all()
     serializer_class = ComboioSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -252,7 +252,14 @@ class ComboioViewSet(viewsets.ModelViewSet):
 
 class OperacaoPolicialViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Operações Policiais"""
-    queryset = OperacaoPolicial.objects.all()
+    queryset = OperacaoPolicial.objects.select_related(
+        'departamento_solicitante',
+        'delegacia_solicitante',
+        'responsavel_operacao',
+        'aprovado_por',
+        'criado_por',
+        'responsavel_custo',
+    ).prefetch_related('departamentos_apoio', 'equipes_operacao').all()
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['departamento_solicitante', 'status', 'tipo_operacao']
@@ -562,7 +569,9 @@ class AlvoViewSet(viewsets.ModelViewSet):
 
 class EquipeOperacaoViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Equipes de Operação"""
-    queryset = EquipeOperacao.objects.all()
+    queryset = EquipeOperacao.objects.select_related(
+        'operacao', 'departamento', 'delegacia', 'chefe', 'viatura'
+    ).prefetch_related('membros', 'substitutos').all()
     serializer_class = EquipeOperacaoSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter]
@@ -626,7 +635,7 @@ class EquipeOperacaoViewSet(viewsets.ModelViewSet):
 
 class ResultadoOperacaoViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Resultados de Operações"""
-    queryset = ResultadoOperacao.objects.all()
+    queryset = ResultadoOperacao.objects.select_related('operacao', 'equipe', 'registrado_por').all()
     serializer_class = ResultadoOperacaoSerializer
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter]
@@ -652,7 +661,7 @@ class AporteFinanceiroViewSet(viewsets.ReadOnlyModelViewSet):
 
 class EventoOperacaoViewSet(viewsets.ModelViewSet):
     """ViewSet para gerenciar Eventos (Carnaval, etc)"""
-    queryset = EventoOperacao.objects.all()
+    queryset = EventoOperacao.objects.select_related('criado_por').prefetch_related('departamentos_participantes').all()
     # permission_classes = [IsAuthenticated]  # TEMPORÁRIO: Usando AllowAny do settings
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['tipo_evento', 'status']

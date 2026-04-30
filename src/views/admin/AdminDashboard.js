@@ -187,29 +187,56 @@ export default function AdminDashboard({ userData, showNotification }) {
                 const { day: dayVagas, night: nightVagas } = vagasConfig[index];
                 const cycleId = getCycleInfo(day).cycleId;
                 const dateStr = toIsoLocalDate(day);
+                const isTuesday = day.getDay() === 2;
 
-                if (Number(dayVagas) > 0) {
+                const pushShiftVagas = (turno, totalVagas) => {
+                    const total = Number(totalVagas) || 0;
+                    if (total <= 0) return;
+
+                    // Regra de terça: reserva 1 posição exclusiva para ADM.
+                    if (isTuesday) {
+                        const abertas = Math.max(total - 1, 0);
+
+                        if (abertas > 0) {
+                            vagasToCreate.push({
+                                data: dateStr,
+                                week_id: weekId,
+                                cycle_id: cycleId,
+                                delegacia: delegaciaId,
+                                turno,
+                                posicoes_disponiveis: abertas,
+                                restrito_adm_cadastra: false,
+                                status: 'Disponivel'
+                            });
+                        }
+
+                        vagasToCreate.push({
+                            data: dateStr,
+                            week_id: weekId,
+                            cycle_id: cycleId,
+                            delegacia: delegaciaId,
+                            turno,
+                            posicoes_disponiveis: 1,
+                            restrito_adm_cadastra: true,
+                            status: 'Disponivel'
+                        });
+                        return;
+                    }
+
                     vagasToCreate.push({
                         data: dateStr,
                         week_id: weekId,
                         cycle_id: cycleId,
                         delegacia: delegaciaId,
-                        turno: 'day',
-                        posicoes_disponiveis: Number(dayVagas),
+                        turno,
+                        posicoes_disponiveis: total,
+                        restrito_adm_cadastra: false,
                         status: 'Disponivel'
                     });
-                }
-                if (Number(nightVagas) > 0) {
-                    vagasToCreate.push({
-                        data: dateStr,
-                        week_id: weekId,
-                        cycle_id: cycleId,
-                        delegacia: delegaciaId,
-                        turno: 'night',
-                        posicoes_disponiveis: Number(nightVagas),
-                        status: 'Disponivel'
-                    });
-                }
+                };
+
+                pushShiftVagas('day', dayVagas);
+                pushShiftVagas('night', nightVagas);
             });
 
             // Criar vagas via API Django

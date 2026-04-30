@@ -232,48 +232,78 @@ export default function DashboardDepartamento({ userData, showNotification }) {
                 ? existentesResponse
                 : (existentesResponse?.results || []);
             const existentesMap = new Map(
-                existentes.map((vaga) => [`${vaga.data}_${vaga.turno}_${vaga.delegacia}`, vaga])
+                existentes.map((vaga) => [
+                    `${vaga.data}_${vaga.turno}_${vaga.delegacia}_${Boolean(vaga.restrito_adm_cadastra)}`,
+                    vaga,
+                ])
             );
 
             const upserts = [];
             currentWeek.weekDays.forEach((day, index) => {
                 const { day: dayVagas, night: nightVagas } = vagasConfig[index];
                 const dataStr = toIsoLocalDate(day);
+                const isTuesday = day.getDay() === 2;
                 const departmentSuffix = userDepartamento ? ` (${userDepartamento})` : '';
                 const descricaoDiurna = `Vaga Diurna - Semana ${weekId}${departmentSuffix}`;
                 const descricaoNoturna = `Vaga Noturna - Semana ${weekId}${departmentSuffix}`;
 
-                upserts.push(
-                    {
-                        data: dataStr,
-                        turno: 'day',
-                        delegacia: delegaciaId,
-                        posicoes_disponiveis: dayVagas,
-                        status: 'Disponível',
-                        descricao: descricaoDiurna,
-                    },
-                    {
-                        data: dataStr,
-                        turno: 'night',
-                        delegacia: delegaciaId,
-                        posicoes_disponiveis: nightVagas,
-                        status: 'Disponível',
-                        descricao: descricaoNoturna,
+                const buildShiftUpserts = (turno, totalVagas, descricaoBase) => {
+                    const total = Number(totalVagas) || 0;
+                    if (total <= 0) return;
+
+                    if (isTuesday) {
+                        const abertas = Math.max(total - 1, 0);
+                        if (abertas > 0) {
+                            upserts.push({
+                                data: dataStr,
+                                turno,
+                                delegacia: delegaciaId,
+                                posicoes_disponiveis: abertas,
+                                restrito_adm_cadastra: false,
+                                status: 'Disponível',
+                                descricao: descricaoBase,
+                            });
+                        }
+
+                        upserts.push({
+                            data: dataStr,
+                            turno,
+                            delegacia: delegaciaId,
+                            posicoes_disponiveis: 1,
+                            restrito_adm_cadastra: true,
+                            status: 'Disponível',
+                            descricao: `${descricaoBase} (1 posição reservada para ADM)`,
+                        });
+                        return;
                     }
-                );
+
+                    upserts.push({
+                        data: dataStr,
+                        turno,
+                        delegacia: delegaciaId,
+                        posicoes_disponiveis: total,
+                        restrito_adm_cadastra: false,
+                        status: 'Disponível',
+                        descricao: descricaoBase,
+                    });
+                };
+
+                buildShiftUpserts('day', dayVagas, descricaoDiurna);
+                buildShiftUpserts('night', nightVagas, descricaoNoturna);
             });
 
             await Promise.all(
                 upserts
                     .filter((vagaPayload) => Number(vagaPayload.posicoes_disponiveis) > 0)
                     .map(async (vagaPayload) => {
-                        const key = `${vagaPayload.data}_${vagaPayload.turno}_${vagaPayload.delegacia}`;
+                        const key = `${vagaPayload.data}_${vagaPayload.turno}_${vagaPayload.delegacia}_${Boolean(vagaPayload.restrito_adm_cadastra)}`;
                         const existente = existentesMap.get(key);
                         if (existente) {
                             return apiClient.updateVaga(existente.id, {
                                 posicoes_disponiveis: vagaPayload.posicoes_disponiveis,
                                 status: vagaPayload.status,
                                 descricao: vagaPayload.descricao,
+                                restrito_adm_cadastra: Boolean(vagaPayload.restrito_adm_cadastra),
                             });
                         }
                         return apiClient.createVaga(vagaPayload);

@@ -75,7 +75,7 @@ class VagaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Vaga
-        fields = ['id', 'data', 'turno', 'delegacia', 'delegacia_nome', 'posicoes_disponiveis', 'descricao', 'status', 'criado_em', 'atualizado_em']
+        fields = ['id', 'data', 'turno', 'delegacia', 'delegacia_nome', 'posicoes_disponiveis', 'descricao', 'status', 'restrito_adm_cadastra', 'criado_em', 'atualizado_em']
         read_only_fields = ['criado_em', 'atualizado_em']
         extra_kwargs = {
             'delegacia': {'required': False, 'allow_null': True},
@@ -226,11 +226,33 @@ class EquipeSerializer(serializers.ModelSerializer):
         if str(getattr(vaga, 'turno', '')).lower() != 'day':
             return
 
+        # Exceção de negócio: na terça há vaga aberta e vaga restrita.
+        if getattr(vaga, 'data', None) and vaga.data.weekday() == 1:
+            if not getattr(vaga, 'restrito_adm_cadastra', False):
+                return
+
         if self._user_is_admin():
             return
 
         raise serializers.ValidationError(
             'Vagas diurnas de 12 horas só podem ser preenchidas por administrador.'
+        )
+
+    def _validate_tuesday_admin_only_slot(self, vaga):
+        """Valida se a vaga é restrita para ADM em dias específicos (ex: terças)"""
+        if not vaga:
+            return
+
+        # Verifica se a vaga está marcada como restrita para ADM
+        if not getattr(vaga, 'restrito_adm_cadastra', False):
+            return
+
+        # Se o usuário é admin, permite
+        if self._user_is_admin():
+            return
+
+        raise serializers.ValidationError(
+            'Esta vaga está reservada exclusivamente para administrador. Apenas ADM pode cadastrar equipe nela.'
         )
 
     def _build_unique_candidates(self, membros, chefe=None):
@@ -338,6 +360,7 @@ class EquipeSerializer(serializers.ModelSerializer):
         vaga = validated_data.get('vaga')
 
         self._validate_day_shift_admin_only(vaga)
+        self._validate_tuesday_admin_only_slot(vaga)
 
         if membros_matriculas:
             delegacia = vaga.delegacia if vaga else None
@@ -379,6 +402,7 @@ class EquipeSerializer(serializers.ModelSerializer):
 
         vaga = validated_data.get('vaga', instance.vaga)
         self._validate_day_shift_admin_only(vaga)
+        self._validate_tuesday_admin_only_slot(vaga)
         membros_efetivos = membros if membros is not None else list(instance.membros.all())
 
         if not validated_data.get('chefe') and chefe_matricula and membros:

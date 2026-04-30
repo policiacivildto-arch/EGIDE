@@ -23,11 +23,8 @@ RUN mkdir -p /app/staticfiles
 # Coletar arquivos estáticos
 RUN python manage.py collectstatic --noinput || true
 
-# Executar migrações
-RUN python manage.py migrate --noinput || true
-
 # Expor porta (Railway injeta PORT automaticamente)
 EXPOSE 8000
 
-# Iniciar Gunicorn (porta dinâmica do Railway)
-CMD ["sh", "-c", "gunicorn egide_backend.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 4"]
+# Aplicar migrações na inicialização e falhar o deploy se o banco estiver inconsistente.
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn egide_backend.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 4"]

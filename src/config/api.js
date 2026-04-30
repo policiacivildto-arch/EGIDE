@@ -26,8 +26,20 @@ const buildHttpError = (status, error) => {
   return requestError;
 };
 
-const shouldAttachAuthToken = ({ token, isAuthLoginEndpoint, isAuthRefreshEndpoint, isAuthRegisterEndpoint }) => {
-  return Boolean(token && !isAuthLoginEndpoint && !isAuthRefreshEndpoint && !isAuthRegisterEndpoint);
+const isPublicAuthEndpoint = (endpoint = '') => {
+  const publicAuthPrefixes = [
+    '/auth/login/',
+    '/auth/refresh/',
+    '/auth/register/',
+    '/auth/password-reset/',
+    '/auth/password-reset-confirm/',
+  ];
+
+  return publicAuthPrefixes.some((prefix) => endpoint.startsWith(prefix));
+};
+
+const shouldAttachAuthToken = ({ token, endpoint }) => {
+  return Boolean(token && !isPublicAuthEndpoint(endpoint));
 };
 
 const shouldTryTokenRefresh = ({ status, options, isAuthLoginEndpoint, isAuthRefreshEndpoint, hasRefreshToken }) => {
@@ -176,7 +188,6 @@ class DjangoApiClient {
     const url = `${this.baseURL}${endpoint}`;
     const isAuthLoginEndpoint = endpoint.startsWith('/auth/login/');
     const isAuthRefreshEndpoint = endpoint.startsWith('/auth/refresh/');
-    const isAuthRegisterEndpoint = endpoint.startsWith('/auth/register/');
     const hasRefreshToken = Boolean(this.getRefreshToken());
     const headers = {
       'Content-Type': 'application/json',
@@ -184,7 +195,7 @@ class DjangoApiClient {
     };
 
     // Adiciona token JWT se disponível
-    if (shouldAttachAuthToken({ token: this.token, isAuthLoginEndpoint, isAuthRefreshEndpoint, isAuthRegisterEndpoint })) {
+    if (shouldAttachAuthToken({ token: this.token, endpoint })) {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 

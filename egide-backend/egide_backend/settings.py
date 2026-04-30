@@ -88,9 +88,13 @@ WSGI_APPLICATION = 'egide_backend.wsgi.application'
 
 # Banco de Dados: SQLite (dev) ou PostgreSQL/Supabase (prod)
 DATABASE_URL = config('DATABASE_URL', default=None)
+USE_REMOTE_DB_IN_DEBUG = config('USE_REMOTE_DB_IN_DEBUG', default=False, cast=bool)
 
-if DATABASE_URL:
-    # Produção: Usar Supabase ou outro PostgreSQL (via DATABASE_URL)
+use_remote_database = bool(DATABASE_URL and (not DEBUG or USE_REMOTE_DB_IN_DEBUG))
+
+if use_remote_database:
+    # Produção: Usar Supabase ou outro PostgreSQL (via DATABASE_URL).
+    # Em DEBUG só usa remoto quando USE_REMOTE_DB_IN_DEBUG=True.
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
     }
@@ -173,7 +177,10 @@ for origin in CORS_ALLOWED_ORIGINS_PROD:
 CORS_ALLOWED_ORIGINS_PROD = normalized_cors_origins
 
 if frontend_url:
-    CORS_ALLOWED_ORIGINS_PROD.append(frontend_url)
+    if frontend_url.startswith('http://') or frontend_url.startswith('https://'):
+        CORS_ALLOWED_ORIGINS_PROD.append(frontend_url)
+    else:
+        CORS_ALLOWED_ORIGINS_PROD.append(f'https://{frontend_url}')
 
 CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD
 

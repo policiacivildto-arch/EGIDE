@@ -81,6 +81,38 @@ def _build_password_reset_link(token, request=None):
     return f'{frontend_url}{reset_path}?{query}' if frontend_url else ''
 
 
+def _build_password_reset_message(user, reset_link, raw_token, expiry_minutes):
+    greeting_name = user.first_name or user.username
+    if reset_link:
+        return (
+            f'Olá {greeting_name},\n\n'
+            f'Recebemos uma solicitação para redefinir sua senha no EGIDE.\n'
+            f'Acesse o link abaixo para continuar:\n\n'
+            f'{reset_link}\n\n'
+            f'Este link expira em {expiry_minutes} minutos.\n\n'
+            f'Se você não solicitou essa alteração, ignore este email.'
+        )
+
+    return (
+        f'Olá {greeting_name},\n\n'
+        f'Recebemos uma solicitação para redefinir sua senha no EGIDE.\n'
+        f'Use o token abaixo para concluir a redefinição:\n\n'
+        f'token: {raw_token}\n\n'
+        f'Este token expira em {expiry_minutes} minutos.\n\n'
+        f'Se você não solicitou essa alteração, ignore este email.'
+    )
+
+
+def _password_reset_debug_response(reset_link, raw_token, expiry_minutes):
+    return Response({
+        'message': PASSWORD_RESET_SUCCESS_MESSAGE,
+        'reset_link': reset_link,
+        'token': raw_token,
+        'expires_in_minutes': expiry_minutes,
+        'delivery': 'debug',
+    })
+
+
 def _create_password_reset_token(user):
     now = timezone.now()
     PasswordResetToken.objects.filter(
@@ -545,60 +577,31 @@ def password_reset_view(request):
             recipient_email = email_input
 
     if user and recipient_email:
-        raw_token = _create_password_reset_token(user)
-        reset_link = _build_password_reset_link(raw_token, request=request)
-        expiry_minutes = _get_password_reset_expiry_minutes()
-
-        subject = 'Redefinição de senha - EGIDE'
-        if reset_link:
-            message = (
-                f'Olá {user.first_name or user.username},\n\n'
-                f'Recebemos uma solicitação para redefinir sua senha no EGIDE.\n'
-                f'Acesse o link abaixo para continuar:\n\n'
-                f'{reset_link}\n\n'
-                f'Este link expira em {expiry_minutes} minutos.\n\n'
-                f'Se você não solicitou essa alteração, ignore este email.'
-            )
-        else:
-            # Fallback para ambientes sem FRONTEND_URL configurado.
-            message = (
-                f'Olá {user.first_name or user.username},\n\n'
-                f'Recebemos uma solicitação para redefinir sua senha no EGIDE.\n'
-                f'Use o token abaixo para concluir a redefinição:\n\n'
-                f'token: {raw_token}\n\n'
-                f'Este token expira em {expiry_minutes} minutos.\n\n'
-                f'Se você não solicitou essa alteração, ignore este email.'
-            )
-
-        if _is_console_email_backend() or (settings.DEBUG and not _is_smtp_configured()):
-            return Response({
-                'message': PASSWORD_RESET_SUCCESS_MESSAGE,
-                'reset_link': reset_link,
-                'token': raw_token,
-                'expires_in_minutes': expiry_minutes,
-                'delivery': 'debug',
-            })
+        raw_token = None
+        reset_link = None
+        expiry_minutes = None
 
         try:
+            raw_token = _create_password_reset_token(user)
+            reset_link = _build_password_reset_link(raw_token, request=request)
+            expiry_minutes = _get_password_reset_expiry_minutes()
+
+            if _is_console_email_backend() or (settings.DEBUG and not _is_smtp_configured()):
+                return _password_reset_debug_response(reset_link, raw_token, expiry_minutes)
+
             send_mail(
-                subject=subject,
-                message=message,
+                subject='Redefinição de senha - EGIDE',
+                message=_build_password_reset_message(user, reset_link, raw_token, expiry_minutes),
                 from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
                 recipient_list=[recipient_email],
                 fail_silently=False,
             )
         except Exception:
-            logger.exception('Falha ao enviar email de redefinição para %s', recipient_email)
+            logger.exception('Falha no fluxo de redefinição de senha para %s', recipient_email)
             if settings.DEBUG:
-                return Response({
-                    'message': PASSWORD_RESET_SUCCESS_MESSAGE,
-                    'reset_link': reset_link,
-                    'token': raw_token,
-                    'expires_in_minutes': expiry_minutes,
-                    'delivery': 'debug',
-                })
+                return _password_reset_debug_response(reset_link, raw_token, expiry_minutes)
             return Response(
-                {'error': 'Não foi possível enviar o email de redefinição no momento.'},
+                {'error': 'Não foi possível processar a redefinição de senha no momento.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 

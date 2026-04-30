@@ -98,6 +98,27 @@ class PasswordResetViewTests(TestCase):
         self.assertIn('error', response.data)
         mocked_send_mail.assert_called_once()
 
+    @override_settings(
+        DEBUG=False,
+        FRONTEND_URL='https://egide.app',
+        RESET_PASSWORD_PATH='/reset-password',
+        EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
+    )
+    @patch('api.views_auth._create_password_reset_token', side_effect=Exception('relation api_passwordresettoken does not exist'))
+    def test_password_reset_retorna_503_quando_fluxo_interno_falha(self, mocked_create_token):
+        response = self.client.post(
+            '/api/auth/password-reset/',
+            {'email': self.user.email},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(
+            response.data.get('error'),
+            'Não foi possível processar a redefinição de senha no momento.',
+        )
+        mocked_create_token.assert_called_once_with(self.user)
+
     def test_password_reset_email_inexistente_retorna_sucesso_generico(self):
         response = self.client.post(
             '/api/auth/password-reset/',
