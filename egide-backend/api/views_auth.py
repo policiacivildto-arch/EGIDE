@@ -517,14 +517,34 @@ def password_reset_view(request):
     Solicitação de redefinição de senha.
 
     POST /api/auth/password-reset/
-    Body: { "email": "usuario@dominio.com" }
+    Body: { "matricula": "12345678" }
+          ou { "email": "usuario@dominio.com" } (fallback para admin)
     """
-    email = str(request.data.get('email') or '').strip().lower()
-    if not email:
-        return Response({'error': 'email é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+    matricula_input = _normalize_matricula(str(request.data.get('matricula') or '').strip())
+    email_input = str(request.data.get('email') or '').strip().lower()
 
-    user = User.objects.filter(email__iexact=email).first()
-    if user:
+    if not matricula_input and not email_input:
+        return Response({'error': 'matricula é obrigatória'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = None
+    recipient_email = None
+
+    # Busca prioritária por matrícula → usa o email do Policial como destino
+    if matricula_input:
+        try:
+            policial = Policial.objects.select_related('usuario').get(matricula=matricula_input)
+            user = policial.usuario
+            recipient_email = policial.email
+        except Policial.DoesNotExist:
+            pass
+
+    # Fallback: busca por email (útil para administradores sem registro de Policial)
+    if user is None and email_input:
+        user = User.objects.filter(email__iexact=email_input).first()
+        if user:
+            recipient_email = email_input
+
+    if user and recipient_email:
         raw_token = _create_password_reset_token(user)
         reset_link = _build_password_reset_link(raw_token, request=request)
         expiry_minutes = _get_password_reset_expiry_minutes()
@@ -564,11 +584,11 @@ def password_reset_view(request):
                 subject=subject,
                 message=message,
                 from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-                recipient_list=[email],
+                recipient_list=[recipient_email],
                 fail_silently=False,
             )
         except Exception:
-            logger.exception('Falha ao enviar email de redefinição para %s', email)
+            logger.exception('Falha ao enviar email de redefinição para %s', recipient_email)
             if settings.DEBUG:
                 return Response({
                     'message': PASSWORD_RESET_SUCCESS_MESSAGE,

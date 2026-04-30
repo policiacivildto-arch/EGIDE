@@ -8,19 +8,19 @@ import { AuthLayout, LoadingSpinner } from '../../App';
 
 export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
     const navigate = useNavigate();
-    const [email, setEmail] = useState('');
+    const [matricula, setMatricula] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
     const handleResetPassword = async (e) => {
         e.preventDefault();
-        const trimmedEmail = email.trim();
-        if (!trimmedEmail) {
-            showNotification("Por favor, insira o seu email.", "error");
+        const trimmedMatricula = matricula.trim().toUpperCase();
+        if (!trimmedMatricula) {
+            showNotification("Por favor, insira sua matrícula.", "error");
             return;
         }
         setIsLoading(true);
         try {
-            const response = await apiClient.requestPasswordReset(trimmedEmail);
+            const response = await apiClient.requestPasswordReset(trimmedMatricula);
 
             // Em modo debug/fallback (dev), seguimos fluxo automático sem depender do e-mail externo.
             if (response?.delivery === 'debug' && response?.token) {
@@ -29,11 +29,11 @@ export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
                 return;
             }
 
-            showNotification("E-mail enviado com sucesso.", "success");
+            showNotification("E-mail enviado para o endereço cadastrado na sua matrícula.", "success");
             setAuthScreen('login');
         } catch (error) {
             console.error("Erro ao redefinir senha:", error);
-            showNotification(error?.message || "Ocorreu um erro. Verifique se o email está correto.", "error");
+            showNotification(error?.message || "Matrícula não encontrada ou ocorreu um erro.", "error");
         } finally {
             setIsLoading(false);
         }
@@ -41,11 +41,21 @@ export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
 
     return (
         <AuthLayout title="Recuperar Senha">
-            <p className="text-center text-gray-400 mb-6 text-sm">Insira seu email para receber um link de redefinição de senha.</p>
+            <p className="text-center text-gray-400 mb-6 text-sm">Insira sua matrícula para receber um link de redefinição de senha no email cadastrado.</p>
             <form onSubmit={handleResetPassword} className="space-y-6">
                 <div>
-                    <label htmlFor="forgot-password-email" className="block text-sm font-medium text-gray-300 mb-1">Email</label>
-                    <input id="forgot-password-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600" placeholder="seuemail@pc.ce.gov.br" required />
+                    <label htmlFor="forgot-password-matricula" className="block text-sm font-medium text-gray-300 mb-1">Matrícula</label>
+                    <input
+                        id="forgot-password-matricula"
+                        type="text"
+                        value={matricula}
+                        onChange={(e) => setMatricula(e.target.value)}
+                        className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600"
+                        placeholder="Ex: 12345678"
+                        pattern="^\d{7}[\dX]$"
+                        maxLength={8}
+                        required
+                    />
                 </div>
                 <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-500">
                     {isLoading ? <LoadingSpinner /> : <><Mail size={20} /><span>Enviar Link</span></>}

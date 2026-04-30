@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.crypto import get_random_string
 from rest_framework import status
 from rest_framework.test import APIClient
-from api.models import PasswordResetToken
+from api.models import PasswordResetToken, Policial, Delegacia, Departamento
 
 
 class PasswordResetViewTests(TestCase):
@@ -22,6 +22,40 @@ class PasswordResetViewTests(TestCase):
             password=initial_password,
             first_name='Teste',
         )
+        departamento = Departamento.objects.create(nome='Departamento Teste', sigla='DT')
+        delegacia = Delegacia.objects.create(nome='Delegacia Teste', departamento=departamento)
+        self.policial = Policial.objects.create(
+            usuario=self.user,
+            matricula='12345678',
+            nome='Teste Reset',
+            classe='Praça',
+            cargo='Policial Civil',
+            delegacia=delegacia,
+            email='teste.reset@example.com',
+        )
+
+    @override_settings(
+        DEBUG=True,
+        FRONTEND_URL='http://localhost:3000',
+        RESET_PASSWORD_PATH='/reset-password',
+        EMAIL_BACKEND='django.core.mail.backends.console.EmailBackend',
+    )
+    def test_password_reset_por_matricula_retorna_link_em_debug_e_salva_token(self):
+        response = self.client.post(
+            '/api/auth/password-reset/',
+            {'matricula': self.policial.matricula},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data.get('delivery'), 'debug')
+        self.assertIn('reset_link', response.data)
+        self.assertIn('token', response.data)
+        self.assertIn('/reset-password?', response.data['reset_link'])
+
+        self.assertEqual(PasswordResetToken.objects.filter(usuario=self.user).count(), 1)
+        token_obj = PasswordResetToken.objects.get(usuario=self.user)
+        self.assertGreater(token_obj.expires_at, timezone.now())
 
     @override_settings(
         DEBUG=True,
@@ -56,7 +90,7 @@ class PasswordResetViewTests(TestCase):
     def test_password_reset_retorna_503_quando_envio_falha(self, mocked_send_mail):
         response = self.client.post(
             '/api/auth/password-reset/',
-            {'email': self.user.email},
+            {'matricula': self.policial.matricula},
             format='json',
         )
 
@@ -84,7 +118,7 @@ class PasswordResetViewTests(TestCase):
     def test_password_reset_confirm_redefine_senha_e_invalida_token(self):
         request_response = self.client.post(
             '/api/auth/password-reset/',
-            {'email': self.user.email},
+            {'matricula': self.policial.matricula},
             format='json',
         )
         self.assertEqual(request_response.status_code, status.HTTP_200_OK)
