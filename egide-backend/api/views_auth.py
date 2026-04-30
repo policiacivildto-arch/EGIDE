@@ -11,7 +11,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import transaction
+from django.db import transaction, DatabaseError
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
@@ -547,8 +547,8 @@ def password_reset_view(request):
     if user and recipient_email:
         try:
             raw_token = _create_password_reset_token(user)
-        except Exception:
-            logger.exception('Falha ao criar token de redefinição para %s', recipient_email)
+        except DatabaseError as exc:
+            logger.exception('Falha ao criar token de redefinição para %s: %s', recipient_email, exc)
             return Response(
                 {'error': 'Não foi possível processar a solicitação no momento. Tente novamente mais tarde.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
