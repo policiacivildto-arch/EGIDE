@@ -29,6 +29,12 @@ export const ForgotPasswordScreen = ({ showNotification, setAuthScreen }) => {
                 return;
             }
 
+            // SMTP não configurado no servidor: token foi criado mas não pode ser enviado.
+            if (response?.delivery === 'log') {
+                showNotification("Serviço de e-mail não configurado. Entre em contato com o administrador do sistema para receber o link de redefinição.", "error");
+                return;
+            }
+
             showNotification("E-mail enviado para o endereço cadastrado na sua matrícula.", "success");
             setAuthScreen('login');
         } catch (error) {
