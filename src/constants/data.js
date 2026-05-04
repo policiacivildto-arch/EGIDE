@@ -595,7 +595,7 @@ export const AIS_BAIRROS = {
     "16": ["Ancuri", "Barroso", "Coaçu", "Conj. Palmeiras", "Curió", "Guajeru", "Jangurussu", "Lagoa Redonda", "Messejana", "Pq. Santa Maria", "Paupina", "Pedras", "São Bento"],
     "17": ["Bom Jardim", "Conj. Ceará I", "Conj. Ceará II", "Genibaú", "Granja Lisboa", "Granja Portugal", "Siqueira"],
     "18": ["Amadeu Furtado", "Antônio Bezerra", "Autran Nunes", "Bela Vista", "Bonsucesso", "Dom Lustosa", "Henrique Jorge", "João XXIII", "Jóquei Clube", "Olavo Oliveira", "Padre Andrade", "Parquelândia", "Pici", "Pres. Kennedy", "Quintino Cunha"],
-    "19": ["Aerolândia", "Alto da Balança", "Castelão", "Cajazeiras", "Cambeba", "Cid. dos Funcionários", "Dias Macêdo", "Edson Queiroz", "Jd. das Oliveiras", "José de Alencar", "Passaré", "Sabiaguaba", "Sapiranga"],
+    "19": ["Aerolândia", "Alto da Balança", "Castelão", "Cajazeiras", "Cambeba", "Cid. dos Funcionários", "Dias Macêdo", "Edson Queiroz", "Gereba", "Jd. das Oliveiras", "José de Alencar", "Passaré", "Sabiaguaba", "Sapiranga"],
     "20": ["Barra do Ceará", "Cristo Redentor", "Floresta", "Jardim Guanabara", "Jardim Iracema", "Pirambu", "Vila Velha"],
     "21": ["Aracapé", "Canindezinho", "Conj. Esperança", "Jd. Cearense", "Manoel Sátiro", "Maraponga", "Mondubim", "Pq. Pres. Vargas", "Pq. Santa Rosa", "Planalto Ayrton Senna", "José Walter"],
     "22": ["Cidade 2000", "Cocó", "De Lourdes", "Dionísio Torres", "Eng. Luciano Cavalcante", "Guararapes", "Joaquim Távora", "Papicu", "Praia do Futuro I", "Praia do Futuro II", "Salinas", "Tauape"],
