@@ -561,12 +561,13 @@ def password_reset_view(request):
     user = None
     recipient_email = None
 
-    # Busca prioritária por matrícula → usa o email do Policial como destino
+    # Busca prioritária por matrícula → usa o email do Policial como destino.
+    # Usa o email do User como fallback caso o Policial não tenha email cadastrado.
     if matricula_input:
         try:
             policial = Policial.objects.select_related('usuario').get(matricula=matricula_input)
             user = policial.usuario
-            recipient_email = policial.email
+            recipient_email = policial.email or (user.email if user else None)
         except Policial.DoesNotExist:
             pass
 
@@ -591,10 +592,12 @@ def password_reset_view(request):
 
             if not _is_smtp_configured():
                 logger.warning(
-                    'SMTP não configurado. Redefinição de senha solicitada para %s, '
-                    'mas o e-mail não pôde ser enviado. Configure as variáveis '
-                    'EMAIL_HOST_USER e EMAIL_HOST_PASSWORD.',
+                    'SMTP não configurado. Redefinição de senha solicitada para %s. '
+                    'Link de redefinição (válido por %s min): %s. '
+                    'Configure as variáveis EMAIL_HOST_USER e EMAIL_HOST_PASSWORD.',
                     recipient_email,
+                    expiry_minutes,
+                    reset_link,
                 )
                 return Response({
                     'message': PASSWORD_RESET_SUCCESS_MESSAGE,
