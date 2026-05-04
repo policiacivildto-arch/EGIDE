@@ -567,7 +567,7 @@ def password_reset_view(request):
         try:
             policial = Policial.objects.select_related('usuario').get(matricula=matricula_input)
             user = policial.usuario
-            recipient_email = policial.email or (user.email if user else None)
+            recipient_email = policial.email or user.email
         except Policial.DoesNotExist:
             pass
 
@@ -593,7 +593,7 @@ def password_reset_view(request):
             if not _is_smtp_configured():
                 logger.warning(
                     'SMTP não configurado. Redefinição de senha solicitada para %s. '
-                    'Link de redefinição (válido por %s min): %s. '
+                    'Link de redefinição (válido por %s minutos): %s. '
                     'Configure as variáveis EMAIL_HOST_USER e EMAIL_HOST_PASSWORD.',
                     recipient_email,
                     expiry_minutes,
