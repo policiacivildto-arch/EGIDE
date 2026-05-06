@@ -1247,6 +1247,23 @@ export const MinhasOperacoesView = ({ user, showNotification }) => {
             });
 
             await Promise.all(payloads.map((payload) => apiClient.createResultadoOperacao(payload)));
+
+            // Persiste o relatório completo no localStorage para o dashboard do admin
+            const rawDate = reportData?.operationDate;
+            const isoDate = rawDate
+                ? (typeof rawDate === 'string'
+                    ? rawDate.split('T')[0]
+                    : (rawDate instanceof Date ? rawDate.toISOString().split('T')[0] : null))
+                : null;
+            try {
+                await apiClient.createConvoyReport({
+                    ...reportData,
+                    data_operacao: isoDate || new Date().toISOString().split('T')[0],
+                });
+            } catch (convoyErr) {
+                console.warn('Não foi possível salvar relatório no cache local:', convoyErr);
+            }
+
             showNotification('Relatório enviado com sucesso!', 'success');
             setReports(prev => new Map(prev).set(operationId, reportData));
             handleCloseModal();

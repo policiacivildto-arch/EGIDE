@@ -151,9 +151,9 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
         const dateKey = toIsoDateKey(operation?.date instanceof Date ? operation.date : parseDateValue(operation?.date));
         const aisKey = normalizeTextKey(operation?.ais);
         const bairrosKey = normalizeTextKey(operation?.bairros);
-        const startKey = normalizeTime(operation?.horarioEntrada);
-        const endKey = normalizeTime(operation?.horarioSaida);
-        return `${dateKey}::${aisKey}::${bairrosKey}::${startKey}::${endKey}`;
+        // Não inclui horário no merge key: convois do mesmo dia/AIS/bairro devem ser mesclados
+        // mesmo que tenham horários ligeiramente diferentes (horário é ajustável pelo usuário).
+        return `${dateKey}::${aisKey}::${bairrosKey}`;
     };
 
     const getEntryMergeKey = (entry) => {
@@ -333,6 +333,8 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
             const frequencias = Array.isArray(frequenciasResponse) ? frequenciasResponse : (frequenciasResponse?.results || []);
             const frequencyByTeamPolicialDate = new Map();
             const frequencyByTeamMatriculaDate = new Map();
+            // Mapa adicional para supervisores: apenas policial+data (ignora equipe)
+            const frequencyBySupervisorDate = new Map();
             for (const freq of frequencias) {
                 const equipeId = String(freq.equipe);
                 const policialId = String(freq.policial || '');
@@ -345,6 +347,22 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
 
                 if (equipeId && matriculaKey && dateKey) {
                     frequencyByTeamMatriculaDate.set(`${equipeId}::${matriculaKey}::${dateKey}`, freq);
+                }
+
+                // Para supervisores: indexa por policial+data (a equipe pode ser qualquer uma do dia)
+                if (policialId && dateKey) {
+                    const supKey = `pol:${policialId}::${dateKey}`;
+                    const existing = frequencyBySupervisorDate.get(supKey);
+                    if (!existing || freq.status === 'presente') {
+                        frequencyBySupervisorDate.set(supKey, freq);
+                    }
+                }
+                if (matriculaKey && dateKey) {
+                    const supMatKey = `mat:${matriculaKey}::${dateKey}`;
+                    const existing = frequencyBySupervisorDate.get(supMatKey);
+                    if (!existing || freq.status === 'presente') {
+                        frequencyBySupervisorDate.set(supMatKey, freq);
+                    }
                 }
             }
 
@@ -459,6 +477,19 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                         processedSupervisorsForDate.add(supervisorKey);
                     }
 
+                    // Busca frequência do supervisor na data (equipe salva pode ser qualquer uma do dia)
+                    const supDateKey = toIsoDateKey(convoyBaseDate);
+                    const supPolicialId = userDetails?.id !== undefined && userDetails?.id !== null ? String(userDetails.id) : null;
+                    const supMatKey = normalizeMatricula(userDetails?.matricula);
+                    let supervisorFreq = null;
+                    if (supPolicialId && supDateKey) {
+                        supervisorFreq = frequencyBySupervisorDate.get(`pol:${supPolicialId}::${supDateKey}`) || null;
+                    }
+                    if (!supervisorFreq && supMatKey && supDateKey) {
+                        supervisorFreq = frequencyBySupervisorDate.get(`mat:${supMatKey}::${supDateKey}`) || null;
+                    }
+                    const supervisorSituacao = supervisorFreq?.status || 'pendente';
+
                     const userCost = addCostForUser(userDetails, convoyBaseDate, operationStartTime, operationEndTime) || 0;
                     addEntry({
                         date: convoyBaseDate,
@@ -467,6 +498,7 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                         matricula: userDetails?.matricula || '',
                         inicio: operationStartTime,
                         fim: operationEndTime,
+                        situacao: supervisorSituacao,
                         cost: userCost,
                     });
 
@@ -590,20 +622,25 @@ export const OperationCostView = ({ showNotification, allUsers, holidays, depart
                 }
 
                 grandTotalCost += currentOperationCost;
-                operationsDetails.push({
-                    id: convoy.id,
-                    date: parseDateValue(convoy?.data || convoy?.date) || new Date(),
-                    ais: convoy.ais,
-                    bairros: Array.isArray(convoy.bairros) ? convoy.bairros.join(', ') : convoy.bairro,
-                    horarioEntrada: operationStartTime,
-                    horarioSaida: operationEndTime,
-                    supervisionCost,
-                    teamCost,
-                    scheduleConfirmed: Boolean(schedule.confirmed),
-                    scheduleConfirmedAt: schedule.confirmedAt,
-                    entries: operationEntries,
-                    cost: currentOperationCost
-                });
+                // Só adiciona ao relatório se há policiais ou custo de supervisão.
+                // Convois sem equipes atribuídas (porque outro convoi do mesmo dia já absorveu as equipes)
+                // gerariam linhas fantasma/duplicadas na tabela.
+                if (operationEntries.length > 0 || supervisionCost > 0) {
+                    operationsDetails.push({
+                        id: convoy.id,
+                        date: parseDateValue(convoy?.data || convoy?.date) || new Date(),
+                        ais: convoy.ais,
+                        bairros: Array.isArray(convoy.bairros) ? convoy.bairros.join(', ') : (convoy.bairros || ''),
+                        horarioEntrada: operationStartTime,
+                        horarioSaida: operationEndTime,
+                        supervisionCost,
+                        teamCost,
+                        scheduleConfirmed: Boolean(schedule.confirmed),
+                        scheduleConfirmedAt: schedule.confirmedAt,
+                        entries: operationEntries,
+                        cost: currentOperationCost
+                    });
+                }
             }
 
             if (operationsDetails.length === 0 && teamsList.length > 0) {

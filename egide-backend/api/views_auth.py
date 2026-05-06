@@ -71,14 +71,22 @@ def _hash_reset_token(token):
 def _build_password_reset_link(token, request=None):
     frontend_url = str(getattr(settings, 'FRONTEND_URL', '') or '').rstrip('/')
     if not frontend_url and request is not None:
-        frontend_url = str(request.headers.get('Origin') or '').rstrip('/')
+        # Tenta Origin, depois Referer (útil quando o frontend chama a API diretamente)
+        origin = str(request.headers.get('Origin') or '').rstrip('/')
+        referer = str(request.headers.get('Referer') or '')
+        if origin:
+            frontend_url = origin
+        elif referer:
+            from urllib.parse import urlparse
+            parsed = urlparse(referer)
+            frontend_url = f'{parsed.scheme}://{parsed.netloc}'.rstrip('/')
 
     reset_path = str(getattr(settings, 'RESET_PASSWORD_PATH', '/reset-password') or '/reset-password')
     if not reset_path.startswith('/'):
         reset_path = f'/{reset_path}'
 
     query = urlencode({'token': token})
-    return f'{frontend_url}{reset_path}?{query}' if frontend_url else ''
+    return f'{frontend_url}{reset_path}?{query}' if frontend_url else f'/reset-password?{query}'
 
 
 def _build_password_reset_message(user, reset_link, raw_token, expiry_minutes):
@@ -566,7 +574,8 @@ def password_reset_view(request):
         try:
             policial = Policial.objects.select_related('usuario').get(matricula=matricula_input)
             user = policial.usuario
-            recipient_email = policial.email
+            # Usa email do policial; se vazio, fallback para email do usuário Django
+            recipient_email = (policial.email or '').strip() or (user.email or '').strip() or None
         except Policial.DoesNotExist:
             pass
 

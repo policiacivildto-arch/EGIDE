@@ -133,11 +133,15 @@ export default function App() {
             setUser({ email: loadedUserData.email });
         } catch (error) {
             console.error('Erro ao verificar autenticação:', error);
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('refresh_token');
-            apiClient.setToken(null);
+            apiClient.clearAuthStorage();
             setUser(null);
             setUserData(null);
+            // Redireciona para login apenas se não estiver já em rota pública
+            const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password'];
+            const isPublicPath = publicPaths.some(p => window.location.pathname.startsWith(p));
+            if (!isPublicPath) {
+                navigate('/login');
+            }
         } finally {
             setLoading(false);
         }

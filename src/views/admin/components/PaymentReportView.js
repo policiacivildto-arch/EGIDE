@@ -72,6 +72,8 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
     const [substituteSelectorOpen, setSubstituteSelectorOpen] = useState({});
     const [substituteSearchTerms, setSubstituteSearchTerms] = useState({});
     const [holidayDateStrings, setHolidayDateStrings] = useState([]);
+    // Ref para evitar que a hidratação do backend sobrescreva status recém confirmado pelo usuário
+    const isSavingRef = React.useRef(false);
 
     // Notifica AdminDashboard quando as datas mudam para sincronizar com OperationCostView
     useEffect(() => {
@@ -318,15 +320,20 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         const registros = teamRow.members
             .map((member) => {
                 const policialId = getPolicialId(member);
-                if (!policialId) return null;
+                // Rejeita IDs inválidos (null, string não-numérica) para evitar erro no backend
+                const numericId = Number(policialId);
+                if (!policialId || !Number.isFinite(numericId) || numericId <= 0) return null;
 
                 const key = getMemberStatusKey(teamRow.id, member);
                 const status = nextAttendanceStatus[key] || 'pendente';
-                const substituto = nextSubstitutions[key]?.id || null;
+                const substitutoRaw = nextSubstitutions[key]?.id || null;
+                const substituto = substitutoRaw !== null && Number.isFinite(Number(substitutoRaw)) && Number(substitutoRaw) > 0
+                    ? Number(substitutoRaw)
+                    : null;
 
                 return {
                     equipe: attendanceTeamId,
-                    policial: policialId,
+                    policial: numericId,
                     data_operacao: teamRow.dateKey,
                     status,
                     substituto,
@@ -336,6 +343,7 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
 
         if (registros.length === 0) return;
 
+        isSavingRef.current = true;
         try {
             const response = await apiClient.registrarFrequenciasLote(registros);
             const erros = Array.isArray(response?.erros) ? response.erros : [];
@@ -346,6 +354,8 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
         } catch (error) {
             console.error('Falha ao persistir frequência no backend:', error);
             showNotification('Falha ao salvar frequência no servidor.', 'error');
+        } finally {
+            isSavingRef.current = false;
         }
     };
 
@@ -755,7 +765,10 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
                     data_operacao__gte: startDate,
                     data_operacao__lte: endDate,
                 });
-                hydrateAttendanceFromBackend(frequencyRows, frequencias);
+                // Não sobrescreve estado se o usuário está no meio de uma confirmação
+                if (!isSavingRef.current) {
+                    hydrateAttendanceFromBackend(frequencyRows, frequencias);
+                }
             } catch (error) {
                 console.error('Falha ao carregar frequência registrada:', error);
             }

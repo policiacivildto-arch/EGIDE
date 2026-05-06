@@ -118,9 +118,9 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
          return reports.reduce((acc, report) => {
              acc.pessoasAbordadas += report.abordagens?.pessoas || 0;
              acc.veiculosAbordados += report.abordagens?.veiculos || 0;
-             acc.totalBoc += report.procedimentos?.boc || 0;
-             acc.totalTco += report.procedimentos?.tco || 0;
-             acc.totalApf += report.procedimentos?.apf || 0;
+             acc.totalBoc += Number(report.procedimentos?.bocTotal ?? (Array.isArray(report.procedimentos?.boc) ? report.procedimentos.boc.length : report.procedimentos?.boc)) || 0;
+             acc.totalTco += Number(report.procedimentos?.tcoTotal ?? (Array.isArray(report.procedimentos?.tco) ? report.procedimentos.tco.length : report.procedimentos?.tco)) || 0;
+             acc.totalApf += Number(report.procedimentos?.apfTotal ?? (Array.isArray(report.procedimentos?.apf) ? report.procedimentos.apf.length : report.procedimentos?.apf)) || 0;
              if (Array.isArray(report.prisoes)) {
                  report.prisoes.forEach(p => {
                      const qtd = Number(p.quantidade) || 0;
