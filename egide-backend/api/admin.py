@@ -6,7 +6,9 @@ from .models import (
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
     # Sistema de Eventos
-    EventoOperacao, DepartamentoEvento, EscalaPolicial
+    EventoOperacao, DepartamentoEvento, EscalaPolicial,
+    # Relatórios de Comboio
+    RelatorioComboio,
 )
 from .models_security import (
     PerfilPolicial, PerfilDepartamento, PerfilDelegacia, LogAuditoria, 
@@ -256,3 +258,12 @@ class SessaoUsuarioAdmin(admin.ModelAdmin):
     search_fields = ['usuario__username', 'policial__nome', 'ip_address']
     readonly_fields = ['iniciada_em', 'ultima_atividade', 'expira_em', 'finalizada_em']
 
+
+
+@admin.register(RelatorioComboio)
+class RelatorioComboioAdmin(admin.ModelAdmin):
+    list_display = ['id', 'convoy_id', 'data_operacao', 'departamento', 'delegacia', 'ais', 'submitted_at', 'criado_em']
+    list_filter = ['departamento', 'data_operacao', 'cycle_id']
+    search_fields = ['departamento', 'delegacia', 'ais']
+    ordering = ['-data_operacao']
+    readonly_fields = ['criado_em', 'atualizado_em']

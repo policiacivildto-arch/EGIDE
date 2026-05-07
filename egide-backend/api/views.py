@@ -14,7 +14,7 @@ from .models import (
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
     EventoOperacao, DepartamentoEvento, EscalaPolicial,
-    Feriado, FrequenciaPolicial
+    Feriado, FrequenciaPolicial, RelatorioComboio
 )
 from .serializers import (
     DepartamentoSerializer, DelegaciaSerializer, PolicialSerializer,
@@ -27,7 +27,7 @@ from .serializers import (
     DepartamentoEventoSerializer, DepartamentoEventoSimplificadoSerializer,
     EscalaPolicialSerializer,
     FeriadoSerializer, FrequenciaPolicialSerializer,
-    PagamentoSerializer
+    PagamentoSerializer, RelatorioComboioSerializer
 )
 # Pagamento API
 from .models import Pagamento
@@ -996,3 +996,19 @@ class FrequenciaPolicialViewSet(viewsets.ModelViewSet):
 
         return Response({'registros': resultados, 'total': len(resultados), 'erros': erros})
 
+
+
+class RelatorioComboioViewSet(viewsets.ModelViewSet):
+    """ViewSet para armazenar e consultar relatórios de resultado de comboios enviados pelos policiais."""
+    queryset = RelatorioComboio.objects.all()
+    serializer_class = RelatorioComboioSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = {
+        'data_operacao': ['exact', 'gte', 'lte'],
+        'cycle_id': ['exact'],
+        'departamento': ['exact', 'icontains'],
+        'convoy_id': ['exact', 'in'],
+    }
+    search_fields = ['departamento', 'delegacia', 'ais']
+    ordering_fields = ['data_operacao', 'criado_em']
+    ordering = ['-data_operacao']

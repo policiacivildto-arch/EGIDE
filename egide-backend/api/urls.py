@@ -2,7 +2,7 @@ from rest_framework import routers
 from .views import (
     DepartamentoViewSet, DelegaciaViewSet, PolicialViewSet, ViaturaViewSet, VagaViewSet,
     EquipeViewSet, OperacaoViewSet, ComboioViewSet, OperacaoPolicialViewSet,
-    PagamentoViewSet
+    PagamentoViewSet, RelatorioComboioViewSet
 )
 
 router = routers.DefaultRouter()
@@ -16,5 +16,6 @@ router.register(r'operacoes', OperacaoViewSet)
 router.register(r'comboios', ComboioViewSet)
 router.register(r'operacoes-policiais', OperacaoPolicialViewSet)
 router.register(r'pagamentos', PagamentoViewSet)
+router.register(r'convoy-reports', RelatorioComboioViewSet)
 
 urlpatterns = router.urls
