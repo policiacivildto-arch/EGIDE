@@ -707,3 +707,50 @@ class Feriado(models.Model):
 
     def __str__(self):
         return f"{self.nome} ({self.data.strftime('%d/%m/%Y')})"
+
+
+class RelatorioComboio(models.Model):
+    """Relatório de resultado de operação enviado pelo policial após o comboio."""
+
+    # Identificação do comboio de origem
+    convoy_id = models.IntegerField(null=True, blank=True, db_index=True)
+    source = models.CharField(max_length=50, blank=True, null=True)
+    legacy_team_id = models.IntegerField(null=True, blank=True)
+    legacy_operation_id = models.IntegerField(null=True, blank=True)
+
+    # Data de referência da operação e ciclo
+    data_operacao = models.DateField(db_index=True)
+    cycle_id = models.CharField(max_length=20, blank=True, null=True, db_index=True)
+
+    # Localização
+    departamento = models.CharField(max_length=100, blank=True, null=True, db_index=True)
+    delegacia = models.CharField(max_length=100, blank=True, null=True)
+    ais = models.CharField(max_length=50, blank=True, null=True)
+    bairros = models.JSONField(default=list, blank=True)
+
+    # Conteúdo do relatório (armazenado como JSON)
+    abordagens = models.JSONField(default=dict, blank=True)
+    prisoes = models.JSONField(default=list, blank=True)
+    procedimentos = models.JSONField(default=dict, blank=True)
+    apreensoes = models.JSONField(default=dict, blank=True)
+    escoltas = models.JSONField(default=list, blank=True)
+    mandados_prisao_diligenciados = models.IntegerField(default=0)
+    conducoes_averiguacao = models.IntegerField(default=0)
+    procedimento_escolta = models.TextField(blank=True, null=True)
+    homicidios_ais = models.BooleanField(null=True, blank=True)
+
+    # Quem submeteu
+    submitted_by = models.JSONField(default=dict, blank=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    # Controle
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-data_operacao', '-criado_em']
+        verbose_name = 'Relatório de Comboio'
+        verbose_name_plural = 'Relatórios de Comboio'
+
+    def __str__(self):
+        return f"Relatório Comboio {self.convoy_id} - {self.data_operacao} ({self.departamento})"

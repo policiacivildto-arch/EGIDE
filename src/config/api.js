@@ -734,6 +734,41 @@ class DjangoApiClient {
   }
 
   async createConvoyReport(data) {
+    // Map camelCase fields from frontend to snake_case expected by the backend
+    const payload = {
+      convoy_id: data.convoyId ?? data.convoy_id ?? null,
+      source: data.source ?? null,
+      legacy_team_id: data.legacyTeamId ?? data.legacy_team_id ?? null,
+      legacy_operation_id: data.legacyOperationId ?? data.legacy_operation_id ?? null,
+      data_operacao: data.data_operacao || (data.operationDate
+        ? (typeof data.operationDate === 'string'
+            ? data.operationDate.split('T')[0]
+            : data.operationDate instanceof Date
+              ? data.operationDate.toISOString().split('T')[0]
+              : null)
+        : null) || new Date().toISOString().split('T')[0],
+      cycle_id: data.cycleId ?? data.cycle_id ?? null,
+      departamento: data.departamento ?? null,
+      delegacia: data.delegacia ?? null,
+      ais: data.ais ?? null,
+      bairros: data.bairros ?? [],
+      abordagens: data.abordagens ?? {},
+      prisoes: data.prisoes ?? [],
+      procedimentos: data.procedimentos ?? {},
+      apreensoes: data.apreensoes ?? {},
+      escoltas: data.escoltas ?? [],
+      mandados_prisao_diligenciados: data.mandadosPrisaoDiligenciados ?? data.mandados_prisao_diligenciados ?? 0,
+      conducoes_averiguacao: data.conducoesAveriguacao ?? data.conducoes_averiguacao ?? 0,
+      procedimento_escolta: data.procedimentoEscolta ?? data.procedimento_escolta ?? null,
+      homicidios_ais: data.homicidiosAIS ?? data.homicidios_ais ?? null,
+      submitted_by: data.submittedBy ?? data.submitted_by ?? {},
+      submitted_at: data.submittedAt
+        ? (data.submittedAt instanceof Date
+            ? data.submittedAt.toISOString()
+            : data.submittedAt)
+        : (data.submitted_at ?? null),
+    };
+
     if (this.convoyReportsEndpointAvailable === false) {
       const reports = this._getLocalConvoyReports();
       const newReport = {
@@ -747,7 +782,7 @@ class DjangoApiClient {
     }
 
     try {
-      const created = await this.create('convoy-reports', data, { suppressErrorLog: true });
+      const created = await this.create('convoy-reports', payload, { suppressErrorLog: true });
       this.convoyReportsEndpointAvailable = true;
       return created;
     } catch (error) {
