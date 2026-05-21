@@ -34,6 +34,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
 
     // Departamento do usuário logado
     const userDepartamento = userData?.departamento || '';
+    const userDepartamentoId = Number(userData?.departamento_id) || null;
 
     const toIsoLocalDate = (date) => {
         const d = new Date(date);
@@ -406,13 +407,13 @@ export default function DashboardDepartamento({ userData, showNotification }) {
 
             {loading ? <LoadingSpinner /> : (
                 <>
-                    {view === 'dashboard' && <ReportsDashboardView showNotification={showNotification} departamento={userDepartamento} />}
+                    {view === 'dashboard' && <ReportsDashboardView showNotification={showNotification} departamento={userDepartamentoId || userDepartamento} />}
                     {view === 'ranking' && <RankingView showNotification={showNotification} departamento={userDepartamento} />}
                     {view === 'schedule' && <ScheduleManagementView vagas={vagas} teams={teams} allUsers={allUsers} showNotification={showNotification} weekId={currentWeek.weekId} departamento={userDepartamento} />}
                     {view === 'convoys' && <ConvoyManagementView teams={teams} convoys={convoys} weekId={currentWeek.weekId} showNotification={showNotification} departamento={userDepartamento} />}
                     {view === 'paymentReport' && <PaymentReportView allUsers={allUsers} showNotification={showNotification} departamento={userDepartamento} />}
                     {view === 'operationCost' && <OperationCostView allUsers={allUsers} holidays={holidays} showNotification={showNotification} departamento={userDepartamento} />}
-                    {view === 'operationReports' && <OperationReportsView showNotification={showNotification} departamento={userDepartamento} />}
+                    {view === 'operationReports' && <OperationReportsView showNotification={showNotification} departamento={userDepartamentoId || userDepartamento} />}
                     {view === 'alerts' && <AlertsView showNotification={showNotification} setView={setViewAndSyncUrl} setCurrentWeek={setCurrentWeek} departamento={userDepartamento} />}
                     {view === 'holidays' && <HolidayManagementView showNotification={showNotification} />}
                 </>
@@ -424,6 +425,7 @@ export default function DashboardDepartamento({ userData, showNotification }) {
 DashboardDepartamento.propTypes = {
     userData: PropTypes.shape({
         departamento: PropTypes.string,
+        departamento_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
         delegacia_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     }),
     showNotification: PropTypes.func,

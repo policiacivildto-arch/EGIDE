@@ -341,11 +341,20 @@ export const PaymentReportView = ({ allUsers = [], showNotification, departament
             })
             .filter(Boolean);
 
-        if (registros.length === 0) return;
+        // Evita enviar a mesma combinação equipe+policial+data mais de uma vez.
+        // Isso pode ocorrer com dados duplicados de membros e gera conflito de unicidade no backend.
+        const uniqueByKey = new Map();
+        registros.forEach((registro) => {
+            const dedupeKey = `${registro.equipe}-${registro.policial}-${registro.data_operacao}`;
+            uniqueByKey.set(dedupeKey, registro);
+        });
+        const registrosDeduped = Array.from(uniqueByKey.values());
+
+        if (registrosDeduped.length === 0) return;
 
         isSavingRef.current = true;
         try {
-            const response = await apiClient.registrarFrequenciasLote(registros);
+            const response = await apiClient.registrarFrequenciasLote(registrosDeduped);
             const erros = Array.isArray(response?.erros) ? response.erros : [];
             if (erros.length > 0) {
                 const primeiraMensagem = String(erros[0]?.erro || 'Falha ao salvar parte das frequências.');

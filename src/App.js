@@ -73,12 +73,14 @@ export default function App() {
                 loadedUserData.role = 'delegacia';
                 loadedUserData.perfil_delegacia = response.perfil_delegacia;
                 loadedUserData.departamento = response.perfil_delegacia.departamento;
+                loadedUserData.departamento_id = response.perfil_delegacia.departamento_id;
                 loadedUserData.delegacia = response.perfil_delegacia.delegacia;
                 loadedUserData.delegacia_id = response.perfil_delegacia.delegacia_id;
             } else if (response.perfil_departamento) {
                 loadedUserData.role = 'departamento';
                 loadedUserData.perfil_departamento = response.perfil_departamento;
                 loadedUserData.departamento = response.perfil_departamento.departamento;
+                loadedUserData.departamento_id = response.perfil_departamento.departamento_id;
             } else {
                 loadedUserData.role = 'officer';
 

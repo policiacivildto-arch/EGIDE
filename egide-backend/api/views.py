@@ -14,7 +14,7 @@ from .models import (
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
     EventoOperacao, DepartamentoEvento, EscalaPolicial,
-    Feriado, FrequenciaPolicial
+    Feriado, FrequenciaPolicial, RelatorioComboio
 )
 from .serializers import (
     DepartamentoSerializer, DelegaciaSerializer, PolicialSerializer,
@@ -27,7 +27,7 @@ from .serializers import (
     DepartamentoEventoSerializer, DepartamentoEventoSimplificadoSerializer,
     EscalaPolicialSerializer,
     FeriadoSerializer, FrequenciaPolicialSerializer,
-    PagamentoSerializer
+    PagamentoSerializer, RelatorioComboioSerializer
 )
 # Pagamento API
 from .models import Pagamento
@@ -910,89 +910,262 @@ class FrequenciaPolicialViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def registrar_lote(self, request):
-        """Registra ou atualiza frequência de múltiplos policiais de uma equipe de uma vez
-        Ao confirmar presença, cria/atualiza registro em Pagamento para o policial/data/operacao."""
-        from .models import Pagamento
+        """Registra ou atualiza frequência de múltiplos policiais de uma equipe de uma vez"""
         registros = request.data.get('registros', [])
         if not registros:
             return Response({'error': 'Nenhum registro enviado.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # ✅ Validar substitutos em batch
+        substituto_ids = {reg.get('substituto') for reg in registros if reg.get('substituto')}
+        substitutos_validos = set(Policial.objects.filter(id__in=substituto_ids).values_list('id', flat=True)) if substituto_ids else set()
+        
         resultados = []
         erros = []
+        frequencias_para_criar = []
+        frequencias_para_atualizar = []
+        frequencias_presentes = []
 
+        # ✅ Processar cada registro
         for index, reg in enumerate(registros):
-            equipe_id = reg.get('equipe')
-            policial_id = reg.get('policial')
-            data_operacao = reg.get('data_operacao')
-            status_freq = reg.get('status', 'pendente')
-            substituto_id = reg.get('substituto')
+            self._processar_registro_frequencia(
+                index, reg, substitutos_validos, request,
+                frequencias_para_criar, frequencias_para_atualizar, frequencias_presentes,
+                resultados, erros
+            )
 
-            if not all([equipe_id, policial_id, data_operacao]):
-                erros.append({'index': index, 'erro': 'Campos obrigatórios ausentes (equipe, policial, data_operacao).'})
-                continue
+        # ✅ Salvar em bulk
+        if frequencias_para_criar:
+            FrequenciaPolicial.objects.bulk_create(frequencias_para_criar, ignore_conflicts=True)
+        if frequencias_para_atualizar:
+            FrequenciaPolicial.objects.bulk_update(frequencias_para_atualizar, ['status', 'substituto_id', 'registrado_por'])
 
-            if substituto_id and not Policial.objects.filter(id=substituto_id).exists():
-                erros.append({'index': index, 'erro': f'Substituto inválido (id={substituto_id}). Registro salvo sem substituto.'})
-                substituto_id = None
+        # ✅ Processar pagamentos
+        if frequencias_presentes:
+            self._processar_pagamentos_lote(frequencias_presentes)
 
-            try:
-                obj, _ = FrequenciaPolicial.objects.update_or_create(
+        return Response({'registros': resultados, 'total': len(resultados), 'erros': erros})
+
+    def _processar_registro_frequencia(self, index, reg, substitutos_validos, request, frequencias_para_criar, frequencias_para_atualizar, frequencias_presentes, resultados, erros):
+        """Processa um registro individual de frequência"""
+        equipe_id = reg.get('equipe')
+        policial_id = reg.get('policial')
+        data_operacao = reg.get('data_operacao')
+        status_freq = reg.get('status', 'pendente')
+        substituto_id = reg.get('substituto')
+
+        if not all([equipe_id, policial_id, data_operacao]):
+            erros.append({'index': index, 'erro': 'Campos obrigatórios ausentes (equipe, policial, data_operacao).'})
+            return
+
+        if substituto_id and substituto_id not in substitutos_validos:
+            erros.append({'index': index, 'erro': f'Substituto inválido (id={substituto_id}).'})
+            substituto_id = None
+
+        try:
+            obj = FrequenciaPolicial.objects.filter(
+                equipe_id=equipe_id,
+                policial_id=policial_id,
+                data_operacao=data_operacao
+            ).first()
+            
+            if obj:
+                obj.status = status_freq
+                obj.substituto_id = substituto_id
+                obj.registrado_por = request.user if request.user.is_authenticated else None
+                frequencias_para_atualizar.append(obj)
+            else:
+                obj = FrequenciaPolicial(
                     equipe_id=equipe_id,
                     policial_id=policial_id,
                     data_operacao=data_operacao,
-                    defaults={
-                        'status': status_freq,
-                        'substituto_id': substituto_id,
-                        'registrado_por': request.user if request.user.is_authenticated else None,
-                    }
+                    status=status_freq,
+                    substituto_id=substituto_id,
+                    registrado_por=request.user if request.user.is_authenticated else None,
                 )
-                resultados.append(FrequenciaPolicialSerializer(obj).data)
-            except Exception as exc:
-                erros.append({'index': index, 'erro': f'Falha ao salvar frequência: {str(exc)}'})
-                continue
-
-            # Se presença confirmada, cria/atualiza Pagamento com cálculo.
-            # Falhas de pagamento não devem quebrar a gravação da frequência.
+                frequencias_para_criar.append(obj)
+            
             if status_freq.lower() == 'presente':
-                try:
-                    policial = obj.policial
-                    equipe = obj.equipe
-                    vaga = getattr(equipe, 'vaga', None)
-                    cargo = policial.cargo if policial else ''
-                    servico = 'EXTRA'  # Ajuste se necessário
-                    data_entrada = obj.data_operacao
-                    data_saida = obj.data_operacao
-                    horario_inicial = timezone.now()
-                    horario_final = timezone.now()
+                frequencias_presentes.append(obj)
+                
+            resultados.append(FrequenciaPolicialSerializer(obj).data)
+            
+        except Exception as exc:
+            erros.append({'index': index, 'erro': f'Falha ao salvar frequência: {str(exc)}'})
 
-                    if vaga and vaga.turno == 'day':
-                        horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('08:00', '%H:%M').time()))
-                        horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('20:00', '%H:%M').time()))
-                    elif vaga and vaga.turno == 'night':
-                        horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('19:00', '%H:%M').time()))
-                        horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('01:00', '%H:%M').time()))
+    
+    def _processar_pagamentos_lote(self, frequencias_presentes):
+        """Processa pagamentos para registros de presença confirmada (bulk)"""
+        from .models import Pagamento
+        
+        if not frequencias_presentes:
+            return
 
-                    valor_pago = calcular_pagamento_backend(
-                        cargo,
-                        servico,
-                        data_entrada,
-                        horario_inicial.timetz() if hasattr(horario_inicial, 'timetz') else horario_inicial.time(),
-                        data_saida,
-                        horario_final.timetz() if hasattr(horario_final, 'timetz') else horario_final.time(),
-                    )
+        pagamentos_para_criar = []
+        pagamentos_para_atualizar = []
+        
+        for obj in frequencias_presentes:
+            self._preparar_pagamento(obj, pagamentos_para_criar, pagamentos_para_atualizar)
+        
+        # ✅ Salvar pagamentos em bulk
+        if pagamentos_para_criar:
+            Pagamento.objects.bulk_create(pagamentos_para_criar, ignore_conflicts=True)
+        if pagamentos_para_atualizar:
+            Pagamento.objects.bulk_update(pagamentos_para_atualizar, ['horario_inicial', 'horario_final', 'valor_pago', 'observacao'])
 
-                    Pagamento.objects.update_or_create(
-                        policial_id=policial_id,
-                        data_operacao=data_operacao,
-                        defaults={
-                            'horario_inicial': horario_inicial,
-                            'horario_final': horario_final,
-                            'valor_pago': valor_pago,
-                            'observacao': '',
-                        }
-                    )
-                except Exception as exc:
-                    erros.append({'index': index, 'erro': f'Falha ao gerar pagamento: {str(exc)}'})
+    def _preparar_pagamento(self, obj, pagamentos_para_criar, pagamentos_para_atualizar):
+        """Prepara um pagamento para ser salvo em bulk"""
+        try:
+            from .models import Pagamento
+            
+            policial = obj.policial
+            equipe = obj.equipe
+            vaga = getattr(equipe, 'vaga', None)
+            cargo = policial.cargo if policial else ''
+            data_entrada = obj.data_operacao
+            data_saida = obj.data_operacao
+            
+            # Definir horários baseado no turno
+            horario_inicial, horario_final = self._obter_horarios(vaga, data_entrada, data_saida)
 
-        return Response({'registros': resultados, 'total': len(resultados), 'erros': erros})
+            valor_pago = calcular_pagamento_backend(
+                cargo, 'EXTRA', data_entrada,
+                horario_inicial.timetz() if hasattr(horario_inicial, 'timetz') else horario_inicial.time(),
+                data_saida,
+                horario_final.timetz() if hasattr(horario_final, 'timetz') else horario_final.time(),
+            )
+
+            # Verificar se existe pagamento
+            pagto = Pagamento.objects.filter(
+                policial_id=obj.policial_id,
+                data_operacao=data_entrada
+            ).first()
+            
+            if pagto:
+                pagto.horario_inicial = horario_inicial
+                pagto.horario_final = horario_final
+                pagto.valor_pago = valor_pago
+                pagto.observacao = ''
+                pagamentos_para_atualizar.append(pagto)
+            else:
+                pagamentos_para_criar.append(Pagamento(
+                    policial_id=obj.policial_id,
+                    data_operacao=data_entrada,
+                    horario_inicial=horario_inicial,
+                    horario_final=horario_final,
+                    valor_pago=valor_pago,
+                    observacao=''
+                ))
+        except Exception:
+            # Silenciar erros de pagamento - frequências já foram salvas
+            pass
+
+    def _obter_horarios(self, vaga, data_entrada, data_saida):
+        """Obtém horários iniciais e finais baseado no turno"""
+        if vaga and vaga.turno == 'day':
+            horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('08:00', '%H:%M').time()))
+            horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('20:00', '%H:%M').time()))
+        elif vaga and vaga.turno == 'night':
+            horario_inicial = timezone.make_aware(timezone.datetime.combine(data_entrada, timezone.datetime.strptime('19:00', '%H:%M').time()))
+            horario_final = timezone.make_aware(timezone.datetime.combine(data_saida, timezone.datetime.strptime('01:00', '%H:%M').time()))
+        else:
+            horario_inicial = timezone.now()
+            horario_final = timezone.now()
+        
+        return horario_inicial, horario_final
+
+
+class RelatorioComboioViewSet(viewsets.ModelViewSet):
+    """ViewSet para gerenciar Relatórios de Comboio"""
+    queryset = None  # Será definido dinamicamente
+    serializer_class = RelatorioComboioSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = {
+        'status': ['exact'],
+        'departamento': ['exact'],
+        'delegacia': ['exact'],
+        'policial': ['exact'],
+        'data_operacao': ['exact', 'gte', 'lte'],
+    }
+    search_fields = ['titulo', 'descricao', 'policial__nome']
+    ordering_fields = ['data_operacao', 'enviado_em', 'status']
+    ordering = ['-data_operacao', '-enviado_em']
+
+    def get_queryset(self):
+        """Filtra relatórios baseado no papel do usuário"""
+        from .models import RelatorioComboio
+        user = self.request.user
+        queryset = RelatorioComboio.objects.select_related(
+            'policial', 'departamento', 'delegacia', 'comboio', 'operacao'
+        )
+        
+        # Admin vê todos
+        if user.is_staff or user.is_superuser:
+            return queryset.all()
+
+        # Perfil de delegacia: vê relatórios da própria delegacia/departamento.
+        if hasattr(user, 'perfil_delegacia'):
+            perfil = user.perfil_delegacia
+            delegacia = perfil.delegacia
+            departamento = delegacia.departamento if delegacia else None
+
+            return queryset.filter(
+                Q(delegacia=delegacia) |
+                Q(departamento=departamento)
+            )
+
+        # Perfil de departamento (inclui DTO): vê relatórios do próprio departamento.
+        if hasattr(user, 'perfil_departamento'):
+            perfil = user.perfil_departamento
+            if perfil.is_dto:
+                return queryset.all()
+            return queryset.filter(departamento=perfil.departamento)
+
+        # Perfil policial legado.
+        if hasattr(user, 'policial'):
+            policial = user.policial
+            if policial.cargo in ['Delegado', 'OIP']:
+                return queryset.filter(
+                    Q(departamento=policial.delegacia.departamento) |
+                    Q(policial=policial)
+                )
+            return queryset.filter(policial=policial)
+
+        return queryset.none()
+
+    def perform_create(self, serializer):
+        """Associa o policial logado ao relatório"""
+        from .models import RelatorioComboio
+        policial = self.request.user.policial
+        
+        # Captura departamento e delegacia do policial
+        departamento = policial.delegacia.departamento if policial.delegacia else None
+        delegacia = policial.delegacia
+        
+        serializer.save(
+            policial=policial,
+            departamento=departamento,
+            delegacia=delegacia
+        )
+
+    def perform_update(self, serializer):
+        """Permite atualização apenas do próprio relatório ou por admin"""
+        from .models import RelatorioComboio
+        instance = self.get_object()
+        policial = self.request.user.policial
+        
+        # Só o autor ou admin pode atualizar
+        if instance.policial != policial and not self.request.user.is_staff:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Você não tem permissão para atualizar este relatório")
+        
+        serializer.save()
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def marcar_como_visualizado(self, request, pk=None):
+        """Marca o relatório como visualizado pelo usuário logado"""
+        from .models import RelatorioComboio
+        relatorio = self.get_object()
+        relatorio.visualizado_por.add(request.user)
+        return Response({'status': 'marcado como visualizado'})
 
