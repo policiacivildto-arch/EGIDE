@@ -158,44 +158,47 @@ CORS_ALLOWED_ORIGINS_DEV = [
 ]
 
 # Em produção, adicione suas URLs de frontend (Vercel, Netlify, etc.)
-CORS_ALLOWED_ORIGINS_PROD = config(
+# Reads a comma-separated list from the env var; filters out blank entries that
+# result from an empty string or trailing commas.
+_raw_cors_origins = config(
     'CORS_ALLOWED_ORIGINS',
     default='https://egide-production-59f6.up.railway.app',
-    cast=lambda v: [s.strip() for s in v.split(',')] if v else []
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()]
 )
 
 # Garante esquema explicito (https://) para origens de producao.
-normalized_cors_origins = []
-for origin in CORS_ALLOWED_ORIGINS_PROD:
-    if not origin:
-        continue
-    if origin.startswith('http://') or origin.startswith('https://'):
-        normalized_cors_origins.append(origin)
+CORS_ALLOWED_ORIGINS_PROD = []
+for _origin in _raw_cors_origins:
+    if _origin.startswith('http://') or _origin.startswith('https://'):
+        CORS_ALLOWED_ORIGINS_PROD.append(_origin)
     else:
-        normalized_cors_origins.append(f'https://{origin}')
-
-CORS_ALLOWED_ORIGINS_PROD = normalized_cors_origins
+        CORS_ALLOWED_ORIGINS_PROD.append(f'https://{_origin}')
 
 if frontend_url:
-    if frontend_url.startswith('http://') or frontend_url.startswith('https://'):
-        CORS_ALLOWED_ORIGINS_PROD.append(frontend_url)
-    else:
-        CORS_ALLOWED_ORIGINS_PROD.append(f'https://{frontend_url}')
+    _frontend_normalized = (
+        frontend_url if frontend_url.startswith('http://') or frontend_url.startswith('https://')
+        else f'https://{frontend_url}'
+    )
+    if _frontend_normalized not in CORS_ALLOWED_ORIGINS_PROD:
+        CORS_ALLOWED_ORIGINS_PROD.append(_frontend_normalized)
 
-CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD))
 
 # Permite frontends Railway sem precisar listar manualmente cada novo subdomínio.
+# django-cors-headers evaluates these regexes when an origin is not found in
+# CORS_ALLOWED_ORIGINS, so both lists work together.
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r'^https://.*\.up\.railway\.app$',
-    r'^https://.*\.railway\.app$',
+    r'^https://[^.]+\.up\.railway\.app$',
+    r'^https://[^.]+\.railway\.app$',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://*.up.railway.app',
-    'https://*.railway.app',
-] + [origin for origin in CORS_ALLOWED_ORIGINS_PROD if origin.startswith('https://')]
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(
+    ['https://*.up.railway.app', 'https://*.railway.app']
+    + [o for o in CORS_ALLOWED_ORIGINS_PROD if o.startswith('https://')]
+))
+
 
 # JWT Configuration
 from datetime import timedelta
