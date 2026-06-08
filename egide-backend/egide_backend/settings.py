@@ -55,9 +55,11 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Deve ficar no topo para garantir headers CORS mesmo em respostas antecipadas
+    # (redirects HTTPS, respostas de segurança, etc.).
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Para servir arquivos estáticos
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -169,6 +171,7 @@ normalized_cors_origins = []
 for origin in CORS_ALLOWED_ORIGINS_PROD:
     if not origin:
         continue
+    origin = origin.strip().rstrip('/')
     if origin.startswith('http://') or origin.startswith('https://'):
         normalized_cors_origins.append(origin)
     else:
@@ -177,6 +180,7 @@ for origin in CORS_ALLOWED_ORIGINS_PROD:
 CORS_ALLOWED_ORIGINS_PROD = normalized_cors_origins
 
 if frontend_url:
+    frontend_url = frontend_url.rstrip('/')
     if frontend_url.startswith('http://') or frontend_url.startswith('https://'):
         CORS_ALLOWED_ORIGINS_PROD.append(frontend_url)
     else:
@@ -191,6 +195,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_PREFLIGHT_MAX_AGE = 86400
 
 CSRF_TRUSTED_ORIGINS = [
     'https://*.up.railway.app',
