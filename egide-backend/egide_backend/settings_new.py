@@ -147,8 +147,9 @@ CORS_ALLOWED_ORIGINS_PROD = config(
 # Garante esquema explícito para origens de produção
 normalized_cors_origins = []
 for origin in CORS_ALLOWED_ORIGINS_PROD:
-    if not origin:
+    if not origin or not origin.strip():
         continue
+    origin = origin.strip()
     if origin.startswith('http://') or origin.startswith('https://'):
         normalized_cors_origins.append(origin)
     else:
@@ -160,16 +161,13 @@ CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD
 
 # Permite frontends Railway sem precisar listar cada subdomínio
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r'^https://.*\.up\.railway\.app$',
-    r'^https://.*\.railway\.app$',
+    r'^https://egide-production-[a-z0-9-]+\.up\.railway\.app$',
+    r'^https://egide-production-[a-z0-9-]+\.railway\.app$',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://*.up.railway.app',
-    'https://*.railway.app',
-] + CORS_ALLOWED_ORIGINS_PROD
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS_PROD
 
 # JWT Configuration
 from datetime import timedelta
