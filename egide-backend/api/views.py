@@ -14,7 +14,7 @@ from .models import (
     OperacaoPolicial, Alvo, EquipeOperacao, SubstitutoOperacao,
     ResultadoOperacao, AporteFinanceiro,
     EventoOperacao, DepartamentoEvento, EscalaPolicial,
-    Feriado, FrequenciaPolicial, RelatorioComboio
+    Feriado, FrequenciaPolicial
 )
 from .serializers import (
     DepartamentoSerializer, DelegaciaSerializer, PolicialSerializer,
@@ -27,7 +27,7 @@ from .serializers import (
     DepartamentoEventoSerializer, DepartamentoEventoSimplificadoSerializer,
     EscalaPolicialSerializer,
     FeriadoSerializer, FrequenciaPolicialSerializer,
-    PagamentoSerializer, RelatorioComboioSerializer
+    PagamentoSerializer
 )
 # Pagamento API
 from .models import Pagamento
@@ -1073,99 +1073,4 @@ class FrequenciaPolicialViewSet(viewsets.ModelViewSet):
         
         return horario_inicial, horario_final
 
-
-class RelatorioComboioViewSet(viewsets.ModelViewSet):
-    """ViewSet para gerenciar Relatórios de Comboio"""
-    queryset = None  # Será definido dinamicamente
-    serializer_class = RelatorioComboioSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = {
-        'status': ['exact'],
-        'departamento': ['exact'],
-        'delegacia': ['exact'],
-        'policial': ['exact'],
-        'data_operacao': ['exact', 'gte', 'lte'],
-    }
-    search_fields = ['titulo', 'descricao', 'policial__nome']
-    ordering_fields = ['data_operacao', 'enviado_em', 'status']
-    ordering = ['-data_operacao', '-enviado_em']
-
-    def get_queryset(self):
-        """Filtra relatórios baseado no papel do usuário"""
-        from .models import RelatorioComboio
-        user = self.request.user
-        queryset = RelatorioComboio.objects.select_related(
-            'policial', 'departamento', 'delegacia', 'comboio', 'operacao'
-        )
-        
-        # Admin vê todos
-        if user.is_staff or user.is_superuser:
-            return queryset.all()
-
-        # Perfil de delegacia: vê relatórios da própria delegacia/departamento.
-        if hasattr(user, 'perfil_delegacia'):
-            perfil = user.perfil_delegacia
-            delegacia = perfil.delegacia
-            departamento = delegacia.departamento if delegacia else None
-
-            return queryset.filter(
-                Q(delegacia=delegacia) |
-                Q(departamento=departamento)
-            )
-
-        # Perfil de departamento (inclui DTO): vê relatórios do próprio departamento.
-        if hasattr(user, 'perfil_departamento'):
-            perfil = user.perfil_departamento
-            if perfil.is_dto:
-                return queryset.all()
-            return queryset.filter(departamento=perfil.departamento)
-
-        # Perfil policial legado.
-        if hasattr(user, 'policial'):
-            policial = user.policial
-            if policial.cargo in ['Delegado', 'OIP']:
-                return queryset.filter(
-                    Q(departamento=policial.delegacia.departamento) |
-                    Q(policial=policial)
-                )
-            return queryset.filter(policial=policial)
-
-        return queryset.none()
-
-    def perform_create(self, serializer):
-        """Associa o policial logado ao relatório"""
-        from .models import RelatorioComboio
-        policial = self.request.user.policial
-        
-        # Captura departamento e delegacia do policial
-        departamento = policial.delegacia.departamento if policial.delegacia else None
-        delegacia = policial.delegacia
-        
-        serializer.save(
-            policial=policial,
-            departamento=departamento,
-            delegacia=delegacia
-        )
-
-    def perform_update(self, serializer):
-        """Permite atualização apenas do próprio relatório ou por admin"""
-        from .models import RelatorioComboio
-        instance = self.get_object()
-        policial = self.request.user.policial
-        
-        # Só o autor ou admin pode atualizar
-        if instance.policial != policial and not self.request.user.is_staff:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("Você não tem permissão para atualizar este relatório")
-        
-        serializer.save()
-
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    def marcar_como_visualizado(self, request, pk=None):
-        """Marca o relatório como visualizado pelo usuário logado"""
-        from .models import RelatorioComboio
-        relatorio = self.get_object()
-        relatorio.visualizado_por.add(request.user)
-        return Response({'status': 'marcado como visualizado'})
 
