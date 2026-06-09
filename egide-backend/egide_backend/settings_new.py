@@ -19,6 +19,11 @@ ALLOWED_HOSTS = config(
 # Se estiver em produção no Render
 if not DEBUG:
     ALLOWED_HOSTS.append('.onrender.com')
+    ALLOWED_HOSTS.append('.railway.app')
+    ALLOWED_HOSTS.append('.up.railway.app')
+
+# Remove duplicidades mantendo ordem
+ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -135,13 +140,36 @@ CORS_ALLOWED_ORIGINS_DEV = [
 # Em produção, adicione suas URLs de frontend (Vercel, Netlify, etc.)
 CORS_ALLOWED_ORIGINS_PROD = config(
     'CORS_ALLOWED_ORIGINS',
-    default='',
+    default='https://egide-production-59f6.up.railway.app',
     cast=lambda v: [s.strip() for s in v.split(',')] if v else []
 )
 
+# Garante esquema explícito para origens de produção
+normalized_cors_origins = []
+for origin in CORS_ALLOWED_ORIGINS_PROD:
+    if not origin:
+        continue
+    if origin.startswith('http://') or origin.startswith('https://'):
+        normalized_cors_origins.append(origin)
+    else:
+        normalized_cors_origins.append(f'https://{origin}')
+
+CORS_ALLOWED_ORIGINS_PROD = normalized_cors_origins
+
 CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD
 
+# Permite frontends Railway sem precisar listar cada subdomínio
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https://.*\.up\.railway\.app$',
+    r'^https://.*\.railway\.app$',
+]
+
 CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.up.railway.app',
+    'https://*.railway.app',
+] + [origin for origin in CORS_ALLOWED_ORIGINS_PROD if origin.startswith('https://')]
 
 # JWT Configuration
 from datetime import timedelta
