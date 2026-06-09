@@ -37,6 +37,7 @@ for public_url in [frontend_url, backend_public_url]:
 if not DEBUG:
     ALLOWED_HOSTS.append('.onrender.com')
     ALLOWED_HOSTS.append('.railway.app')
+    ALLOWED_HOSTS.append('.up.railway.app')
 
 # Remove duplicidades mantendo a ordem.
 ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))

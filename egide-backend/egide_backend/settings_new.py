@@ -19,6 +19,11 @@ ALLOWED_HOSTS = config(
 # Se estiver em produção no Render
 if not DEBUG:
     ALLOWED_HOSTS.append('.onrender.com')
+    ALLOWED_HOSTS.append('.railway.app')
+    ALLOWED_HOSTS.append('.up.railway.app')
+
+# Remove duplicidades mantendo ordem
+ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -139,9 +144,34 @@ CORS_ALLOWED_ORIGINS_PROD = config(
     cast=lambda v: [s.strip() for s in v.split(',')] if v else []
 )
 
+# Garante esquema explícito para origens de produção
+normalized_cors_origins = []
+for origin in CORS_ALLOWED_ORIGINS_PROD:
+    stripped_origin = origin.strip()
+    if not stripped_origin:
+        continue
+    if stripped_origin.startswith('http://') or stripped_origin.startswith('https://'):
+        normalized_cors_origins.append(stripped_origin)
+    else:
+        normalized_cors_origins.append(f'https://{stripped_origin}')
+
+CORS_ALLOWED_ORIGINS_PROD = normalized_cors_origins
+
 CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_PROD
 
+# Permite frontends Railway sem precisar listar cada subdomínio
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https://egide-production-[a-z0-9]+(?:-[a-z0-9]+)*\.up\.railway\.app$',
+    r'^https://egide-production-[a-z0-9]+(?:-[a-z0-9]+)*\.railway\.app$',
+]
+
 CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='',
+    cast=lambda v: [s.strip() for s in v.split(',')] if v else []
+)
 
 # JWT Configuration
 from datetime import timedelta
