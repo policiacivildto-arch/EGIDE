@@ -147,7 +147,7 @@ CORS_ALLOWED_ORIGINS_PROD = config(
 # Garante esquema explícito para origens de produção
 normalized_cors_origins = []
 for origin in CORS_ALLOWED_ORIGINS_PROD:
-    if not origin or not origin.strip():
+    if not origin.strip():
         continue
     origin = origin.strip()
     if origin.startswith('http://') or origin.startswith('https://'):
@@ -167,7 +167,11 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS_PROD
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='',
+    cast=lambda v: [s.strip() for s in v.split(',')] if v else []
+)
 
 # JWT Configuration
 from datetime import timedelta
