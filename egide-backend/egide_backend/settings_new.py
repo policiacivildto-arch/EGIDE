@@ -140,7 +140,7 @@ CORS_ALLOWED_ORIGINS_DEV = [
 # Em produção, adicione suas URLs de frontend (Vercel, Netlify, etc.)
 CORS_ALLOWED_ORIGINS_PROD = config(
     'CORS_ALLOWED_ORIGINS',
-    default='https://egide-production-59f6.up.railway.app',
+    default='',
     cast=lambda v: [s.strip() for s in v.split(',')] if v else []
 )
 
@@ -169,7 +169,7 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     'https://*.up.railway.app',
     'https://*.railway.app',
-] + [origin for origin in CORS_ALLOWED_ORIGINS_PROD if origin.startswith('https://')]
+] + CORS_ALLOWED_ORIGINS_PROD
 
 # JWT Configuration
 from datetime import timedelta
